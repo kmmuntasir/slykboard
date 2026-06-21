@@ -5,9 +5,17 @@ export interface Config {
   databaseUrl: string;
 }
 
-export const env: Readonly<Config> = Object.freeze({
-  port: Number(process.env.PORT ?? 3000),
-  frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
-  nodeEnv: process.env.NODE_ENV ?? 'development',
-  databaseUrl: process.env.DATABASE_URL ?? '',
-});
+export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
+  if (!envSource.FRONTEND_URL) {
+    throw new Error('Missing required environment variable: FRONTEND_URL');
+  }
+
+  return {
+    port: Number(envSource.PORT ?? 3000),
+    frontendUrl: envSource.FRONTEND_URL,
+    nodeEnv: envSource.NODE_ENV ?? 'development',
+    databaseUrl: envSource.DATABASE_URL ?? '',
+  };
+}
+
+export const env: Readonly<Config> = Object.freeze(loadConfig());
