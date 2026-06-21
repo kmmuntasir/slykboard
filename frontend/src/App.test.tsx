@@ -42,8 +42,11 @@ describe('App shell', () => {
     it('renders top nav and board page when authenticated', () => {
         useAuthStore.getState().setUser({
             token: 't',
+            id: 'u1',
             email: 'e@x',
             name: 'Test',
+            role: 'MEMBER',
+            avatarUrl: null,
         });
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
             new Response(JSON.stringify({ status: 'ok', service: 'x' }), {

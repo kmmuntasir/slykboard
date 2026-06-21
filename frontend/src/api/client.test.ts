@@ -43,8 +43,11 @@ describe('apiFetch', () => {
   it('injects Authorization when token is set', async () => {
     useAuthStore.getState().setUser({
       token: 'abc',
+      id: 'u1',
       email: 'e',
       name: 'n',
+      role: 'MEMBER',
+      avatarUrl: null,
     });
     const spy = vi
       .spyOn(globalThis, 'fetch')
