@@ -29,7 +29,19 @@ export function LoginPage() {
                 });
                 navigate(from, { replace: true });
             } catch (err) {
-                setError(err instanceof ApiClientError ? err.message : 'Login failed');
+                if (err instanceof ApiClientError) {
+                    if (err.code === 'FORBIDDEN') {
+                        // F06 D8: domain restriction. Specialized message — actionable for the user.
+                        setError(
+                            'Your Google account is not in the allowed workspace. ' +
+                                'Sign in with your workspace email or contact your administrator.',
+                        );
+                    } else {
+                        setError(err.message);
+                    }
+                } else {
+                    setError('Login failed');
+                }
             }
         },
         onError: () => setError('Google sign-in was cancelled or failed'),

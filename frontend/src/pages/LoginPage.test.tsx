@@ -115,6 +115,63 @@ describe('LoginPage', () => {
         expect(useAuthStore.getState().user).toBeNull();
     });
 
+    it('shows specialized workspace message on FORBIDDEN', async () => {
+        loginWithGoogleMock.mockRejectedValueOnce(
+            new ApiClientError(
+                'Your Google account is not in the allowed workspace',
+                403,
+                'FORBIDDEN',
+            ),
+        );
+        renderLogin(['/login']);
+        const opts = readGoogleLoginOpts();
+        await act(async () => {
+            await opts.onSuccess?.({ code: 'test-code' });
+        });
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(
+            'Your Google account is not in the allowed workspace. Sign in with your workspace email',
+        );
+    });
+
+    it('shows generic message on UNAUTHENTICATED (unverified email)', async () => {
+        loginWithGoogleMock.mockRejectedValueOnce(
+            new ApiClientError('Email not verified by Google', 401, 'UNAUTHENTICATED'),
+        );
+        renderLogin(['/login']);
+        const opts = readGoogleLoginOpts();
+        await act(async () => {
+            await opts.onSuccess?.({ code: 'test-code' });
+        });
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Email not verified by Google');
+        expect(alert).not.toHaveTextContent('allowed workspace');
+    });
+
+    it('shows generic message on INTERNAL_ERROR', async () => {
+        loginWithGoogleMock.mockRejectedValueOnce(
+            new ApiClientError('Authentication failed', 500, 'INTERNAL_ERROR'),
+        );
+        renderLogin(['/login']);
+        const opts = readGoogleLoginOpts();
+        await act(async () => {
+            await opts.onSuccess?.({ code: 'test-code' });
+        });
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Authentication failed');
+    });
+
+    it('shows "Login failed" on non-ApiClientError', async () => {
+        loginWithGoogleMock.mockRejectedValueOnce(new Error('network'));
+        renderLogin(['/login']);
+        const opts = readGoogleLoginOpts();
+        await act(async () => {
+            await opts.onSuccess?.({ code: 'test-code' });
+        });
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Login failed');
+    });
+
     it('shows error on GIS onError', async () => {
         renderLogin(['/login']);
         const opts = readGoogleLoginOpts();
