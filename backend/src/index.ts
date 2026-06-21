@@ -10,6 +10,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { notFound } from './middleware/notFound';
 import { errorHandler } from './middleware/errorMiddleware';
 import { pingRouter } from './middleware/pingRoute';
+import { authRouter } from './routes/auth.routes';
 
 const app: Express = express();
 
@@ -44,6 +45,7 @@ app.get('/api/health', (_req, res) => {
 
 // Smoke route proving the F03 contract end-to-end (D16).
 app.use('/api', pingRouter);
+app.use('/api/auth', authRouter);
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);
