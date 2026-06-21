@@ -110,15 +110,20 @@ Instruct the synthesis agent to:
 
 The agent **returns the complete markdown**. Main thread does not draft content — it only writes the returned text.
 
-### Step 4 — Write the file (main thread)
+### Step 4 — Write and commit the file (main thread)
 
 1. Create the output directory if it does not exist.
 2. Write the synthesis output to the resolved output path.
-3. **Do not** check the feature box in the index — the owner marks it done only after implementation. Do not commit unless asked (follow repo's git conventions — do not assume a specific rule file exists).
+3. **Do not** check the feature box in the index — the owner marks it done only after implementation.
+4. **Commit the written task doc.** This skill instruction is the user's standing explicit approval to commit — no further approval is needed for this commit.
+   - Stage and commit **only** the task-doc output file. **Never** commit the feature index — its checkboxes stay untouched.
+   - Follow the repo's git conventions for message format and branch policy. Auto-detect conventions — do not assume a specific rule file exists. (E.g. a `type/SLUG-TICKET-desc` branch + `SLYK-TICKET: <message>` single-line commit.) If no conventions can be detected, fall back to a single-line message: `docs: Add F<NN> <slug> task plan`.
+   - **Never** push, merge, rebase, squash, or amend — just the local commit.
 
 ### Step 5 — Report (main thread)
 
 - Output path.
+- **Commit** — commit hash + commit message used.
 - One-line summary of each Key Technical Decision (especially deviations from the obvious).
 - The **batch/parallelization** summary.
 - Any **owner sign-off questions** the plan deferred (surface prominently).
