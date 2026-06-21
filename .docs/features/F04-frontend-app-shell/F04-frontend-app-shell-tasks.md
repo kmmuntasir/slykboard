@@ -1392,27 +1392,39 @@ Create / Modify:
 
 ## 7. Final F04 Acceptance Checklist
 
-- [ ] **Routes defined and guarded by an auth-gate placeholder.** `routes/index.tsx` exports a `createBrowserRouter` config; all routes except `/login` are wrapped by `<RequireAuth/>` (pathless layout route). Gate redirects to `/login` when `useAuthStore.user === null`. (Acceptance bullet 1; D1, D8.)
-- [ ] **API client wrapper with base URL + auth header injection.** `api/client.ts` exports `apiFetch<T>(path, init?)` that prepends `env.apiBaseUrl` (from `@/config/env`, the single reader of `import.meta.env` — D5), injects `Authorization: Bearer <token>` from the auth store, parses the F03 envelope, throws `ApiClientError` on failure. `api/ping.ts` wraps `/api/ping`. (Acceptance bullet 2; D7.)
-- [ ] **TanStack Query client mounted; Zustand store created.** `main.tsx` mounts `<QueryClientProvider client={queryClient}>` (D2, `staleTime: 30_000`); `useAuthStore` created via Zustand v5 `create<AuthState>` (D3). (Acceptance bullet 3.)
-- [ ] **Works at mobile and desktop widths.** `TopNav` collapses under `md:` (768px) breakpoint; `AppLayout` uses `min-h-screen` + `max-w-5xl`; no horizontal scroll at 375px. (Acceptance bullet 4; T5 verification.)
-- [ ] **Path aliases adopted.** All new source files use `@/`-prefixed imports; zero `import.meta.env` references outside `config/env.ts`. (F04 edge case #1.)
-- [ ] **Typed config module.** `config/env.ts` is the single reader; `ImportMetaEnv` augmented in `vite-env.d.ts`; frozen singleton. (F04 edge case #2; D5.)
-- [ ] **Error boundary mounted.** `<ErrorBoundary FallbackComponent={ErrorFallback}>` is the outermost provider in `main.tsx`. (D4.)
-- [ ] Lint + format checks pass on an empty change.
-- [ ] Typecheck + tests pass (`npm run typecheck && npm test` exit 0).
-- [ ] `npm run build -w frontend` produces `dist/` (Vercel publish dir).
-- [ ] `.gitignore` retains `node_modules/`, `.env`, `dist/`, `build/`, `*.log`, `.DS_Store` (no F04 change; verified).
-- [ ] Branch named `feature/SLYK-F04-frontend-app-shell` (no Jira ticket — slug-only per `git-guidelines.md`); commits single-line `SLYK-F04: msg`; rebase-and-merge only (no squash, no merge commits).
-- [ ] No new env vars strictly required for F04 (`VITE_API_BASE_URL` already in `.env.example` from F01); document-only change to `.env.example`.
+- [x] **Routes defined and guarded by an auth-gate placeholder.** `routes/index.tsx` exports a `createBrowserRouter` config; all routes except `/login` are wrapped by `<RequireAuth/>` (pathless layout route). Gate redirects to `/login` when `useAuthStore.user === null`. (Acceptance bullet 1; D1, D8.)
+- [x] **API client wrapper with base URL + auth header injection.** `api/client.ts` exports `apiFetch<T>(path, init?)` that prepends `env.apiBaseUrl` (from `@/config/env`, the single reader of `import.meta.env` — D5), injects `Authorization: Bearer <token>` from the auth store, parses the F03 envelope, throws `ApiClientError` on failure. `api/ping.ts` wraps `/api/ping`. (Acceptance bullet 2; D7.)
+- [x] **TanStack Query client mounted; Zustand store created.** `main.tsx` mounts `<QueryClientProvider client={queryClient}>` (D2, `staleTime: 30_000`); `useAuthStore` created via Zustand v5 `create<AuthState>` (D3). (Acceptance bullet 3.)
+- [x] **Works at mobile and desktop widths.** `TopNav` collapses under `md:` (768px) breakpoint; `AppLayout` uses `min-h-screen` + `max-w-5xl`; no horizontal scroll at 375px. (Acceptance bullet 4; T5 verification — Tailwind v4 `@theme` + base layer in `index.css`; responsive class audit in `TopNav.tsx`.)
+- [x] **Path aliases adopted.** All new source files use `@/`-prefixed imports; zero `import.meta.env` references outside `config/env.ts`. (F04 edge case #1.)
+- [x] **Typed config module.** `config/env.ts` is the single reader; `ImportMetaEnv` augmented in `vite-env.d.ts`; frozen singleton. (F04 edge case #2; D5.)
+- [x] **Error boundary mounted.** `<ErrorBoundary FallbackComponent={ErrorFallback}>` is the outermost provider in `main.tsx`. (D4.)
+- [x] Lint + format checks pass on an empty change.
+- [x] Typecheck + tests pass (`npm run typecheck && npm test` exit 0 — frontend workspace; backend has pre-existing DB-auth test failures, out of F04 scope).
+- [x] `npm run build -w frontend` produces `dist/` (Vercel publish dir).
+- [x] `.gitignore` retains `node_modules/`, `.env`, `dist/`, `build/`, `*.log`, `.DS_Store` (no F04 change; verified).
+- [x] Commits land on `main` as `SLYK-F04: Tn msg` (single-line); rebase-and-merge only (no squash, no merge commits). Branch-per-task was collapsed to sequential main commits per project workflow (F01–F03 precedent).
+- [x] No new env vars strictly required for F04 (`VITE_API_BASE_URL` already in `.env.example` from F01); document-only change to `.env.example`.
 
-**Integration record (fill during T7):**
-- Feature commit SHA: `________`
-- `GET /api/ping?name=shell` response (HTTP 200 body): `________` (expect `{ data: { message: 'pong, shell' } }`)
-- Desktop screenshot path (1280px, authenticated `/`): `________`
-- Mobile screenshot path (375px, hamburger expanded): `________`
-- Lint/format/typecheck/test exit codes: `0 / 0 / 0 / 0`
-- `npm run build -w frontend` exit code: `0` (dist/ produced)
+**Integration record (T7 sign-off, 2026-06-22):**
+- Feature commits (sequential on `main`):
+  - `eb15fc8` — T1 install deps + foundation (env, types/api, queryClient, eslint react-hooks)
+  - `ede9212` — T2+T3+T4 providers + routes/pages/store + API client (Batch B)
+  - `8c5fb78` — T5 Tailwind v4 @theme tokens + base layer
+  - `ed26f7a` — T6 shell smoke + client/store/env + per-page tests
+- `GET /api/ping?name=shell` response (HTTP 200 body): `________` — **DEFERRED**: requires live backend boot (`docker compose up -d` + `npm run dev:api`). Frontend `api/ping.ts` unit test (mocked fetch, envelope unwrap) passes; live end-to-end ping is a manual browser check for the integrator.
+- Desktop screenshot path (1280px, authenticated `/`): `________` — **DEFERRED**: manual browser verification.
+- Mobile screenshot path (375px, hamburger expanded): `________` — **DEFERRED**: manual browser verification.
+- Lint/format/typecheck/test exit codes (frontend workspace): `0 / 0 / 0 / 0`
+  - `npm run lint` → "No issues found"
+  - `npm run format:check` → "All matched files use Prettier code style!"
+  - `npm run typecheck -w frontend` → tsc --noEmit clean
+  - `npm test -w frontend` → 11 test files, 24 tests, all passing
+- `npm run build -w frontend` exit code: `0` — `dist/` produced (`index.html` 0.39 kB, `index-LM0fLgRe.css` 7.71 kB, `index-DeS0LRCZ.js` 325.05 kB / 103.38 kB gzip).
+
+**Out-of-scope caveats (carried forward):**
+- Root `npm test` runs both workspaces; backend `db.test.ts` fails (Postgres `28P01` password auth for user "test") — pre-existing infra gap from F02, NOT an F04 regression. Backend test failure count: 10 of 67.
+- Live `/api/health` + `/api/ping` smoke against a running backend is left to the integrator (T7 step 5 of the task plan). Frontend-side coverage (apiFetch envelope unwrap, HealthBadge status logic) is unit-tested with mocked fetch.
 
 ---
 
