@@ -36,7 +36,7 @@
 **Phase 0 — Foundation**
 - [x] **F01** Monorepo scaffolding & dev tooling — 🏗 Scaffolding · _deps: —_
 - [x] **F02** Database connection & migration pipeline — 🔧 Infrastructure · _deps: F01_
-- [ ] **F03** API contract layer (envelope, errors, validation) — 🔧 Infrastructure · _deps: F01_
+- [x] **F03** API contract layer (envelope, errors, validation) — 🔧 Infrastructure · _deps: F01_
 - [ ] **F04** Frontend app shell (routing, layout, providers) — 🏗 Scaffolding · _deps: F01_
 
 **Phase 1 — Identity & Access**
