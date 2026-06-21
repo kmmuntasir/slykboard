@@ -1323,18 +1323,18 @@ Create / Modify:
 - [ ] No new env vars introduced (F03 reuses `env.nodeEnv`, `env.frontendUrl` from F01); `.env.example` and `vitest.config.ts` unchanged.
 
 **Integration record (fill during T6):**
-- Feature commit SHA: `________`
-- Deps installed: zod `__._._`, pino `__._._`, pino-http `__._._`, helmet `__._._`, pino-pretty `__._._` (dev).
-- `GET /api/health` (HTTP 200) body: `________` (non-enveloped — D10).
-- `GET /api/ping?name=munta` (HTTP 200) body: `________` (success envelope).
-- `GET /api/ping?name=` (HTTP 400) body: `________` (VALIDATION_FAILED envelope with details).
-- `GET /api/nope` (HTTP 404) body: `________` (NOT_FOUND envelope).
-- CORS disallowed-origin check: `Access-Control-Allow-Origin` absent for evil origin: `________` (yes/no).
-- Helmet headers: `X-Content-Type-Options: nosniff` present `________`; `X-Powered-By` absent `________`.
-- Log redaction: `req.headers.authorization` shows `[REDACTED]` `________` (yes/no).
-- SIGTERM exit time: `____s` (under 10s deadline).
-- Lint/format/typecheck/test exit codes: `0 / 0 / 0 / 0`.
-- Test count: `________` tests across `________` files.
+- Feature commit SHA: `fc19fac` (branch HEAD at T6 verification time; will advance when orchestrator commits T6).
+- Deps installed: zod `4.4.3`, pino `10.3.1`, pino-http `11.0.0`, helmet `8.2.0`, pino-pretty `13.1.3` (dev).
+- `GET /api/health` (HTTP 200) body: `NOT VERIFIED — requires live DB (env unavailable; docker compose has 0 services, no backend/.env DATABASE_URL)`. Code path returns `{ status:'ok', service, uptime, timestamp }` non-enveloped (D10), proven by unit test `health stays non-enveloped`.
+- `GET /api/ping?name=munta` (HTTP 200) body: `NOT VERIFIED — requires live DB`. Contract asserted via unit tests on pingRoute + validateRequest.
+- `GET /api/ping?name=` (HTTP 400) body: `NOT VERIFIED — requires live DB`. Contract asserted via errorMiddleware + validateRequest unit tests.
+- `GET /api/nope` (HTTP 404) body: `NOT VERIFIED — requires live DB`. Contract asserted via `health.test.ts` "returns NOT_FOUND envelope for unknown routes" (passes).
+- CORS disallowed-origin check: `Access-Control-Allow-Origin` absent for evil origin: `NOT VERIFIED — requires live DB` (CORS config source-of-truth: `origin: env.frontendUrl` single string, `credentials: true`, hardened methods/allowedHeaders/maxAge — D8).
+- Helmet headers: `X-Content-Type-Options: nosniff` present `NOT VERIFIED — requires live DB`; `X-Powered-By` absent `NOT VERIFIED — requires live DB` (helmet() mounted first in stack — D14).
+- Log redaction: `req.headers.authorization` shows `[REDACTED]` `NOT VERIFIED — requires live DB` (redaction config in `requestLogger.ts` — D9).
+- SIGTERM exit time: `NOT VERIFIED — requires live DB` (shutdown logic unchanged from F02; 10s forceExit timer intact).
+- Lint/format/typecheck/test exit codes: `0 / 0 / 0 / nonzero`. Test run reports `1 failed | 10 passed` files — the single failure is pre-existing `backend/src/db/db.test.ts` (PG 28P01 auth, committed in F02, needs live DB creds, NOT F03 code). Every F03 test file passes.
+- Test count: `57 passed | 10 failed` tests across `11` files (10 failures all in db.test.ts; 57 passes include health, envelope, errorMiddleware, notFound, validateRequest, pingRoute, requestLogger suites).
 
 ---
 

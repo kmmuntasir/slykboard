@@ -5,7 +5,9 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
 
-type RequestWithLog = Request & { log?: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> } };
+type RequestWithLog = Request & {
+  log?: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
+};
 
 function makeReqRes() {
   const req = { log: { error: vi.fn(), warn: vi.fn() } } as unknown as Request;
@@ -19,12 +21,24 @@ function makeReqRes() {
 
 describe('errorMiddleware', () => {
   const cases = [
-    { name: 'VALIDATION_FAILED → 400', code: ErrorCode.VALIDATION_FAILED, status: HttpStatus.BAD_REQUEST },
-    { name: 'UNAUTHENTICATED → 401', code: ErrorCode.UNAUTHENTICATED, status: HttpStatus.UNAUTHORIZED },
+    {
+      name: 'VALIDATION_FAILED → 400',
+      code: ErrorCode.VALIDATION_FAILED,
+      status: HttpStatus.BAD_REQUEST,
+    },
+    {
+      name: 'UNAUTHENTICATED → 401',
+      code: ErrorCode.UNAUTHENTICATED,
+      status: HttpStatus.UNAUTHORIZED,
+    },
     { name: 'FORBIDDEN → 403', code: ErrorCode.FORBIDDEN, status: HttpStatus.FORBIDDEN },
     { name: 'NOT_FOUND → 404', code: ErrorCode.NOT_FOUND, status: HttpStatus.NOT_FOUND },
     { name: 'CONFLICT → 409', code: ErrorCode.CONFLICT, status: HttpStatus.CONFLICT },
-    { name: 'INTERNAL_ERROR → 500', code: ErrorCode.INTERNAL_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR },
+    {
+      name: 'INTERNAL_ERROR → 500',
+      code: ErrorCode.INTERNAL_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+    },
   ];
 
   cases.forEach(({ name, code, status }) => {
@@ -34,7 +48,8 @@ describe('errorMiddleware', () => {
       errorHandler(err, req, res, next);
       expect(res.status).toHaveBeenCalledWith(status);
       // isProd=true in test env → 5xx messages are forced to the generic string.
-      const expectedMessage = status >= HttpStatus.INTERNAL_SERVER_ERROR ? 'Internal server error' : 'msg';
+      const expectedMessage =
+        status >= HttpStatus.INTERNAL_SERVER_ERROR ? 'Internal server error' : 'msg';
       expect(res.json).toHaveBeenCalledWith({
         error: { code, message: expectedMessage, details: { x: 1 } },
       });

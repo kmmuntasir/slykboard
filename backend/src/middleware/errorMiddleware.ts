@@ -12,11 +12,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
       ? err
       : new AppError(
           ErrorCode.INTERNAL_ERROR,
-          isProd
-            ? 'Internal server error'
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error',
+          isProd ? 'Internal server error' : err instanceof Error ? err.message : 'Unknown error',
           { cause: err },
         );
 
