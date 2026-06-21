@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["featureId", "status", "tasks"],
+  "properties": {
+    "featureId": { "type": "string" },
+    "status": { "type": "string", "enum": ["success", "blocked", "partial"] },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["taskId", "status", "filesTouched", "summary"],
+        "properties": {
+          "taskId": { "type": "string" },
+          "status": { "type": "string", "enum": ["success", "blocked", "partial"] },
+          "filesTouched": { "type": "array", "items": { "type": "string" } },
+          "summary": { "type": "string" },
+          "verification": { "type": "string" },
+          "blockers": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  },
+  "additionalProperties": false
+}
