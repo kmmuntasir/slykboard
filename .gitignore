@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Test coverage
+coverage/
+
+# Vite cache
+.vite/
+
+# Local-only files
+*.local
+
+# ESLint cache
+.eslintcache
