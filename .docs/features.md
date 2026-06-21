@@ -40,7 +40,7 @@
 - [x] **F04** Frontend app shell (routing, layout, providers) — 🏗 Scaffolding · _deps: F01_
 
 **Phase 1 — Identity & Access**
-- [ ] **F05** Google SSO login + JWT issuance — ✨ Feature · _deps: F02, F03, F04_
+- [~] **F05** Google SSO login + JWT issuance — ✨ Feature · _deps: F02, F03, F04_ — code complete + unit-tested (T1-T12 ✅); T13/T14 live Google smoke pending owner
 - [ ] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_
 - [ ] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_
 
