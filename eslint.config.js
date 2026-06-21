@@ -1,5 +1,5 @@
-import globals from 'globals'
-import tseslint from 'typescript-eslint'
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'] },
@@ -16,4 +16,4 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
-)
+);

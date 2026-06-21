@@ -4,3 +4,12 @@ coverage/
 node_modules/
 pnpm-lock.yaml
 package-lock.json
+
+# Env files
+.env
+.env.*
+
+# Project docs, rules, and skills are user-authored — not source code
+.claude/
+.docs/
+*.md
