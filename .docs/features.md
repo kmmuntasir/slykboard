@@ -23,37 +23,60 @@
 
 ## Feature Index
 
-| ID | Feature | Phase | Depends on |
-| --- | --- | --- | --- |
-| F01 | Monorepo scaffolding & dev tooling | 0 | — |
-| F02 | Database connection & migration pipeline | 0 | F01 |
-| F03 | API contract layer (envelope, errors, validation) | 0 | F01 |
-| F04 | Frontend app shell (routing, layout, providers) | 0 | F01 |
-| F05 | Google SSO login + JWT issuance | 1 | F02, F03, F04 |
-| F06 | Onboarding, workspace restriction & roles | 1 | F05 |
-| F07 | Session lifecycle & auth guards | 1 | F05, F06 |
-| F08 | Projects: create, list, select, slug, columns | 2 | F07 |
-| F09 | Board read (columns + cards) | 2 | F08 |
-| F10 | Board auto-polling (30s) & conflict handling | 2 | F09 |
-| F11 | Drag-and-drop with order persistence | 2 | F09 |
-| F12 | Ticket creation with sequential IDs | 3 | F09 |
-| F13 | Ticket attributes: title, description, assignee, priority | 3 | F12 |
-| F14 | Labels catalog (project-scoped, color-coded) | 3 | F12 |
-| F15 | Checklist | 3 | F12 |
-| F16 | Ticket detail modal (view & edit) | 3 | F13, F14, F15 |
-| F17 | Ticket permissions (admin-only delete) | 3 | F16, F18 |
-| F18 | Activity log capture | 4 | F12 |
-| F19 | Activity feed UI | 4 | F18 |
-| F20 | Server-authoritative timer (start/stop, browser-independent) | 5 | F16 |
-| F21 | Manual time entry | 5 | F20 |
-| F22 | Time log list per ticket | 5 | F20 |
-| F23 | Time log report (per-user, weekly/monthly) | 6 | F22 |
-| F24 | Ticket summary report (resolved by priority) | 6 | F12 |
-| F25 | User & role management (admin) | 7 | F06 |
-| F26 | Board search & filter | 7 | F13, F14 |
-| F27 | Project settings (rename, columns) | 7 | F08 |
-| F28 | UX polish: empty / loading / error / 404 / 403 | 7 | F07 |
-| F29 | Deployment & self-host packaging | 7 | all above |
+> **Categories:** 🏗 Scaffolding · 🔧 Infrastructure · ✨ Feature · ⬆ Enhancement · 🚀 Deployment
+>
+> - 🏗 **Scaffolding** — empty skeleton, tooling, project bootstrap. No domain logic.
+> - 🔧 **Infrastructure** — cross-cutting runtime plumbing (DB, API contract, auth guards) every feature leans on.
+> - ✨ **Feature** — distinct user-facing capability; an end user does something concrete.
+> - ⬆ **Enhancement** — refines an existing feature; not standalone.
+> - 🚀 **Deployment** — packaging, hosting, release.
+>
+> Track progress by checking items off. Spec per feature lives in the sections below.
+
+**Phase 0 — Foundation**
+- [ ] **F01** Monorepo scaffolding & dev tooling — 🏗 Scaffolding · _deps: —_
+- [ ] **F02** Database connection & migration pipeline — 🔧 Infrastructure · _deps: F01_
+- [ ] **F03** API contract layer (envelope, errors, validation) — 🔧 Infrastructure · _deps: F01_
+- [ ] **F04** Frontend app shell (routing, layout, providers) — 🏗 Scaffolding · _deps: F01_
+
+**Phase 1 — Identity & Access**
+- [ ] **F05** Google SSO login + JWT issuance — ✨ Feature · _deps: F02, F03, F04_
+- [ ] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_
+- [ ] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_
+
+**Phase 2 — Projects & Board**
+- [ ] **F08** Projects: create, list, select, slug, columns — ✨ Feature · _deps: F07_
+- [ ] **F09** Board read (columns + cards) — ✨ Feature · _deps: F08_
+- [ ] **F10** Board auto-polling (30s) & conflict handling — ⬆ Enhancement · _deps: F09_
+- [ ] **F11** Drag-and-drop with order persistence — ✨ Feature · _deps: F09_
+
+**Phase 3 — Tickets**
+- [ ] **F12** Ticket creation with sequential IDs — ✨ Feature · _deps: F09_
+- [ ] **F13** Ticket attributes: title, description, assignee, priority — ✨ Feature · _deps: F12_
+- [ ] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_
+- [ ] **F15** Checklist — ✨ Feature · _deps: F12_
+- [ ] **F16** Ticket detail modal (view & edit) — ✨ Feature · _deps: F13, F14, F15_
+- [ ] **F17** Ticket permissions (admin-only delete) — ✨ Feature · _deps: F16, F18_
+
+**Phase 4 — Audit Trail**
+- [ ] **F18** Activity log capture — ✨ Feature · _deps: F12_
+- [ ] **F19** Activity feed UI — ✨ Feature · _deps: F18_
+
+**Phase 5 — Time Tracking**
+- [ ] **F20** Server-authoritative timer (start/stop, browser-independent) — ✨ Feature · _deps: F16_
+- [ ] **F21** Manual time entry — ✨ Feature · _deps: F20_
+- [ ] **F22** Time log list per ticket — ✨ Feature · _deps: F20_
+
+**Phase 6 — Reporting**
+- [ ] **F23** Time log report (per-user, weekly/monthly) — ✨ Feature · _deps: F22_
+- [ ] **F24** Ticket summary report (resolved by priority) — ✨ Feature · _deps: F12_
+
+**Phase 7 — Admin & Polish**
+- [ ] **F25** User & role management (admin) — ✨ Feature · _deps: F06_
+- [ ] **F26** Board search & filter — ⬆ Enhancement · _deps: F13, F14_
+- [ ] **F27** Project settings (rename, columns) — ✨ Feature · _deps: F08_
+- [ ] **F28** UX polish: empty / loading / error / 404 / 403 — ⬆ Enhancement · _deps: F07_
+- [ ] **F29** Deployment & self-host packaging — 🚀 Deployment · _deps: all above_
 
 ---
 
