@@ -8,6 +8,10 @@ import { BoardPage } from '@/pages/BoardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { useAuthStore } from '@/stores/useAuthStore';
 
+vi.mock('@react-oauth/google', () => ({
+    useGoogleLogin: vi.fn(() => () => {}),
+}));
+
 function renderShell(initialEntry = '/') {
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -40,8 +44,10 @@ describe('App shell', () => {
     });
 
     it('renders top nav and board page when authenticated', () => {
+        // Valid decodable JWT with far-future exp so RequireAuth's isTokenExpired passes.
+        const validJwt = 'eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.';
         useAuthStore.getState().setUser({
-            token: 't',
+            token: validJwt,
             id: 'u1',
             email: 'e@x',
             name: 'Test',
