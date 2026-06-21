@@ -169,6 +169,25 @@ T3: ❌ Missing (file not created)
 
 ---
 
+### Step 5: Update Feature Index (if applicable)
+
+After writing the verification report, check whether the task plan file references a feature index file (e.g., a features list / roadmap). Look for:
+
+1. **Explicit reference in the task file header** — a path or link to a feature index (e.g., `features.md`, `feature-list.md`).
+2. **Feature ID in the task file** — extract the feature identifier (e.g., `F02` from the title/header) and check for a conventional feature index location (e.g., `.docs/features.md`).
+
+If a feature index file is found:
+
+- **100% implementation (all tasks ✅):** Mark the feature checkbox as done: `- [x] **F##** ...`
+- **Partial implementation (some tasks ⚠️ or ❌):** Mark the checkbox as partially complete: `- [~] **F##** ...`
+- **No change** if the feature was already marked done or if no feature index is found.
+
+Do NOT modify the feature index if verification percentage is below 50% (leave unchecked).
+
+**Commit the feature index update** alongside (or immediately after) the verification report commit.
+
+---
+
 ## Error Handling
 
 - **Can't read file** — Ask user to verify path
