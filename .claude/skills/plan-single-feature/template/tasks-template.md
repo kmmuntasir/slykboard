@@ -1,30 +1,31 @@
 # F{{NN}} — {{Title}}: Plan + Task Breakdown
 
 > **Feature:** F{{NN}} — {{title}} ({{Phase name}} — {{phase subtitle}})
-> **Slug:** `{{SLYK}}` · **Depends on:** {{deps or "—"}} · **PRD ref:** {{PRD §/REQ refs}}
-> **Sources:** [`basic-PRD.md`](../../basic-PRD.md), [`features.md`](../../features.md) (F{{NN}} spec block + relevant schema-delta rows), [`.claude/rules/js-development-rules.md`](../../../.claude/rules/js-development-rules.md), [`js-style-guide.md`](../../../.claude/rules/js-style-guide.md), [`js-testing-rules.md`](../../../.claude/rules/js-testing-rules.md), [`git-guidelines.md`](../../../.claude/rules/git-guidelines.md){{, plus dependency feature task docs: [F{{dep}}](../F{{dep-slug}}/F{{dep-slug}}-tasks.md)}}
+> **Slug:** `{{PROJECT_SLUG}}` · **Depends on:** {{deps or "—"}} · **PRD ref:** {{PRD §/REQ refs}}
+> **Sources:** [`{{prd-file}}`](./{{prd-file}}), [`{{features-file}}`](./{{features-file}}) (F{{NN}} spec block + relevant schema-delta rows){{, the project rules discovered for this repo}}{{, plus dependency feature task docs: [F{{dep}}](../F{{dep-slug}}/F{{dep-slug}}-tasks.md)}}
 
 <!--
 AUTHOR GUIDANCE (delete all HTML comments before finalizing):
-- This template mirrors .docs/features/F01-monorepo-scaffolding/F01-monorepo-scaffolding-tasks.md in structure and depth.
 - Fill EVERY section. Replace {{placeholders}}. Delete sections only if genuinely N/A (and say why).
-- Ground every claim in a source: PRD §, rule file, dep task doc, code path:line, or web URL.
-- Resolve every "Edge case" from the features.md spec into an explicit decision or a flagged owner question.
+- Ground every claim in a source: PRD §, project rule file, dep task doc, code path:line, or web URL.
+- Resolve every "Edge case" from the feature spec into an explicit decision or a flagged owner question.
+- If a depth exemplar (an existing completed *-tasks.md in the same dir family) was found, mirror its
+  level of detail. Otherwise match the rigor implied by the placeholders below.
 -->
 
 ---
 
 ## 1. F{{NN}} Recap
 
-**Goal:** {{one-sentence outcome — copy/refine from features.md Goal}}.
+**Goal:** {{one-sentence outcome — copy/refine from the feature spec's Goal}}.
 
-**Ships:** {{what an end user can concretely do once merged — copy/refine from features.md Ships}}.
+**Ships:** {{what an end user can concretely do once merged — copy/refine from the feature spec's Ships}}.
 
 **Acceptance (definition of done):**
-{{Copy the feature's Acceptance bullets from features.md verbatim, then tighten. Each must be observable.}}
+{{Copy the feature's Acceptance bullets from the feature spec verbatim, then tighten. Each must be observable.}}
 
 **Edge cases to resolve up front:**
-{{For each Edge case in the features.md spec: state the resolution as a decision, OR flag it as an owner question. Never carry an unresolved trap forward silently.}}
+{{For each Edge case in the feature spec: state the resolution as a decision, OR flag it as an owner question. Never carry an unresolved trap forward silently.}}
 - {{Edge case}} → **Decision:** {{choice + one-line rationale}}.
 - {{Edge case}} → **Owner question:** {{what needs sign-off}}.
 
@@ -38,7 +39,7 @@ AUTHOR GUIDANCE (delete all HTML comments before finalizing):
 - **Existing structure this feature builds on:** {{dirs, config modules, exported seams — with path citations}}.
 - **Prior art / partial work:** {{anything already half-built that this feature completes or must reconcile with}}.
 - **File paths the plan references that do NOT exist yet** (will be created): {{list}}.
-- **Authority files** this plan must satisfy: {{which .claude/rules/*.md dictate structure/naming/testing/git for this feature}}.
+- **Project rules** this plan must satisfy: {{the rule files discovered for this repo (style, testing, dev, git, etc.) — list them; do not invent ones that do not exist}}.
 - **Hidden coupling to plan for:** {{shared types, config, env vars, schema columns the spec doesn't spell out but tasks will touch}}.
 
 ---
@@ -52,7 +53,7 @@ AUTHOR GUIDANCE (delete all HTML comments before finalizing):
 
 > **Out of F{{NN}} scope (explicitly deferred):** {{what this feature does NOT do and which later feature owns it. Prevents scope creep.}}
 
-> **Owner sign-off needed:** {{any irreversible / cross-cutting choice deferred to the owner (e.g. who can create projects; soft vs hard delete; reports access). Surface these in chat too.}}
+> **Owner sign-off needed:** {{any irreversible / cross-cutting choice deferred to the owner. Surface these in chat too.}}
 
 ---
 
@@ -75,8 +76,7 @@ Tasks are grouped into **N batches** by dependency order. Within a batch, tasks 
 ### Batch dependency diagram
 
 ```
-{{ASCII diagram: Batch A → Batch B → ... showing which tasks gate which.
-Reuse the F01 diagram style (T1 ──┐ ├──▶ T3).}}
+{{ASCII diagram: Batch A → Batch B → ... showing which tasks gate which.}}
 ```
 
 - {{Batch A}} → {{Batch B}} is a hard barrier: {{why}}.
@@ -161,22 +161,22 @@ Steps:
 
 ## 7. Final F{{NN}} Acceptance Checklist
 
-- [ ] {{restates the feature's definition-of-done from features.md, expanded with the wiring proven in the terminal task}}.
-- [ ] `npm run lint` + `npm run format:check` pass on an empty change (per F01 baseline).
-- [ ] `npm run typecheck` + `npm run test` pass.
+- [ ] {{restates the feature's definition-of-done from the feature spec, expanded with the wiring proven in the terminal task}}.
+- [ ] Lint + format checks pass on an empty change.
+- [ ] Typecheck + test pass.
 - [ ] {{feature-specific observable checks}}.
 
 **Integration record (fill during the terminal task):**
 - Feature commit SHA: `________`
-- {{key observable: e.g. `/api/...` response, UI screenshot path, migration applied}}: `________`
+- {{key observable: e.g. API response, UI screenshot path, migration applied}}: `________`
 - Lint/format/typecheck/test exit codes: `0 / 0 / 0 / 0`
 
 ---
 
 ## 8. Schema deltas owned by this feature
 
-{{If features.md §"Schema deltas vs. PRD" assigns a delta to F{{NN}}, document the exact migration here. Otherwise delete this section.}}
+{{If the feature file's "Schema deltas" section assigns a delta to F{{NN}}, document the exact migration here. Otherwise delete this section.}}
 
 | Delta | Detail | Migration |
 | --- | --- | --- |
-| {{e.g. `Tickets.position`}} | {{type, nullable, default, index}} | {{`ALTER TABLE ...` / Prisma schema block}} |
+| {{e.g. `Tickets.position`}} | {{type, nullable, default, index}} | {{`ALTER TABLE ...` / ORM schema block}} |

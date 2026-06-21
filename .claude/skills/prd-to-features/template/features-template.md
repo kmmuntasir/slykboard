@@ -1,6 +1,6 @@
 # {{Product Name}} — Feature Breakdown
 
-> Source of truth for scope: [`{{prd-file}}`](./{{prd-file}}). Slug: `{{SLUG}}`.
+> Source of truth for scope: [`{{prd-file}}`](./{{prd-file}}). Project slug: `{{PROJECT_SLUG}}`.
 >
 > This document decomposes the {{MVP | product}} into **small, shippable, sequential features**. Each
 > feature is an independently mergeable increment that leaves the system in a working state
@@ -22,6 +22,15 @@
 ---
 
 ## Feature Index
+
+<!--
+INDEX FORMAT CONTRACT (read by the sibling `plan-single-feature` skill):
+- One checkbox line per feature: `- [ ] **F<NN>** <title> — <emoji> <Category> · _deps: <ids or —>_`.
+- Checked = `- [x]` = feature implemented.
+- Keep the `_deps: ..._` token on every line (even when empty) so deps are machine-readable.
+- Print the category legend used in the file. The five below are the default set; extend only if
+  the product needs a category they do not cover, and add the new emoji to the legend here.
+-->
 
 > **Categories:** 🏗 Scaffolding · 🔧 Infrastructure · ✨ Feature · ⬆ Enhancement · 🚀 Deployment
 >
