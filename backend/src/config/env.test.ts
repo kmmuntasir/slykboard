@@ -11,6 +11,16 @@ type Case = {
 };
 
 describe('loadConfig', () => {
+  // F05: full valid base — happy-path cases extend it; throw cases build partial inputs.
+  const validBase: Record<string, string | undefined> = {
+    FRONTEND_URL: 'http://localhost:5173',
+    DATABASE_URL: 'postgresql://x:x@localhost:5432/x',
+    JWT_SECRET: 'x'.repeat(32),
+    GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
+    GOOGLE_CLIENT_SECRET: 'test-client-secret',
+    GOOGLE_CALLBACK_URL: 'postmessage',
+  };
+
   const cases: Case[] = [
     { name: 'throws when FRONTEND_URL missing', input: { PORT: '3000' }, expectThrow: true },
     { name: 'throws when FRONTEND_URL empty', input: { FRONTEND_URL: '' }, expectThrow: true },
@@ -20,40 +30,62 @@ describe('loadConfig', () => {
       expectThrow: 'DATABASE_URL is required',
     },
     {
-      name: 'returns config when FRONTEND_URL present',
+      name: 'throws when JWT_SECRET missing',
       input: {
         FRONTEND_URL: 'http://localhost:5173',
         DATABASE_URL: 'postgresql://x:x@localhost:5432/x',
       },
+      expectThrow: 'Missing JWT_SECRET',
+    },
+    {
+      name: 'throws when JWT_SECRET shorter than 32 chars',
+      input: { ...validBase, JWT_SECRET: 'too-short' },
+      expectThrow: 'JWT_SECRET must be >= 32 chars',
+    },
+    {
+      name: 'throws when GOOGLE_CLIENT_ID missing',
+      input: { ...validBase, GOOGLE_CLIENT_ID: undefined },
+      expectThrow: 'Missing GOOGLE_CLIENT_ID',
+    },
+    {
+      name: 'throws when GOOGLE_CLIENT_SECRET missing',
+      input: { ...validBase, GOOGLE_CLIENT_SECRET: undefined },
+      expectThrow: 'Missing GOOGLE_CLIENT_SECRET',
+    },
+    {
+      name: 'throws when GOOGLE_CALLBACK_URL missing',
+      input: { ...validBase, GOOGLE_CALLBACK_URL: undefined },
+      expectThrow: 'Missing GOOGLE_CALLBACK_URL',
+    },
+    {
+      name: 'returns config when FRONTEND_URL present',
+      input: { ...validBase },
       field: 'frontendUrl',
       value: 'http://localhost:5173',
     },
     {
       name: 'accepts DATABASE_URL',
-      input: {
-        FRONTEND_URL: 'http://localhost:5173',
-        DATABASE_URL: 'postgresql://x:x@localhost:5432/x',
-      },
+      input: { ...validBase },
       field: 'databaseUrl',
       value: 'postgresql://x:x@localhost:5432/x',
     },
     {
       name: 'defaults PORT to 3000 when unset',
-      input: {
-        FRONTEND_URL: 'http://x',
-        DATABASE_URL: 'postgresql://x:x@localhost:5432/x',
-      },
+      input: { ...validBase, PORT: undefined },
       field: 'port',
       value: 3000,
     },
     {
       name: 'defaults NODE_ENV to development',
-      input: {
-        FRONTEND_URL: 'http://x',
-        DATABASE_URL: 'postgresql://x:x@localhost:5432/x',
-      },
+      input: { ...validBase, NODE_ENV: undefined },
       field: 'nodeEnv',
       value: 'development',
+    },
+    {
+      name: 'exposes F05 JWT signing key',
+      input: { ...validBase },
+      field: 'jwtSecret',
+      value: 'x'.repeat(32),
     },
   ];
 
