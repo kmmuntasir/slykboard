@@ -1,8 +1,9 @@
 # F{{NN}} — {{Title}}: Plan + Task Breakdown
 
 > **Feature:** F{{NN}} — {{title}} ({{Phase name}} — {{phase subtitle}})
+> **Feature index:** [`{{feature-index-file}}`]({{feature-index-file}})
 > **Slug:** `{{PROJECT_SLUG}}` · **Depends on:** {{deps or "—"}} · **PRD ref:** {{PRD §/REQ refs}}
-> **Sources:** [`{{prd-file}}`](./{{prd-file}}), [`{{features-file}}`](./{{features-file}}) (F{{NN}} spec block + relevant schema-delta rows){{, the project rules discovered for this repo}}{{, plus dependency feature task docs: [F{{dep}}](../F{{dep-slug}}/F{{dep-slug}}-tasks.md)}}
+> **Sources:** [`{{prd-file}}`](./{{prd-file}}){{, the project rules discovered for this repo}}{{, plus dependency feature task docs: [F{{dep}}](../F{{dep-slug}}/F{{dep-slug}}-tasks.md)}}
 
 <!--
 AUTHOR GUIDANCE (delete all HTML comments before finalizing):

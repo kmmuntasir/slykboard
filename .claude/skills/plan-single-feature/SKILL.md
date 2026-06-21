@@ -94,10 +94,12 @@ Thin/empty findings → note the gap; do not invent.
 Dispatch **ONE `general-purpose` subagent** (high reasoning effort). Inputs:
 - The target feature spec block (Step 1).
 - All Phase-2 summaries (A/B/C/D), verbatim.
+- **The resolved feature index file path** (absolute) — so the header `> **Feature index:**` line links to the original source.
 - The template path — **instruct it to follow the skeleton exactly.**
 - The depth exemplar path (if found) — depth/rigor reference, not content to copy.
 
 Instruct the synthesis agent to:
+0. Populate the header blockquote exactly. Replace all `{{placeholders}}`. The `**Feature index:**` field must contain a relative Markdown link to the **original feature index file** (e.g., `[features.md](../../features.md)`). This is the file passed as input — use its absolute-to-relative path resolved from the output file's location.
 1. Resolve every **edge case** the spec lists into an explicit decision (or a clearly-flagged owner question). No unresolved traps carried forward.
 2. Produce the **Key Technical Decisions** table — one row per material choice, each rationale grounded in the Phase-2 evidence (cite PRD §, rule file, or web source).
 3. Produce the **Architecture Overview** target tree — only the files/dirs this feature adds or changes; reuse existing structure where the codebase summary confirms it.
