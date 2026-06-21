@@ -41,7 +41,7 @@
 
 **Phase 1 — Identity & Access**
 - [~] **F05** Google SSO login + JWT issuance — ✨ Feature · _deps: F02, F03, F04_ — code complete + unit-tested (T1-T12 ✅); T13/T14 live Google smoke pending owner
-- [ ] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_
+- [ ] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_ — task plan drafted; decisions resolved: grandfather disallowed domain / whitelist→F25 / token_version→F07
 - [ ] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_
 
 **Phase 2 — Projects & Board**
@@ -178,7 +178,11 @@
 **Edge cases:**
 - Race: two simultaneous first-signups could both grab admin. Guard with a counted query + unique constraint or a singleton "bootstrap admin" env var.
 - Domain check must run on the verified Google email, not a raw claim (verify the ID token).
-- Existing user whose domain later becomes disallowed — decide: block on next login or grandfather. Document choice.
+- Existing user whose domain later becomes disallowed — **DECISION: grandfather.** Domain check runs only on the insert (signup) path; the conflict path (existing `googleId`) skips it, so tightening `ALLOWED_DOMAIN` never locks out current members. Retroactive eviction belongs to the manual whitelist/blocklist → **F25**.
+- Manual email whitelist (allow/block specific emails regardless of domain) — **DECISION: deferred to F25.** F06 ships ONLY `ALLOWED_DOMAIN` enforcement (Option A). F25 owns whitelist management per its spec.
+- Mid-session role-change invalidation (`token_version` / `ver` claim) — **DECISION: deferred to F07.** F06's single-admin model has the only role transition at insert time (before any token exists), so no stale token to invalidate; `/me` re-fetch from the DB mitigates the symptom. F25 multi-admin demotion is the scenario that needs `token_version`.
+
+> Full decision matrix + task breakdown: [F06 task plan](./features/F06-onboarding-workspace-roles/F06-onboarding-workspace-roles-tasks.md) (§3 decisions, §9 sign-off).
 
 ### F07 — Session lifecycle & auth guards
 **Goal:** Authenticated state is enforced end to end.
@@ -192,7 +196,7 @@
 - Logout clears server/client session state.
 
 **Edge cases:**
-- Role changed by an admin (F25) must take effect — either short JWT TTL or a token-version check.
+- Role changed by an admin (F25) must take effect — either short JWT TTL or a token-version check. F06 defers `token_version` here (single-admin model has no mid-session role change yet).
 - 401 from any API call → global interceptor logs the user out once, not per-request.
 - Concurrent tabs: logout in one tab should reflect in others (storage event or broadcast).
 
@@ -574,6 +578,7 @@ The PRD §8 schema is a draft. These additions are required for the features abo
 | `TimeEntries` partial unique index on `user_id` where `end_time IS NULL` | Enforce single active timer. | F20 |
 | `ActivityLogs.action_type` add `LABELS_CHANGED` | Label edits are an audited attribute change. | F18 |
 | Column identity (`columns` JSONB as `{id, name}`) | Renaming a column must not orphan tickets. | F08 |
+| `users_one_admin` partial unique index on `role` WHERE `role='ADMIN'` | Race-safe first-admin guarantee — at most one ADMIN row (DB-enforced). | F06 |
 
 ---
 
