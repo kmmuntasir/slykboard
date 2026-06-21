@@ -773,15 +773,15 @@ Create / Modify:
 - [ ] `.gitignore` has `node_modules/`, `.env`, `dist/`, `build/`, `*.log`, `.DS_Store`.
 - [ ] Branch named `feature/SLYK-<n>-db-connection-migration-pipeline` (or omit ticket if unknown); commits single-line `SLYK-<n>: msg`; rebase-and-merge only.
 
-**Integration record (fill during T4):**
-- Feature commit SHA: `________`
-- `docker compose up -d` healthcheck: `________` (timestamp)
-- `db:migrate` applied migration file: `backend/src/db/migrations/0000_<name>.sql`
-- `db:seed` output: `Seeded 2 users`
-- `GET /api/health` response: `________`
-- `psql \d "Users"` columns confirmed: `________`
-- SIGTERM exit time: `________`s (must be ≤ 10s)
-- Lint/format/typecheck/test exit codes: `0 / 0 / 0 / 0`
+**Integration record (filled during T4 — 2026-06-21):**
+- Feature commit SHA (pre-T4): `f835cfc` (T4 commit added by orchestrator on top)
+- `docker compose up -d` healthcheck: container `slykboard-db` StartedAt `2026-06-21T14:13:08Z`, `State.Health.Status=healthy`
+- `db:migrate` applied migration file: `backend/src/db/migrations/0000_calm_the_renegades.sql` (re-applied idempotently: `migrations applied successfully!`)
+- `db:seed` output: `Seeded 2 users` (first run inserted 2; second run idempotent via `onConflictDoNothing({ target: users.email })` — row count stayed at 2)
+- `GET /api/health` response (HTTP 200): `{"status":"ok","service":"slykboard-backend","uptime":9.865832625,"timestamp":"2026-06-21T14:23:47.610Z"}`
+- `psql \d "Users"` columns confirmed: `id uuid PK DEFAULT gen_random_uuid()` · `google_id text NOT NULL` (UNIQUE) · `email text NOT NULL` (UNIQUE) · `full_name text NOT NULL` · `avatar_url text` (nullable) · `role "Role" NOT NULL DEFAULT 'MEMBER'` · `created_at timestamp with time zone NOT NULL DEFAULT now()` · `updated_at timestamp with time zone NOT NULL DEFAULT now()` (D6 proven: both timestamps are `timestamp with time zone`)
+- SIGTERM exit time: `0.06s` (well under the 10s deadline; `lsof -i :3000` clean post-shutdown, no hanging backend sockets on `:5432`)
+- Lint/format/typecheck/test exit codes: `0 / 0 / 0 / 0` (`npm run lint` — 0 issues; `npm run format:check` — all files pass; `npm run typecheck -w backend` — clean; `npm test -w backend` — 19/19 tests pass across 3 files: `env.test.ts` 7, `health.test.ts` 2, `db.test.ts` 10)
 
 ---
 
