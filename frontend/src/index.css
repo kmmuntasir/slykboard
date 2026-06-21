@@ -1,1 +1,29 @@
 @import 'tailwindcss';
+
+/* F04 minimal palette (D6). Board-specific colors deferred to F09. */
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #111827;
+  --color-primary: #2563eb;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+}
