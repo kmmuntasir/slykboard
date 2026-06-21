@@ -50,7 +50,15 @@ export function validateRequest(schema: SchemaInput) {
         });
       }
       // Overwrite with parsed (coerced/stripped) value.
-      (req[source] as unknown) = result.data;
+      // Express 5 defines `req.query` (and possibly other props) as a getter-only
+      // property — direct assignment throws TypeError. defineProperty bypasses it
+      // and works uniformly for body/query/params. Backward-compatible with plain
+      // mock objects in unit tests (their props are writable by default).
+      Object.defineProperty(req, source, {
+        value: result.data,
+        writable: true,
+        configurable: true,
+      });
     }
 
     next();
