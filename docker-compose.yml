@@ -1,0 +1,24 @@
+# Slykboard local dev database (F02). Matches hosted Postgres 16 engine.
+# Usage: docker compose up -d   (from repo root)
+services:
+  postgres:
+    image: postgres:16
+    container_name: slykboard-db
+    environment:
+      POSTGRES_USER: slyk
+      POSTGRES_PASSWORD: slyk
+      POSTGRES_DB: slykboard
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U slyk -d slykboard']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
