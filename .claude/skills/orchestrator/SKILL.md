@@ -86,6 +86,8 @@ All paths are relative to the repo root (the orchestrator runs from there).
 
 5. **Report at the end.** Per dispatched unit: what was implemented (files touched), what was verified, anything blocked or left open.
 
+6. **Post-Orchestration Action.** Check if a Claude skill like `/verify-implementation` (or similar) exists. If so, invoke it with the original task-list document for automated verification. If not, note the lack of automated verification in your final report.
+
 ## Conflict-free heuristics (shared working tree — mandatory)
 
 There are **no per-task worktrees**. Parallel headless sessions write the same working tree, so the conflict-free gate is mandatory, not optional. Compute file-set overlap from the analyst's `files[]` arrays before dispatching.
