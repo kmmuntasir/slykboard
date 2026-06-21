@@ -24,23 +24,23 @@
 - **Decide path aliases (`@/`) up front — expensive to retrofit.** → **Decision:** Already wired by F01 (`frontend/vite.config.ts:9-11`, `frontend/tsconfig.json:10-12`). F04 adopts `@/` as the canonical import style for all new source files. No additional config work. Phase-2 grep confirmed zero existing `@/` imports; F04 establishes the convention by example (every new file authored in this feature uses `@/`-prefixed imports for internal modules).
 - **Environment variables read once into a typed config module, not scattered `import.meta.env` calls.** → **Decision:** Create `frontend/src/config/env.ts` as the single reader of `import.meta.env`. Export a typed `env` object (frozen singleton, mirroring the backend's `backend/src/config/env.ts` pattern). Augment `ImportMetaEnv` in `frontend/src/vite-env.d.ts` to declare all `VITE_` vars the shell needs (today: just `VITE_API_BASE_URL`; future F05+ vars extend the augmentation). All other code imports from `@/config/env`, never `import.meta.env` directly. This kills the "scattered `import.meta.env`" anti-pattern the F03 smoke-probe in `App.tsx:14` already exhibits.
 
-> **Owner sign-off needed (surfaced for confirmation; not blocking plan finalization):**
-> - Whether to preserve the current `App.tsx` health probe as a `<HealthBadge>` component under the new layout, or delete it entirely. **Recommendation:** delete the bespoke probe; the F03 `/api/ping` smoke route is exercised once by the new API client's unit test. A permanent health indicator belongs in F09 when there's real state to gate. F04 ships no health UI.
-> - Whether to install `eslint-plugin-react-hooks` now (F01 verification explicitly deferred it). **Recommendation:** install now (T1) — the F04 shell introduces hook-heavy providers (`QueryClientProvider`, `useAuthStore`, `useQuery` in the smoke test); the plugin prevents the most common React 19 footguns at lint time. Cost is one flat-config entry.
-> - Confirm package manager is npm (workspaces) and the `npm install -w frontend ...` form is preferred over `cd frontend && npm install`. Phase-2 root `package.json:6-8` confirms npm workspaces; `-w frontend` targets the workspace from the repo root and is the idiomatic form.
+> **Owner sign-off (resolved 2026-06-22):**
+> - **PRESERVE** the current `App.tsx` health probe, refactored into a `<HealthBadge>` component mounted inside `<AppLayout/>`. Probes `/api/health` via `apiFetch`; shows green/red dot. Owner chose to keep the indicator visible through F04.
+> - **INSTALL** `eslint-plugin-react-hooks` now (T1). F04 shell is hook-heavy (providers, `useQuery`, `useAuthStore`); the plugin prevents missing-deps / rules-of-hooks bugs at lint time. F01 verification had deferred this — F04 picks it up.
+> - **CONFIRMED:** package manager is npm workspaces; install form is `npm install -w frontend …` from the repo root (not `cd frontend && npm install`).
 
 ---
 
 ## 2. Codebase Analysis Summary
 
-- **State:** **Modified greenfield.** F01 (monorepo scaffolding) is merged and verified (SHA `98c9333`, 2026-06-21; lint/format/typecheck/test all exit 0). The frontend boots — `main.tsx:1-10` mounts `<App/>` in `<StrictMode>` via `createRoot`; `App.tsx:1-45` renders an `<h1>Slykboard</h1>` and probes `${import.meta.env.VITE_API_BASE_URL}/health` with raw `fetch` (the anti-pattern F04 resolves). Vite 7 + Tailwind 4 + Vitest 3 are pinned and configured. **MISSING for F04:** router, providers (QueryClient / error boundary), Zustand store, API client, typed config module, themed layout, placeholder pages, auth-gate. Placeholder dirs (`src/{api,components,constants,hooks,pages,stores,types,utils}/`) exist as `.gitkeep`-only.
+- **State:** **Modified greenfield.** F01 (monorepo scaffolding) is merged and verified (SHA `98c9333`, 2026-06-21; lint/format/typecheck/test all exit 0). The frontend boots — `main.tsx:1-10` mounts `<App/>` in `<StrictMode>` via `createRoot`; `App.tsx:1-45` renders an `<h1>Slykboard</h1>` and probes `${import.meta.env.VITE_API_BASE_URL}/health` with raw `fetch` (F04 refactors this probe into a `<HealthBadge>` component and removes the raw `import.meta.env` access). Vite 7 + Tailwind 4 + Vitest 3 are pinned and configured. **MISSING for F04:** router, providers (QueryClient / error boundary), Zustand store, API client, typed config module, themed layout, placeholder pages, auth-gate. Placeholder dirs (`src/{api,components,constants,hooks,pages,stores,types,utils}/`) exist as `.gitkeep`-only.
 - **Monorepo shape (confirmed live):** npm workspaces `["frontend","backend"]`; root `type: module`; root `engines.node: ">=24.0.0"` (`.nvmrc:1` pins `24`). Install prefix: `-w frontend`. Root scripts (`package.json:13-23`): `dev` (concurrently), `dev:web`, `build` (backend → frontend), `typecheck` (both workspaces), `lint` (`eslint .`), `format` / `format:check`, `test` (`vitest run` in both).
 - **TS config gotchas (`tsconfig.base.json:1-14`):** `strict`, `verbatimModuleSyntax` (forces `import type` / `export type` for type-only imports), `noUncheckedIndexedAccess` (indexed lookups return `T | undefined` — relevant for route config arrays, config lookups), `isolatedModules`, `module: ESNext`, `moduleResolution: Bundler`. Frontend `tsconfig.json:1-15` extends base with `jsx: react-jsx`, `lib: ["ES2023","DOM","DOM.Iterable"]`, `composite: true`, `paths: {"@/*":["./src/*"]}`. **Path alias already wired** — no F04 action beyond adopting it.
 - **Vite config (`frontend/vite.config.ts:1-18`):** plugins `react()` + `tailwindcss()`; `resolve.alias` `'@' → ./src` (lines 9-11); `test` (Vitest) inline: `environment: 'jsdom'`, `globals: true`, `setupFiles: ['./src/test-setup.ts']`. No changes needed.
 - **Tailwind v4 (`frontend/src/index.css:1`):** `@import 'tailwindcss';` — CSS-first config (no JS). F04 extends with `@theme {}` tokens.
 - **Frontend deps today (`frontend/package.json`):** runtime: only `react ^19.0.0`, `react-dom ^19.0.0`. Dev: `@tailwindcss/vite`, `@testing-library/jest-dom`, `@testing-library/react`, `@types/react ^19`, `@vitejs/plugin-react ^4.3.4`, `jsdom ^25`, `tailwindcss ^4`, `typescript ^5.6`, `vite ^7`, `vitest ^3`. Scripts: `dev`, `build` (`tsc -b && vite build`), `preview`, `typecheck` (`tsc --noEmit`), `test` (`vitest run`), `test:watch`. **NOT installed (F04 adds):** `@tanstack/react-query`, `zustand`, `react-router`, `react-error-boundary`. Plus dev: `eslint-plugin-react-hooks`.
 - **Existing frontend files F04 modifies or reconciles:**
-  - `frontend/src/App.tsx:1-45` — current health-probe shell. **F04 replaces** with `<RouterProvider router={router}/>` mount (the probe is deleted — owner-rec'd above).
+  - `frontend/src/App.tsx:1-45` — current health-probe shell. **F04 refactors** the probe into `<HealthBadge/>` (mounted inside `<AppLayout/>`) and replaces the `App.tsx` body with `<RouterProvider router={router}/>` (D12).
   - `frontend/src/main.tsx:1-10` — bare `StrictMode` + `createRoot`. **F04 wraps** with providers (`ErrorBoundary` → `QueryClientProvider` → `RouterProvider`).
   - `frontend/src/index.css:1` — single `@import 'tailwindcss';`. **F04 appends** `@theme {}` tokens + base layer.
   - `frontend/src/vite-env.d.ts:1-9` — `ImportMetaEnv` already declares `VITE_API_BASE_URL: string`. **F04 keeps** and documents the augmentation pattern for future vars.
@@ -60,7 +60,7 @@
   - `.claude/rules/js-testing-rules.md` — Vitest; co-located `*.test.tsx`; Testing Library priority `getByRole > getByLabelText > getByText > getByTestId`; coverage targets business logic >80%, components >70%.
   - `.claude/rules/git-guidelines.md` — never run git without explicit approval (skill grants approval for the planning commit only); branch `type/SLYK-TICKET-desc` (F04 has no Jira ticket — omit; use `feature/SLYK-F04-frontend-app-shell`); single-line commit `SLYK-F04: msg`; rebase-and-merge only, no squash, no merge commits; `.gitignore` has `node_modules/`, `.env`, `dist/`, `build/`, `*.log`, `.DS_Store`.
   - `.claude/rules/persona.md` — React 19+ / Vite / Tailwind / React Query / Zustand; deployment Vercel (frontend); frontend code → `./frontend/`.
-- **Prior art / partial work:** None for F04. No router, no providers, no store, no API client, no theme tokens. The `App.tsx` health probe is throwaway code F04 replaces.
+- **Prior art / partial work:** No router, providers, store, API client, or theme tokens exist. The `App.tsx` health probe is the one piece of prior art F04 preserves — refactored into `<HealthBadge/>` (D12, owner-resolved).
 - **File paths the plan references that do NOT exist yet (will be created):**
   - `frontend/src/config/env.ts` — typed env reader (D5).
   - `frontend/src/config/env.test.ts` — unit tests.
@@ -77,7 +77,7 @@
   - `frontend/src/components/ErrorBoundary.tsx` — re-export + app-level boundary wiring.
   - `frontend/src/components/ErrorFallback.tsx` — fallback UI.
   - `frontend/src/components/Loading.tsx` — spinner / skeleton.
-  - `frontend/src/components/HealthBadge.tsx` — **NOT created** (decision: delete probe; no health UI in F04).
+  - `frontend/src/components/HealthBadge.tsx` — **NEW (D12, owner-resolved).** Refactored from the `App.tsx` raw-fetch probe; uses `apiFetch('/health')` on mount (via `useQuery`), renders a status dot; mounted inside `<AppLayout/>`.
   - `frontend/src/pages/BoardPage.tsx` — placeholder.
   - `frontend/src/pages/ReportsPage.tsx` — placeholder.
   - `frontend/src/pages/SettingsPage.tsx` — placeholder.
@@ -114,7 +114,7 @@
 | D9 | **Install command** | **`npm install -w frontend @tanstack/react-query@^5.101 zustand@^5.0 react-router@^7.18 react-error-boundary@^5`** + **`npm install -D -w frontend eslint-plugin-react-hooks`** (run from repo root) | Phase-2 root `package.json:6-8` confirms npm workspaces; `-w frontend` targets the workspace from the repo root. Idiomatic form (vs `cd frontend && npm install`). |
 | D10 | **ESLint react-hooks plugin** | **Wire `eslint-plugin-react-hooks`** now in the flat config with recommended rules | F01 verification explicitly deferred this; F04 is hook-heavy (providers, `useQuery`, `useAuthStore`). Cost is one flat-config entry. Prevents missing-deps / rules-of-hooks bugs at lint time. |
 | D11 | **Env client type mirror** | **`frontend/src/types/api.ts`** exports `Envelope<T>`, `ApiErrorBody`, `ErrorCode` union mirroring backend `envelope.ts` | F03 ships a closed `ErrorCode` vocabulary at `backend/src/utils/envelope.ts:5-12`. Frontend branches on codes client-side; duplicating the union (with a comment pointing at the backend source) avoids cross-workspace type packages until drift forces it. F01 verification note #5: "no shared workspace types package". |
-| D12 | **`App.tsx` health probe** | **Delete** the current `${VITE_API_BASE_URL}/health` probe; replace `App.tsx` body with `<RouterProvider router={router}/>` | Owner-rec'd (see §1). The probe duplicates what the API client's unit test asserts. Permanent health UI belongs in F09. F04 ships no health UI. |
+| D12 | **`App.tsx` health probe** | **PRESERVE** the probe logic, refactored into `<HealthBadge/>` (mounted inside `<AppLayout/>`); `App.tsx` body becomes `<RouterProvider router={router}/>` | Owner-resolved 2026-06-22 (keep indicator visible). `<HealthBadge/>` calls `apiFetch('/health')` via `useQuery` on mount and renders a green/red dot — exercises the new API client in the live UI, complementing the `/api/ping` unit test. F09 may relocate or extend; F04 ships it inside the layout. |
 | D13 | **Test router strategy** | **`createMemoryRouter`** in tests (deterministic history, no URL bar coupling); `render(<RouterProvider router={memoryRouter}/>)` from `@testing-library/react` | React Router v7 data-router: `createBrowserRouter` couples to real history; tests need `createMemoryRouter` for `initialEntries` + deterministic navigation. Phase-2 research + RR v7 docs. |
 | D14 | **No persistence layer** | **F04 ships no `persist` middleware** on the Zustand store; `user` resets on reload | F05 owns auth persistence (localStorage vs cookie vs session). F04's gate works structurally (redirects to `/login` on reload because `user === null`); persistence is additive and non-breaking when F05 lands. |
 
@@ -129,14 +129,14 @@
 > - **Cross-workspace shared types package** — F01 deferred; F04 duplicates the envelope types in `frontend/src/types/api.ts` with a backend pointer.
 > - **OpenAPI codegen for the API client** — not requested; manual types suffice through Phase 0.
 
-> **Owner sign-off status:**
+> **Owner sign-off status (all resolved 2026-06-22):**
 > - ✅ Router library + mode (`react-router` v7 data-router) — PRD §5 + F04 spec edge case.
 > - ✅ React Query + 30s `staleTime` default — PRD §5 + PRD §4 REQ-4 alignment.
 > - ✅ Zustand per-domain stores — `js-development-rules.md` (State Management section).
 > - ✅ Config module pattern (`config/env.ts`) — F04 edge case #2 verbatim.
-> - ➖ Delete `App.tsx` health probe (D12) — resolved with rationale; owner-rec'd.
-> - ➖ Install `eslint-plugin-react-hooks` now (D10) — resolved with rationale; F01 verification flagged as deferred.
-> - ➖ Confirm npm workspaces + `-w frontend` form (D9) — phase-2 confirms workspaces; confirm the `-w` form is preferred over `cd frontend && npm install`.
+> - ✅ `App.tsx` health probe → **preserve as `<HealthBadge/>`** (D12) — owner-resolved.
+> - ✅ Install `eslint-plugin-react-hooks` now (D10) — owner-resolved.
+> - ✅ npm workspaces + `npm install -w frontend …` form (D9) — owner-confirmed.
 
 ---
 
@@ -152,7 +152,7 @@ slykboard/                                          # repo root
         ├── vite-env.d.ts                           # MODIFY — keep ImportMetaEnv augmentation (VITE_API_BASE_URL typed)
         ├── index.css                               # MODIFY — append @theme tokens + base layer (Tailwind v4 CSS-first)
         ├── main.tsx                                # MODIFY — mount providers (ErrorBoundary → QueryClientProvider → RouterProvider)
-        ├── App.tsx                                 # MODIFY — replace health probe with RouterProvider mount (D12)
+        ├── App.tsx                                 # MODIFY — body becomes <RouterProvider router={router}/> (D12); probe logic moves to <HealthBadge/>
         ├── App.test.tsx                            # MODIFY — shell smoke test (routes render, nav present, ping query)
         ├── config/
         │   ├── env.ts                              # NEW (D5) — typed env reader; frozen singleton
@@ -170,8 +170,9 @@ slykboard/                                          # repo root
         │   ├── useAuthStore.ts                     # NEW (D3) — Zustand auth skeleton {user, setUser, clear}
         │   └── useAuthStore.test.ts                # NEW — unit: setUser/clear, default null
         ├── components/
-        │   ├── AppLayout.tsx                       # NEW — top nav + <Outlet/> shell
+        │   ├── AppLayout.tsx                       # NEW — top nav + <HealthBadge/> + <Outlet/> shell
         │   ├── TopNav.tsx                          # NEW — nav links + mobile hamburger (md: breakpoint)
+        │   ├── HealthBadge.tsx                     # NEW (D12) — refactored probe; useQuery('/health') → status dot
         │   ├── RequireAuth.tsx                     # NEW (D8) — auth-gate wrapper
         │   ├── ErrorBoundary.tsx                   # NEW (D4) — re-export with FallbackComponent wired
         │   ├── ErrorFallback.tsx                   # NEW — fallback UI (reload button)
@@ -244,7 +245,7 @@ Tasks are grouped into **3 batches** by dependency order. Within a batch, tasks 
 
 **Within Batch B, T2 / T3 / T4 touch disjoint files** (confirmed by file-set inspection):
 - **T2** owns: `src/lib/queryClient.ts`, `src/main.tsx`, `src/components/ErrorBoundary.tsx`, `src/components/ErrorFallback.tsx`, `src/components/Loading.tsx`.
-- **T3** owns: `src/routes/index.tsx`, `src/pages/*.tsx`, `src/components/AppLayout.tsx`, `src/components/TopNav.tsx`, `src/components/RequireAuth.tsx`, `src/stores/useAuthStore.ts`, `src/App.tsx`.
+- **T3** owns: `src/routes/index.tsx`, `src/pages/*.tsx`, `src/components/AppLayout.tsx`, `src/components/TopNav.tsx`, `src/components/HealthBadge.tsx`, `src/components/RequireAuth.tsx`, `src/stores/useAuthStore.ts`, `src/App.tsx`.
 - **T4** owns: `src/api/client.ts`, `src/api/ping.ts`.
 
 No overlaps. All three can branch off `main` post-T1, implement, and merge in any order.
@@ -261,10 +262,10 @@ No overlaps. All three can branch off `main` post-T1, implement, and merge in an
 |---|-------|---------------------|------------|-------------------|
 | **T1** | A | `frontend/package.json`, `frontend/package-lock.json`, `eslint.config.js`, `frontend/src/config/env.ts`, `frontend/src/config/env.test.ts`, `frontend/src/types/api.ts`, `frontend/src/lib/queryClient.ts`, `frontend/.env.example` | — | — |
 | **T2** | B | `frontend/src/components/ErrorBoundary.tsx`, `frontend/src/components/ErrorFallback.tsx`, `frontend/src/components/Loading.tsx`, `frontend/src/main.tsx` | T1 | T3, T4 |
-| **T3** | B | `frontend/src/stores/useAuthStore.ts`, `frontend/src/components/AppLayout.tsx`, `frontend/src/components/TopNav.tsx`, `frontend/src/components/RequireAuth.tsx`, `frontend/src/pages/BoardPage.tsx`, `frontend/src/pages/ReportsPage.tsx`, `frontend/src/pages/SettingsPage.tsx`, `frontend/src/pages/LoginPage.tsx`, `frontend/src/pages/NotFoundPage.tsx`, `frontend/src/routes/index.tsx`, `frontend/src/App.tsx` | T1 | T2, T4 |
+| **T3** | B | `frontend/src/stores/useAuthStore.ts`, `frontend/src/components/AppLayout.tsx`, `frontend/src/components/TopNav.tsx`, `frontend/src/components/HealthBadge.tsx`, `frontend/src/components/RequireAuth.tsx`, `frontend/src/pages/BoardPage.tsx`, `frontend/src/pages/ReportsPage.tsx`, `frontend/src/pages/SettingsPage.tsx`, `frontend/src/pages/LoginPage.tsx`, `frontend/src/pages/NotFoundPage.tsx`, `frontend/src/routes/index.tsx`, `frontend/src/App.tsx` | T1 | T2, T4 |
 | **T4** | B | `frontend/src/api/client.ts`, `frontend/src/api/ping.ts` | T1 | T2, T3 |
 | **T5** | C | `frontend/src/index.css` | T2, T3 | T6 |
-| **T6** | C | `frontend/src/App.test.tsx`, `frontend/src/api/client.test.ts`, `frontend/src/api/ping.test.ts`, `frontend/src/stores/useAuthStore.test.ts`, `frontend/src/config/env.test.ts` (move if created in T1), per-component smoke tests | T2, T3, T4 | T5 |
+| **T6** | C | `frontend/src/App.test.tsx`, `frontend/src/api/client.test.ts`, `frontend/src/api/ping.test.ts`, `frontend/src/stores/useAuthStore.test.ts`, `frontend/src/config/env.test.ts` (move if created in T1), `frontend/src/components/HealthBadge.test.tsx`, per-component smoke tests | T2, T3, T4 | T5 |
 | **T7** | C | (terminal — no files; runs verification + fills integration record) | T5, T6 | — |
 
 ### Developer assignment tracks
@@ -562,7 +563,7 @@ Create / Modify:
 
 **Batch:** B · **Depends on:** T1 · **Parallel with:** T2, T4
 
-**Description:** Build the routing tree (D1), the auth store skeleton (D3), the auth-gate (D8), the app layout + top nav (responsive), and the five placeholder pages. Replace `App.tsx` with the `<RouterProvider>` mount. Disjoint files: `src/stores/useAuthStore.ts`, `src/components/{AppLayout,TopNav,RequireAuth}.tsx`, `src/pages/*.tsx`, `src/routes/index.tsx`, `src/App.tsx`.
+**Description:** Build the routing tree (D1), the auth store skeleton (D3), the auth-gate (D8), the app layout + top nav (responsive), the `<HealthBadge/>` (D12 — refactored from the existing `App.tsx` probe), and the five placeholder pages. Replace `App.tsx` with the `<RouterProvider>` mount. Disjoint files: `src/stores/useAuthStore.ts`, `src/components/{AppLayout,TopNav,HealthBadge,RequireAuth}.tsx`, `src/pages/*.tsx`, `src/routes/index.tsx`, `src/App.tsx`.
 
 Create / Modify:
 
@@ -618,16 +619,18 @@ Create / Modify:
 
   Notes: (a) Selector form `useAuthStore((s) => s.user)` avoids re-renders on unrelated state changes (Zustand best practice). (b) `state={{ from: location }}` lets F05's LoginPage redirect back after auth. (c) Pathless layout route — the route config wraps `<AppLayout/>` + `<Outlet/>` inside `<RequireAuth/>` so every guarded route inherits the gate.
 
-- **`frontend/src/components/AppLayout.tsx`** (NEW). Top nav + `<Outlet/>`.
+- **`frontend/src/components/AppLayout.tsx`** (NEW). Top nav + `<HealthBadge/>` + `<Outlet/>`.
 
   ```tsx
   import { Outlet } from 'react-router';
   import { TopNav } from './TopNav';
+  import { HealthBadge } from './HealthBadge';
 
   export function AppLayout() {
       return (
           <div className="flex min-h-screen flex-col bg-background text-foreground">
               <TopNav />
+              <HealthBadge />
               <main className="flex-1">
                   <Outlet />
               </main>
@@ -635,6 +638,34 @@ Create / Modify:
       );
   }
   ```
+
+- **`frontend/src/components/HealthBadge.tsx`** (NEW, D12). Refactored from the prior `App.tsx` raw-fetch probe. Uses the new API client (T4) + `useQuery` (T2 provider) to call `/api/health` on mount; renders a status dot.
+
+  ```tsx
+  import { useQuery } from '@tanstack/react-query';
+  import { apiFetch } from '@/api/client';
+
+  export function HealthBadge() {
+      const { data, isError } = useQuery({
+          queryKey: ['health'],
+          queryFn: () => apiFetch<{ status: string; service: string }>('/health'),
+          staleTime: 30_000,
+      });
+
+      const ok = data?.status === 'ok' && !isError;
+      return (
+          <div className="flex items-center justify-center gap-2 bg-muted px-4 py-1 text-xs">
+              <span
+                  aria-label={ok ? 'Service healthy' : 'Service unhealthy'}
+                  className={`h-2 w-2 rounded-full ${ok ? 'bg-green-500' : 'bg-red-500'}`}
+              />
+              <span>{ok ? 'Healthy' : 'Unhealthy'}</span>
+          </div>
+      );
+  }
+  ```
+
+  Notes: (a) Endpoint is `/api/health` (F03 non-enveloped probe) — strip the `/api` prefix because `apiFetch` prepends `env.apiBaseUrl` which already ends in `/api`. (b) `apiFetch` is T4's export — T3 may stub a thin local fetcher in `HealthBadge.tsx` during parallel dev and swap to `apiFetch` at integration; alternatively, T3 depends on T4 for this file (T3 still parallel-safe because the file is the boundary). **Prefer the clean form above; T4 ships first if sequence matters.** (c) `staleTime: 30_000` matches the board-poll default; health does not need to be live-to-the-second.
 
 - **`frontend/src/components/TopNav.tsx`** (NEW). Nav links + mobile hamburger. Responsive at `md:` (768px).
 
@@ -803,7 +834,7 @@ Create / Modify:
 
   Notes: (a) Pathless layout route `<RequireAuth/>` wraps `<AppLayout/>` which provides `<TopNav/>` + `<Outlet/>`. (b) `/login` is public (outside the guard). (c) `path: '*'` catches unmatched routes inside the guarded layout → `<NotFoundPage/>`. (d) Tests (T6) use `createMemoryRouter` with the same config for deterministic history.
 
-- **`frontend/src/App.tsx`** (MODIFY, D12). Replace the health probe with the router mount.
+- **`frontend/src/App.tsx`** (MODIFY, D12). Body becomes the router mount. The prior health-probe code moves to `<HealthBadge/>` (above).
 
   ```tsx
   import { RouterProvider } from 'react-router';
@@ -819,7 +850,8 @@ Create / Modify:
 **Acceptance Criteria:**
 - [ ] `useAuthStore` exports `{ user, setUser, clear }`; default `user === null`.
 - [ ] `RequireAuth` redirects to `/login` when `user === null`; renders `<Outlet/>` when set.
-- [ ] `AppLayout` renders `<TopNav/>` + `<Outlet/>`.
+- [ ] `AppLayout` renders `<TopNav/>` + `<HealthBadge/>` + `<Outlet/>`.
+- [ ] `HealthBadge` queries `/health` via `apiFetch` + `useQuery`; renders a dot (green on `status:'ok'`, red on error/isError).
 - [ ] `TopNav` shows three `NavLink`s (Board, Reports, Settings); hamburger toggles under `md:` breakpoint.
 - [ ] Five pages exist (`Board`, `Reports`, `Settings`, `Login`, `NotFound`); each renders an `<h1>`.
 - [ ] `routes/index.tsx` exports `router` built via `createBrowserRouter`; `/login` public, all others guarded.
@@ -1029,7 +1061,7 @@ Create / Modify:
 
 **Batch:** C · **Depends on:** T2, T3, T4 · **Parallel with:** T5
 
-**Description:** Rewrite `App.test.tsx` as a shell smoke test (router boots, top nav present, `/api/ping` query succeeds via mocked fetch). Add unit tests for the API client (success unwrap, error throw, auth header, network failure), the ping wrapper, the auth store, and the env config. Add a smoke test per placeholder page. Disjoint files: `src/App.test.tsx`, `src/api/client.test.ts`, `src/api/ping.test.ts`, `src/stores/useAuthStore.test.ts`, `src/config/env.test.ts` (already from T1 — T6 may extend), per-page smoke tests under `src/pages/*.test.tsx`.
+**Description:** Rewrite `App.test.tsx` as a shell smoke test (router boots, top nav present, `/api/health` query via `<HealthBadge/>` succeeds through mocked fetch). Add unit tests for the API client (success unwrap, error throw, auth header, network failure), the ping wrapper, the auth store, the env config, and a smoke test for `<HealthBadge/>`. Add a smoke test per placeholder page. Disjoint files: `src/App.test.tsx`, `src/api/client.test.ts`, `src/api/ping.test.ts`, `src/stores/useAuthStore.test.ts`, `src/config/env.test.ts` (already from T1 — T6 may extend), `src/components/HealthBadge.test.tsx`, per-page smoke tests under `src/pages/*.test.tsx`.
 
 Create / Modify:
 
