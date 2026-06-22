@@ -5,12 +5,14 @@ import { TopNav } from './TopNav';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
 
-const { logoutMock, navigateMock } = vi.hoisted(() => ({
+const { logoutMock, navigateMock, broadcastLogoutMock } = vi.hoisted(() => ({
     logoutMock: vi.fn(),
     navigateMock: vi.fn(),
+    broadcastLogoutMock: vi.fn(),
 }));
 
 vi.mock('@/api/auth', () => ({ logout: logoutMock }));
+vi.mock('@/hooks/useCrossTabLogout', () => ({ broadcastLogout: broadcastLogoutMock }));
 
 vi.mock('react-router', async (importOriginal) => {
     const actual = await importOriginal<typeof import('react-router')>();
@@ -40,6 +42,7 @@ describe('TopNav', () => {
         useAuthStore.getState().clear();
         logoutMock.mockReset();
         navigateMock.mockReset();
+        broadcastLogoutMock.mockReset();
     });
 
     it('renders avatar img when avatarUrl is set', () => {
@@ -80,19 +83,38 @@ describe('TopNav', () => {
 
         expect(logoutMock).toHaveBeenCalledTimes(1);
         expect(useAuthStore.getState().user).toBeNull();
+        expect(broadcastLogoutMock).toHaveBeenCalledTimes(1);
         expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
     });
 
-    it('preserves nav links (Board/Reports/Settings)', () => {
+    it('renders Settings link when role is ADMIN', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
-        const board = screen.getByRole('link', { name: 'Board' });
-        const reports = screen.getByRole('link', { name: 'Reports' });
-        const settings = screen.getByRole('link', { name: 'Settings' });
+        expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    });
 
-        expect(board).toHaveAttribute('href');
-        expect(reports).toHaveAttribute('href');
-        expect(settings).toHaveAttribute('href');
+    it('hides Settings link when role is MEMBER', () => {
+        useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
+        renderTopNav();
+
+        expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+    });
+
+    it('always renders Board + Reports for ADMIN', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href');
+        expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href');
+    });
+
+    it('always renders Board + Reports for MEMBER', () => {
+        useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
+        renderTopNav();
+
+        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href');
+        expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href');
+        expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
     });
 });

@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { logout } from '@/api/auth';
+import { useRequireRole } from '@/hooks/useRequireRole';
+import { broadcastLogout } from '@/hooks/useCrossTabLogout';
 
-const NAV_LINKS = [
+const PUBLIC_NAV_LINKS = [
     { to: '/', label: 'Board', end: true },
     { to: '/reports', label: 'Reports', end: false },
-    { to: '/settings', label: 'Settings', end: false },
 ] as const;
+
+const ADMIN_NAV_LINKS = [{ to: '/settings', label: 'Settings', end: false }] as const;
 
 function getInitials(name: string, email: string): string {
     const source = name || email.split('@')[0] || '?';
@@ -18,11 +21,13 @@ export function TopNav() {
     const [open, setOpen] = useState(false);
     const user = useAuthStore((s) => s.user);
     const clear = useAuthStore((s) => s.clear);
+    const isAdmin = useRequireRole('ADMIN');
     const navigate = useNavigate();
 
     const handleSignOut = async () => {
         await logout();
         clear();
+        broadcastLogout();
         navigate('/login', { replace: true });
     };
 
@@ -45,7 +50,7 @@ export function TopNav() {
                             open ? 'flex' : 'hidden'
                         } flex-col gap-2 md:flex md:flex-row md:items-center md:gap-6`}
                     >
-                        {NAV_LINKS.map((link) => (
+                        {PUBLIC_NAV_LINKS.map((link) => (
                             <li key={link.to}>
                                 <NavLink
                                     to={link.to}
@@ -59,6 +64,21 @@ export function TopNav() {
                                 </NavLink>
                             </li>
                         ))}
+                        {isAdmin &&
+                            ADMIN_NAV_LINKS.map((link) => (
+                                <li key={link.to}>
+                                    <NavLink
+                                        to={link.to}
+                                        end={link.end}
+                                        onClick={() => setOpen(false)}
+                                        className={({ isActive }) =>
+                                            `text-sm ${isActive ? 'text-primary' : 'text-muted'}`
+                                        }
+                                    >
+                                        {link.label}
+                                    </NavLink>
+                                </li>
+                            ))}
                     </ul>
                     {user && (
                         <div className="flex items-center gap-3">
