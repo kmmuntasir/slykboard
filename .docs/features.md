@@ -42,7 +42,7 @@
 **Phase 1 — Identity & Access**
 - [x] **F05** Google SSO login + JWT issuance — ✨ Feature · _deps: F02, F03, F04_ — DONE (T1-T14 ✅; live Google SSO smoke passed 2026-06-22)
 - [x] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_ — DONE (T1-T6 ✅; live Google SSO smoke passed 2026-06-22)
-- [ ] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_
+- [x] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_ — DONE (T1-T7 ✅; backend live smoke passed 2026-06-22; frontend browser smokes pending)
 
 **Phase 2 — Projects & Board**
 - [ ] **F08** Projects: create, list, select, slug, columns — ✨ Feature · _deps: F07_
