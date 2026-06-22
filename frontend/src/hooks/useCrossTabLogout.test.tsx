@@ -3,13 +3,23 @@ import { act, renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { ReactNode } from 'react';
 import { broadcastLogout, useCrossTabLogout } from '@/hooks/useCrossTabLogout';
+import { useAuthStore, type AuthUser } from '@/stores/useAuthStore';
+import { AUTH_STORAGE_KEY } from '@/constants/auth';
 
 const { navigateMock } = vi.hoisted(() => ({
     navigateMock: vi.fn(),
 }));
 
-const clearMock = vi.fn();
 const queryClientClearMock = vi.fn();
+
+const testUser: AuthUser = {
+    token: 't',
+    id: 'u1',
+    email: 'a@b.c',
+    name: 'N',
+    role: 'ADMIN',
+    avatarUrl: null,
+};
 
 // In-memory BroadcastChannel stub. jsdom v25 lacks BroadcastChannel.
 class MockBroadcastChannel extends EventTarget {
@@ -39,18 +49,14 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
     };
 });
 
-vi.mock('@/stores/useAuthStore', () => ({
-    useAuthStore: (selector: (s: Record<string, unknown>) => unknown) =>
-        selector({ user: null, setUser: vi.fn(), clear: clearMock }),
-}));
-
 function wrapper({ children }: { children: ReactNode }) {
     return <MemoryRouter>{children}</MemoryRouter>;
 }
 
 describe('useCrossTabLogout', () => {
     beforeEach(() => {
-        clearMock.mockReset();
+        localStorage.clear();
+        useAuthStore.getState().clear();
         queryClientClearMock.mockReset();
         navigateMock.mockReset();
         MockBroadcastChannel.instances = [];
@@ -63,6 +69,7 @@ describe('useCrossTabLogout', () => {
     });
 
     it('dispatching {type:"logout"} clears + clears query cache + navigates', () => {
+        useAuthStore.getState().setUser(testUser);
         renderHook(() => useCrossTabLogout(), { wrapper });
 
         const channel = MockBroadcastChannel.lastInstance;
@@ -72,46 +79,53 @@ describe('useCrossTabLogout', () => {
             channel!.dispatchEvent(new MessageEvent('message', { data: { type: 'logout' } }));
         });
 
-        expect(clearMock).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().user).toBeNull();
         expect(queryClientClearMock).toHaveBeenCalledTimes(1);
         expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
     });
 
-    it('dispatching {type:"login"} does nothing', () => {
+    it('storage event with newValue:null (real key removal) triggers remote logout', () => {
+        useAuthStore.getState().setUser(testUser);
         renderHook(() => useCrossTabLogout(), { wrapper });
 
-        const channel = MockBroadcastChannel.lastInstance;
-        expect(channel).not.toBeNull();
-
         act(() => {
-            channel!.dispatchEvent(new MessageEvent('message', { data: { type: 'login' } }));
+            window.dispatchEvent(
+                new StorageEvent('storage', { key: AUTH_STORAGE_KEY, newValue: null }),
+            );
         });
 
-        expect(clearMock).not.toHaveBeenCalled();
-        expect(queryClientClearMock).not.toHaveBeenCalled();
-        expect(navigateMock).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().user).toBeNull();
+        expect(queryClientClearMock).toHaveBeenCalledTimes(1);
+        expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
     });
 
-    it('storage event removing slyk-auth key triggers logout', () => {
+    it('storage event with a cleared envelope (parsed user===null) triggers remote logout', () => {
+        useAuthStore.getState().setUser(testUser);
         renderHook(() => useCrossTabLogout(), { wrapper });
 
         act(() => {
-            window.dispatchEvent(new StorageEvent('storage', { key: 'slyk-auth', newValue: null }));
+            window.dispatchEvent(
+                new StorageEvent('storage', {
+                    key: AUTH_STORAGE_KEY,
+                    newValue: JSON.stringify({ state: { user: null }, version: 0 }),
+                }),
+            );
         });
 
-        expect(clearMock).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().user).toBeNull();
         expect(queryClientClearMock).toHaveBeenCalledTimes(1);
         expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
     });
 
     it('storage event for a different key does nothing', () => {
+        useAuthStore.getState().setUser(testUser);
         renderHook(() => useCrossTabLogout(), { wrapper });
 
         act(() => {
             window.dispatchEvent(new StorageEvent('storage', { key: 'other', newValue: null }));
         });
 
-        expect(clearMock).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().user).not.toBeNull();
         expect(queryClientClearMock).not.toHaveBeenCalled();
         expect(navigateMock).not.toHaveBeenCalled();
     });
@@ -121,7 +135,7 @@ describe('useCrossTabLogout', () => {
 
         expect(MockBroadcastChannel.instances).toHaveLength(1);
         const channel = MockBroadcastChannel.lastInstance!;
-        expect(channel.name).toBe('slyk-auth');
+        expect(channel.name).toBe(AUTH_STORAGE_KEY);
         expect(channel.postMessage).toHaveBeenCalledWith({ type: 'logout' });
         expect(channel.close).toHaveBeenCalledTimes(1);
     });

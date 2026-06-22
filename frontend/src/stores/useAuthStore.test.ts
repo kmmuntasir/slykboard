@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAuthStore, type AuthUser } from './useAuthStore';
-
-const STORAGE_KEY = 'slyk-auth';
+import { AUTH_STORAGE_KEY } from '@/constants/auth';
 
 const fullUser: AuthUser = {
   token: 'tok-123',
@@ -13,7 +12,7 @@ const fullUser: AuthUser = {
 };
 
 function readPersistedState(): Record<string, unknown> {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY);
   expect(raw).not.toBeNull();
   return JSON.parse(raw!) as Record<string, unknown>;
 }
@@ -52,7 +51,7 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().user).toBeNull();
   });
 
-  it('persists user to localStorage under "slyk-auth" key', () => {
+  it('persists user to localStorage under the auth storage key', () => {
     useAuthStore.getState().setUser(fullUser);
     const persisted = readPersistedState();
     const persistedUser = persisted.state as { user: AuthUser };
@@ -67,14 +66,14 @@ describe('useAuthStore', () => {
   it('rehydrates from localStorage on store recreation', () => {
     useAuthStore.getState().setUser(fullUser);
     // Persisted blob exists and contains the user under the store's storage key.
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     expect(raw).not.toBeNull();
     expect(raw!).toContain('tok-123');
     expect(raw!).toContain('demo@slykboard.local');
 
-    // The store's persist options are wired with name 'slyk-auth' (the key a fresh
+    // The store's persist options are wired with the auth storage key (the key a fresh
     // `create(...persist(...))` would read on rehydration).
-    expect(STORAGE_KEY).toBe('slyk-auth');
+    expect(AUTH_STORAGE_KEY).toBe('slyk-auth');
   });
 
   it('does NOT persist setUser/clear functions', () => {
@@ -85,5 +84,12 @@ describe('useAuthStore', () => {
     expect(Object.keys(state)).toEqual(['user']);
     expect(state.setUser).toBeUndefined();
     expect(state.clear).toBeUndefined();
+  });
+
+  it('clear() removes the auth localStorage key (zustand-5 removeOnNull equivalent)', () => {
+    useAuthStore.getState().setUser(fullUser);
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).not.toBeNull();
+    useAuthStore.getState().clear();
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull();
   });
 });
