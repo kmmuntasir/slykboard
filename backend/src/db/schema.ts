@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   integer,
   jsonb,
+  doublePrecision,
 } from 'drizzle-orm/pg-core';
 
 // PRD §8.1 — role enum. Admin manages settings; Member is default.
@@ -61,6 +62,37 @@ export const projects = pgTable('Projects', {
     .notNull()
     .references(() => users.id),
   // F08 D-Timestamps: PRD omits; aligns with Users schema.
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+// F09 D-Priority-Enum: SCREAMING_SNAKE per style guide. PRD REQ-3.2 Title-Case is UI-only.
+export const priorityEnum = pgEnum('Priority', ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']);
+
+// F09 D-Tickets-Table: PRD §8.3 read-render slice. F12 owns creation.
+// statusColumn is text (references a Column.id in Projects.columns JSONB) —
+// no Columns table exists, so integrity is enforced at read time (D-Unsorted-Bucket).
+// position is doublePrecision: F09 read-sorts ASC; F11 will write-reorder.
+export const tickets = pgTable('Tickets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id),
+  ticketNumber: integer('ticket_number').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  statusColumn: text('status_column').notNull(),
+  position: doublePrecision('position').notNull().default(0),
+  assigneeId: uuid('assignee_id').references(() => users.id),
+  creatorId: uuid('creator_id')
+    .notNull()
+    .references(() => users.id),
+  priority: priorityEnum('priority').default('MEDIUM').notNull(),
+  // F09: labels as jsonb string[] for forward-compat (richer label objects later).
+  labels: jsonb('labels').$type<string[]>().default([]).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
     .defaultNow()
