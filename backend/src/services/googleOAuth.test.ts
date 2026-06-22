@@ -25,7 +25,13 @@ describe('exchangeCodeForUser', () => {
   it('returns normalized user info on success', async () => {
     getToken.mockResolvedValueOnce({ tokens: { id_token: 'x' } });
     verifyIdToken.mockResolvedValueOnce({
-      getPayload: () => ({ sub: 'g1', email: 'a@b.com', name: 'A B', picture: 'url' }),
+      getPayload: () => ({
+        sub: 'g1',
+        email: 'a@b.com',
+        name: 'A B',
+        picture: 'url',
+        email_verified: true,
+      }),
     });
 
     const result = await exchangeCodeForUser('code-1');
@@ -41,7 +47,7 @@ describe('exchangeCodeForUser', () => {
   it('falls back to email local-part when name missing', async () => {
     getToken.mockResolvedValueOnce({ tokens: { id_token: 'x' } });
     verifyIdToken.mockResolvedValueOnce({
-      getPayload: () => ({ sub: 'g2', email: 'a@b.com' }),
+      getPayload: () => ({ sub: 'g2', email: 'a@b.com', email_verified: true }),
     });
 
     const result = await exchangeCodeForUser('code-2');
@@ -52,7 +58,7 @@ describe('exchangeCodeForUser', () => {
   it('stores null avatarUrl when picture missing', async () => {
     getToken.mockResolvedValueOnce({ tokens: { id_token: 'x' } });
     verifyIdToken.mockResolvedValueOnce({
-      getPayload: () => ({ sub: 'g3', email: 'a@b.com', name: 'A B' }),
+      getPayload: () => ({ sub: 'g3', email: 'a@b.com', name: 'A B', email_verified: true }),
     });
 
     const result = await exchangeCodeForUser('code-3');
@@ -99,5 +105,41 @@ describe('exchangeCodeForUser', () => {
     expect(err).toBeInstanceOf(AppError);
     expect(err.message).toBe('Authentication failed');
     expect(err.message).not.toContain('invalid_grant');
+  });
+
+  it('throws UNAUTHENTICATED when email_verified is false', async () => {
+    getToken.mockResolvedValueOnce({ tokens: { id_token: 'x' } });
+    verifyIdToken.mockResolvedValueOnce({
+      getPayload: () => ({ sub: 'g1', email: 'a@b.com', email_verified: false }),
+    });
+
+    const err = await exchangeCodeForUser('c').catch((e) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toMatchObject({ code: 'UNAUTHENTICATED', message: 'Email not verified by Google' });
+  });
+
+  it('throws UNAUTHENTICATED when email_verified is undefined', async () => {
+    getToken.mockResolvedValueOnce({ tokens: { id_token: 'x' } });
+    verifyIdToken.mockResolvedValueOnce({
+      getPayload: () => ({ sub: 'g1', email: 'a@b.com' }),
+    });
+
+    const err = await exchangeCodeForUser('c').catch((e) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toMatchObject({ code: 'UNAUTHENTICATED', message: 'Email not verified by Google' });
+  });
+
+  it('throws INTERNAL_ERROR when payload missing sub or email', async () => {
+    getToken.mockResolvedValueOnce({ tokens: { id_token: 'x' } });
+    verifyIdToken.mockResolvedValueOnce({
+      getPayload: () => ({ email: 'a@b.com', email_verified: true }),
+    });
+
+    await expect(exchangeCodeForUser('c')).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Authentication failed',
+    });
   });
 });
