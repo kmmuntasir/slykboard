@@ -31,6 +31,8 @@ export async function authenticate(
 
   // F07 D3: compare JWT `ver` to DB tokenVersion. Mismatch → 401 (hard
   // mid-session invalidation). Covers: logout (bumped), future F25 role demotion.
+  // F07 M3: verifyJwt guarantees `ver` is a finite number, so this `!==` compare
+  // is strict-numeric and never compares against `undefined`.
   const dbTokenVersion = await findUserTokenVersion(payload.sub);
   if (dbTokenVersion === undefined || dbTokenVersion !== payload.ver) {
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Token version mismatch');

@@ -36,6 +36,21 @@ function signExpiredToken(claims: {
     .sign(secretKey);
 }
 
+function signVerlessToken(claims: {
+  sub: string;
+  email: string;
+  role: 'ADMIN' | 'MEMBER';
+}): Promise<string> {
+  return new SignJWT({ email: claims.email, role: claims.role })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(claims.sub)
+    .setIssuedAt()
+    .setExpirationTime('8h')
+    .setIssuer('slykboard')
+    .setAudience('slykboard-web')
+    .sign(secretKey);
+}
+
 function tamperSignature(token: string): string {
   const parts = token.split('.');
   const sig = parts[2] ?? '';
@@ -137,6 +152,23 @@ describe('authenticate middleware', () => {
       code: ErrorCode.UNAUTHENTICATED,
     });
     // F07 D3: verifyJwt throws before the DB compare is reached.
+    expect(tokenVersionMock.findUserTokenVersion).not.toHaveBeenCalled();
+  });
+
+  it('throws UNAUTHENTICATED on token missing ver claim', async () => {
+    const verless = await signVerlessToken({
+      sub: 'user-123',
+      email: 'a@b.com',
+      role: 'MEMBER',
+    });
+    const req = makeReq(`Bearer ${verless}`);
+    const res = {} as Response;
+    const next = vi.fn() as unknown as NextFunction;
+
+    await expect(authenticate(req, res, next)).rejects.toMatchObject({
+      code: ErrorCode.UNAUTHENTICATED,
+    });
+    // F07 M3: verifyJwt throws before the DB compare is reached.
     expect(tokenVersionMock.findUserTokenVersion).not.toHaveBeenCalled();
   });
 

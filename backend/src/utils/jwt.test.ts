@@ -10,6 +10,8 @@ import { SignJWT } from 'jose';
 import { signJwt, verifyJwt, type JwtUserClaims } from './jwt';
 import { env } from '../config';
 import type { Config } from '../config';
+import { AppError } from './appError';
+import { ErrorCode } from './envelope';
 
 const secretKey = new TextEncoder().encode(env.jwtSecret);
 
@@ -89,6 +91,42 @@ describe('jwt', () => {
     const token = await signJwt({ ...validClaims, ver: 5 });
     const payload = await verifyJwt(token);
     expect(payload.ver).toBe(5);
+  });
+
+  it('throws UNAUTHENTICATED when ver claim is missing', async () => {
+    // Mirror signBadToken style: raw SignJWT, correct issuer/audience/exp,
+    // but omit `ver` from the payload object entirely.
+    const token = await new SignJWT({ email: 'test@slykboard.test', role: 'MEMBER' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(validClaims.sub)
+      .setIssuedAt()
+      .setIssuer('slykboard')
+      .setAudience('slykboard-web')
+      .setExpirationTime('8h')
+      .sign(secretKey);
+
+    await expect(verifyJwt(token)).rejects.toMatchObject({
+      code: ErrorCode.UNAUTHENTICATED,
+      message: 'Token missing numeric ver claim',
+    });
+    await expect(verifyJwt(token)).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('throws UNAUTHENTICATED when ver claim is a string', async () => {
+    // ver: "0" must fail closed — typeof string !== number.
+    const token = await new SignJWT({ email: 'test@slykboard.test', role: 'MEMBER', ver: '0' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(validClaims.sub)
+      .setIssuedAt()
+      .setIssuer('slykboard')
+      .setAudience('slykboard-web')
+      .setExpirationTime('8h')
+      .sign(secretKey);
+
+    await expect(verifyJwt(token)).rejects.toMatchObject({
+      code: ErrorCode.UNAUTHENTICATED,
+      message: 'Token missing numeric ver claim',
+    });
   });
 
   it('honors env.jwtTtl for the expiration window', async () => {
