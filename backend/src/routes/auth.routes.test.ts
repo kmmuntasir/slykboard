@@ -392,4 +392,29 @@ describe('auth routes', () => {
     expect(res.body.data.success).toBe(true);
     expect(mockedBump).toHaveBeenCalledWith('u1');
   });
+
+  it('POST /logout returns 500 INTERNAL_ERROR when bumpTokenVersion rejects', async () => {
+    const { signJwt: realSignJwt } =
+      await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
+    const realToken = await realSignJwt({
+      sub: 'u1',
+      email: 'user@example.com',
+      role: 'MEMBER',
+      ver: 0,
+    });
+    mockedFindVersion.mockResolvedValue(0);
+    mockedBump.mockRejectedValue(
+      new AppError(ErrorCode.INTERNAL_ERROR, 'Version bump failed'),
+    );
+
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${realToken}`);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('INTERNAL_ERROR');
+    // errorHandler rewrites >= 500 messages to 'Internal server error' in non-dev envs.
+    expect(res.body.error.message).toBe('Internal server error');
+    expect(mockedBump).toHaveBeenCalledWith('u1');
+  });
 });

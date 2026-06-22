@@ -76,7 +76,9 @@ authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
 
 // POST /api/auth/logout — F07 D4: bump tokenVersion to hard-expire outstanding
 // JWTs for this user (defense-in-depth; client-side clear is authoritative for UX).
-// Google token revocation deferred to F29. Best-effort: client swallows errors.
+// Server reports failure (500) if the version bump did not persist; the client
+// must still clear locally for UX regardless of the response. Google token
+// revocation deferred to F29.
 authRouter.post('/logout', authenticate, async (req, res): Promise<void> => {
   await bumpTokenVersion(req.user!.id);
   res.json(success({ success: true }));
