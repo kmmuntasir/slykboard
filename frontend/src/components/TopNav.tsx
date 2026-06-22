@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { logout } from '@/api/auth';
 import { useRequireRole } from '@/hooks/useRequireRole';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
+import { ProjectPicker } from './ProjectPicker';
 
 const PUBLIC_NAV_LINKS = [
     { to: '/', label: 'Board', end: true },
@@ -84,6 +85,7 @@ export function TopNav() {
                                 </li>
                             ))}
                     </ul>
+                    <ProjectPicker />
                     {user && (
                         <div className="flex items-center gap-3">
                             {user.avatarUrl ? (

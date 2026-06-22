@@ -54,11 +54,13 @@ describe('App shell', () => {
             role: 'MEMBER',
             avatarUrl: null,
         });
-        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-            new Response(JSON.stringify({ status: 'ok', service: 'x' }), {
-                status: 200,
-            }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+            const url = typeof input === 'string' ? input : input.toString();
+            if (url.includes('/projects')) {
+                return new Response(JSON.stringify({ data: [] }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ status: 'ok', service: 'x' }), { status: 200 });
+        });
         renderShell('/');
         expect(screen.getByRole('link', { name: 'Board' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Board' })).toBeInTheDocument();

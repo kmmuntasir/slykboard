@@ -1,4 +1,4 @@
-import { Outlet, createBrowserRouter } from 'react-router';
+import { Navigate, Outlet, createBrowserRouter } from 'react-router';
 import { AppLayout } from '@/components/AppLayout';
 import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
@@ -8,6 +8,8 @@ import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { ProjectsPage } from '@/pages/ProjectsPage';
+import { useProjectStore } from '@/stores/useProjectStore';
 
 function RootLayout() {
     return (
@@ -15,6 +17,16 @@ function RootLayout() {
             <CrossTabLogoutSync />
             <Outlet />
         </>
+    );
+}
+
+// F08 D-Current-Project: '/' redirects to the last selected project board,
+// or to /projects if none. URL param is the source of truth; the store is the
+// landing convenience.
+function IndexRedirect() {
+    const lastSelectedSlug = useProjectStore((s) => s.lastSelectedSlug);
+    return (
+        <Navigate to={lastSelectedSlug ? `/projects/${lastSelectedSlug}` : '/projects'} replace />
     );
 }
 
@@ -32,7 +44,9 @@ export const router = createBrowserRouter([
                     {
                         element: <AppLayout />,
                         children: [
-                            { path: '/', element: <BoardPage /> },
+                            { path: '/', element: <IndexRedirect /> },
+                            { path: '/projects', element: <ProjectsPage /> },
+                            { path: '/projects/:slug', element: <BoardPage /> },
                             { path: '/reports', element: <ReportsPage /> },
                             {
                                 path: '/settings',

@@ -13,6 +13,9 @@ const { logoutMock, navigateMock, broadcastLogoutMock } = vi.hoisted(() => ({
 
 vi.mock('@/api/auth', () => ({ logout: logoutMock }));
 vi.mock('@/hooks/useCrossTabLogout', () => ({ broadcastLogout: broadcastLogoutMock }));
+vi.mock('@/hooks/useProjects', () => ({
+    useProjects: () => ({ data: [], isLoading: false }),
+}));
 
 vi.mock('react-router', async (importOriginal) => {
     const actual = await importOriginal<typeof import('react-router')>();
