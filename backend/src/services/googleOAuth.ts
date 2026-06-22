@@ -24,6 +24,13 @@ export async function exchangeCodeForUser(code: string): Promise<GoogleUserInfo>
     if (!payload?.sub || !payload?.email) {
       throw new Error('Google payload missing sub or email');
     }
+    // D2: Google must have verified the email. Without this the domain gate is
+    // bypassable (the email claim is attacker-controllable). email_verified is
+    // `boolean | undefined` on google-auth-library v10 TokenPayload — `!== true`
+    // covers both `false` and `undefined`.
+    if (payload.email_verified !== true) {
+      throw new AppError(ErrorCode.UNAUTHENTICATED, 'Email not verified by Google');
+    }
     return {
       googleId: payload.sub,
       email: payload.email,
@@ -31,6 +38,8 @@ export async function exchangeCodeForUser(code: string): Promise<GoogleUserInfo>
       avatarUrl: payload.picture ?? null,
     };
   } catch (cause) {
+    // AppError (e.g. UNAUTHENTICATED for an unverified email) propagates as-is.
+    if (cause instanceof AppError) throw cause;
     // D7: never leak Google's error to the client — generic message.
     throw new AppError(ErrorCode.INTERNAL_ERROR, 'Authentication failed', { cause });
   }
