@@ -6,6 +6,7 @@ import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
 import { exchangeCodeForUser } from '../services/googleOAuth';
 import { upsertByGoogleId, findUserById } from '../services/userService';
+import { bumpTokenVersion } from '../services/tokenVersion';
 import { assertDomainAllowed } from '../services/accessControl';
 import { authCodeSchema } from './auth.schema';
 
@@ -23,7 +24,12 @@ authRouter.post(
     // email (D2) and BEFORE we persist it. errorHandler turns the throw into 403.
     assertDomainAllowed(info.email);
     const user = await upsertByGoogleId(info);
-    const token = await signJwt({ sub: user.id, email: user.email, role: user.role });
+    const token = await signJwt({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      ver: user.tokenVersion,
+    });
     res.json(
       success({
         token,
@@ -48,7 +54,12 @@ authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
   if (!user) {
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'User no longer exists');
   }
-  const token = await signJwt({ sub: user.id, email: user.email, role: user.role });
+  const token = await signJwt({
+    sub: user.id,
+    email: user.email,
+    role: user.role,
+    ver: user.tokenVersion,
+  });
   res.json(
     success({
       token,
@@ -63,7 +74,10 @@ authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
   );
 });
 
-// POST /api/auth/logout — D10: stateless JWT, logout is client-side. No denylist.
-authRouter.post('/logout', (_req, res): void => {
+// POST /api/auth/logout — F07 D4: bump tokenVersion to hard-expire outstanding
+// JWTs for this user (defense-in-depth; client-side clear is authoritative for UX).
+// Google token revocation deferred to F29. Best-effort: client swallows errors.
+authRouter.post('/logout', authenticate, async (req, res): Promise<void> => {
+  await bumpTokenVersion(req.user!.id);
   res.json(success({ success: true }));
 });

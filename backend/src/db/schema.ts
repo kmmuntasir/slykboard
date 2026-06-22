@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, pgEnum, uniqueIndex, integer } from 'drizzle-orm/pg-core';
 
 // PRD §8.1 — role enum. Admin manages settings; Member is default.
 export const roleEnum = pgEnum('Role', ['ADMIN', 'MEMBER']);
@@ -15,6 +15,10 @@ export const users = pgTable(
     fullName: text('full_name').notNull(),
     avatarUrl: text('avatar_url'),
     role: roleEnum('role').default('MEMBER').notNull(),
+    // F07 D3: token version for hard session invalidation. authenticate compares
+    // the JWT `ver` claim to this column; bumpTokenVersion increments it.
+    // Default 0 so existing rows need no data migration.
+    tokenVersion: integer('token_version').default(0).notNull(),
     // Convention: every table carries UTC timestamptz (F18 audit + F20+ baseline).
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     // Drizzle has no SQL-layer @updatedAt; bump on every update via this hook.

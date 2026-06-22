@@ -1,7 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../config', async (importActual) => {
+  const actual = await importActual<typeof import('../config')>();
+  // Shallow-copy the frozen env into a mutable object so tests can flip jwtTtl.
+  return { env: { ...actual.env } };
+});
+
 import { SignJWT } from 'jose';
 import { signJwt, verifyJwt, type JwtUserClaims } from './jwt';
 import { env } from '../config';
+import type { Config } from '../config';
 
 const secretKey = new TextEncoder().encode(env.jwtSecret);
 
@@ -9,6 +17,7 @@ const validClaims: JwtUserClaims = {
   sub: 'user-uuid-123',
   email: 'test@slykboard.test',
   role: 'MEMBER',
+  ver: 1,
 };
 
 function signBadToken(
@@ -74,5 +83,26 @@ describe('jwt', () => {
 
   it('throws on malformed (non-JWT) string', async () => {
     await expect(verifyJwt('not-a-jwt')).rejects.toThrow();
+  });
+
+  it('embeds the ver claim and round-trips it through verify', async () => {
+    const token = await signJwt({ ...validClaims, ver: 5 });
+    const payload = await verifyJwt(token);
+    expect(payload.ver).toBe(5);
+  });
+
+  it('honors env.jwtTtl for the expiration window', async () => {
+    // env is typed Readonly<Config>; the mock backs it with a mutable object,
+    // so cast to the mutable shape for this scenario only.
+    const mutableEnv = env as Config;
+    const original = mutableEnv.jwtTtl;
+    mutableEnv.jwtTtl = '1m';
+    try {
+      const token = await signJwt(validClaims);
+      const payload = await verifyJwt(token);
+      expect(payload.exp! - payload.iat!).toBe(60);
+    } finally {
+      mutableEnv.jwtTtl = original;
+    }
   });
 });

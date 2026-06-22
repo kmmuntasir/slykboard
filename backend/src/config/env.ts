@@ -6,6 +6,7 @@ export interface Config {
   nodeEnv: string;
   databaseUrl: string;
   jwtSecret: string;
+  jwtTtl: string; // F07 D8: env-driven JWT TTL (jose setExpirationTime string, e.g. '8h', '15m')
   googleClientId: string;
   googleClientSecret: string;
   googleCallbackUrl: string;
@@ -41,6 +42,7 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     nodeEnv: envSource.NODE_ENV ?? 'development',
     databaseUrl: envSource.DATABASE_URL,
     jwtSecret: envSource.JWT_SECRET,
+    jwtTtl: envSource.JWT_TTL || '8h', // F07 D8: default preserves F05/F06 behavior
     googleClientId: envSource.GOOGLE_CLIENT_ID,
     googleClientSecret: envSource.GOOGLE_CLIENT_SECRET,
     googleCallbackUrl: envSource.GOOGLE_CALLBACK_URL,
