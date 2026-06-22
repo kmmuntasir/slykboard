@@ -403,9 +403,7 @@ describe('auth routes', () => {
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
-    mockedBump.mockRejectedValue(
-      new AppError(ErrorCode.INTERNAL_ERROR, 'Version bump failed'),
-    );
+    mockedBump.mockRejectedValue(new AppError(ErrorCode.INTERNAL_ERROR, 'Version bump failed'));
 
     const res = await request(app)
       .post('/api/auth/logout')

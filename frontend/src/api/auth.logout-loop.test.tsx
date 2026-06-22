@@ -12,15 +12,21 @@ import { apiFetch, ApiClientError } from '@/api/client';
 import { useAuthSync } from '@/hooks/useAuthSync';
 import { useAuthStore } from '@/stores/useAuthStore';
 
-const { navigateMock, fetchMeMock, logoutApiMock, decodeJwtMock, broadcastLogoutMock, queryClientClearMock } =
-    vi.hoisted(() => ({
-        navigateMock: vi.fn(),
-        fetchMeMock: vi.fn(),
-        logoutApiMock: vi.fn(),
-        decodeJwtMock: vi.fn(),
-        broadcastLogoutMock: vi.fn(),
-        queryClientClearMock: vi.fn(),
-    }));
+const {
+    navigateMock,
+    fetchMeMock,
+    logoutApiMock,
+    decodeJwtMock,
+    broadcastLogoutMock,
+    queryClientClearMock,
+} = vi.hoisted(() => ({
+    navigateMock: vi.fn(),
+    fetchMeMock: vi.fn(),
+    logoutApiMock: vi.fn(),
+    decodeJwtMock: vi.fn(),
+    broadcastLogoutMock: vi.fn(),
+    queryClientClearMock: vi.fn(),
+}));
 
 vi.mock('react-router', async (importOriginal) => {
     const actual = await importOriginal<typeof import('react-router')>();

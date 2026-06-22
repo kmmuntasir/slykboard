@@ -223,11 +223,7 @@ describe('apiFetch 401 interceptor', () => {
       logout,
     });
 
-    const results = await Promise.allSettled([
-      apiFetch('/a'),
-      apiFetch('/b'),
-      apiFetch('/c'),
-    ]);
+    const results = await Promise.allSettled([apiFetch('/a'), apiFetch('/b'), apiFetch('/c')]);
     results.forEach((r) => {
       expect(r.status).toBe('rejected');
       if (r.status === 'rejected') {
@@ -243,10 +239,9 @@ describe('apiFetch 401 interceptor', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }),
-          { status: 401 },
-        ),
+        new Response(JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }), {
+          status: 401,
+        }),
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: { ok: 1 } }), {
@@ -255,10 +250,9 @@ describe('apiFetch 401 interceptor', () => {
         }),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }),
-          { status: 401 },
-        ),
+        new Response(JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }), {
+          status: 401,
+        }),
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: { ok: 2 } }), {
@@ -306,9 +300,10 @@ describe('apiFetch 401 interceptor', () => {
     });
     registerLogoutHandlers({ refresh, logout: vi.fn() });
 
-    await expect(
-      apiFetch('/x', { signal: controller.signal }),
-    ).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
+    await expect(apiFetch('/x', { signal: controller.signal })).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      status: 0,
+    });
 
     // The retry call received the SAME signal object — proves init re-passed (L8).
     const retryInit = fetchSpy.mock.calls[1]?.[1];
@@ -348,10 +343,9 @@ describe('apiFetch 401 interceptor', () => {
   it('non-401 errors unaffected (refresh/logout not called)', async () => {
     authStore.getState().setUser(MOCK_USER_STALE);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { code: 'FORBIDDEN', message: 'no' } }),
-        { status: 403 },
-      ),
+      new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'no' } }), {
+        status: 403,
+      }),
     );
     const refresh = vi.fn();
     const logout = vi.fn();

@@ -93,16 +93,12 @@
         "Users_google_id_unique": {
           "name": "Users_google_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "google_id"
-          ]
+          "columns": ["google_id"]
         },
         "Users_email_unique": {
           "name": "Users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -114,10 +110,7 @@
     "public.Role": {
       "name": "Role",
       "schema": "public",
-      "values": [
-        "ADMIN",
-        "MEMBER"
-      ]
+      "values": ["ADMIN", "MEMBER"]
     }
   },
   "schemas": {},
