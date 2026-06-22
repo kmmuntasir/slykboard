@@ -41,7 +41,7 @@
 
 **Phase 1 — Identity & Access**
 - [~] **F05** Google SSO login + JWT issuance — ✨ Feature · _deps: F02, F03, F04_ — code complete + unit-tested (T1-T12 ✅); T13/T14 live Google smoke pending owner
-- [ ] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_ — task plan drafted; decisions resolved: grandfather disallowed domain / whitelist→F25 / token_version→F07
+- [~] **F06** Onboarding, workspace restriction & roles — ✨ Feature · _deps: F05_ — code complete + unit-tested (T1-T5 ✅, T6 automated gates + migration/index verified); live Google smoke + §9 sign-offs pending owner
 - [ ] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_
 
 **Phase 2 — Projects & Board**
