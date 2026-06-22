@@ -28,9 +28,9 @@
 
 - **Slug collisions** → **Decision:** DB `unique` constraint (D-Slug-Uniqueness) + service-layer pre-check returning `CONFLICT`/409 with a `details` field naming the colliding slug. DB constraint is the authoritative guard; service pre-check gives a cleaner error than a raw PG unique violation.
 - **Reserved slugs** → **Decision:** block `API,AUTH,HEALTH,REPORTS,SETTINGS,LOGIN,NEW,ADMIN` (D-Reserved-Slugs) via `RESERVED_SLUGS` set in `backend/src/utils/slug.ts`; service rejects with `VALIDATION_FAILED`/400.
-- **Who may create projects** → **Decision:** ADMIN-only `POST` via `authenticate` + `requireRole('ADMIN')` (D-Who-Creates). Rationale: PRD REQ-1.3 two-role model; `requireRole` exists (F07) but unmounted — F08 is its first mount. **Sign-off flagged (§9a).**
+- **Who may create projects** → **Decision:** ADMIN-only `POST` via `authenticate` + `requireRole('ADMIN')` (D-Who-Creates). Rationale: PRD REQ-1.3 two-role model; `requireRole` exists (F07) but unmounted — F08 is its first mount. **Confirmed (§9a).**
 - **Column identity / rename orphans** → **Decision:** `columns` = JSONB ordered array of `{id, name}` where `id = crypto.randomUUID()` (D-Column-Identity). Tickets (future F09+) reference column `id`, not `name`; renaming a column updates `name` only. PRD §8.2 specified a string array; F08 upgrades to `{id,name}` objects (schema delta vs PRD — documented §8).
-- **No `ProjectMembers` table** → **Decision:** Defer (D-ProjectMembers). All authed users see all projects (no per-project membership). PRD §8 omits this table. **Sign-off flagged (§9b).**
+- **No `ProjectMembers` table** → **Decision:** Defer (D-ProjectMembers). All authed users see all projects (no per-project membership). PRD §8 omits this table. **Confirmed (§9b).**
 - **Default columns when caller omits** → **Decision:** service supplies `[{name:'To Do'},{name:'In Progress'},{name:'Done'}]` with generated `id`s (D-Default-Columns). Caller may supply a custom ordered list. REQ-2.2.
 
 **Scope boundary (explicit deferrals):**
@@ -82,8 +82,8 @@
 - **Hidden coupling to plan for:**
   - **MEMORY `drizzle-partial-index-enum-dollar1`:** `drizzle-kit generate` emits unapplyable `$1` SQL for the F06 enum partial index when regenerating. Incremental generate is diff-based so the bug *should not* fire on a pure additive `CREATE TABLE`, but T1 MUST inspect `0003_*.sql` and confirm no `WHERE "role" = $1`; if present, hand-edit to literal `'ADMIN'`.
   - **`requireRole('ADMIN')` first mount.** F07 shipped the middleware unmounted. F08's `POST /api/projects` is its first real consumer — the route is the seam that proves the middleware works end-to-end. T5 keeps `requireRole` REAL (not mocked) in route tests to exercise it.
-  - **`creator_id` FK → `Users.id`.** PRD §8.2 omits this column. F08 adds it (aligns with PRD §8.3 Tickets having a creator/owner FK). Schema delta vs PRD — sign-off flagged (§9c).
-  - **Timestamps.** PRD §8.2 omits `created_at`/`updated_at` on Projects. F08 adds them (aligns with `Users` schema). Sign-off flagged (§9d).
+  - **`creator_id` FK → `Users.id`.** PRD §8.2 omits this column. F08 adds it (aligns with PRD §8.3 Tickets having a creator/owner FK). Schema delta vs PRD — confirmed (§9c).
+  - **Timestamps.** PRD §8.2 omits `created_at`/`updated_at` on Projects. F08 adds them (aligns with `Users` schema). Confirmed (§9d).
   - **Column `{id,name}` vs PRD string array.** PRD §8.2 says `columns` JSONB of strings. F08 upgrades to `{id,name}` objects for stable identity across renames (D-Column-Identity). This is the key schema delta — future F09+ tickets reference column `id`.
   - **`crypto.randomUUID()` server-side.** Node 24 has global `crypto.randomUUID()` — no import needed for id generation in the service.
   - **Express 5 async.** Rejected promises in async MW/routes auto-caught by `errorHandler`. No try/catch wrapper for control-flow throws.
@@ -98,13 +98,13 @@
 | # | Decision | Choice | Rationale (cite source) |
 |---|----------|--------|-----------|
 | D-Column-Identity | **Column shape** | **`columns` = JSONB ordered array of `{id, name}`; `id = crypto.randomUUID()`** | Stable identity across renames — tickets (F09+) reference column `id`, not `name`, so renaming a column never orphans tickets. PRD §8.2 specified a string array; F08 upgrades (schema delta vs PRD). Cite features.md L213, L580, L220. |
-| D-Who-Creates | **Who may POST a project** | **ADMIN-only via `authenticate` + `requireRole('ADMIN')`** | PRD REQ-1.3 two-role model; F07 `requireRole` exists unmounted — F08 first mount. Members LIST/SELECT. **Sign-off (§9a).** Cite PRD REQ-1.3 L48, `requireRole.ts:9`. |
-| D-ProjectMembers | **Per-project membership** | **Defer — all authed users see all projects** | PRD §8 omits a `ProjectMembers` table; MVP treats workspace as flat. A later feature adds membership. **Sign-off (§9b).** Cite features.md L221/577. |
+| D-Who-Creates | **Who may POST a project** | **ADMIN-only via `authenticate` + `requireRole('ADMIN')`** | PRD REQ-1.3 two-role model; F07 `requireRole` exists unmounted — F08 first mount. Members LIST/SELECT. **Confirmed (§9a).** Cite PRD REQ-1.3 L48, `requireRole.ts:9`. |
+| D-ProjectMembers | **Per-project membership** | **Defer — all authed users see all projects** | PRD §8 omits a `ProjectMembers` table; MVP treats workspace as flat. A later feature adds membership. **Confirmed (§9b).** Cite features.md L221/577. |
 | D-Slug-Format | **Slug regex** | **`^[A-Z][A-Z0-9]{1,15}$` (len 2–16)** | Uppercase alphanumerics, starts with a letter. Normalize (upper + strip non-alnum) before uniqueness check so `'slyk'` input → `'SLYK'`. Cite features.md L214. |
 | D-Reserved-Slugs | **Reserved slugs** | **Block `API,AUTH,HEALTH,REPORTS,SETTINGS,LOGIN,NEW,ADMIN`** | Route-namespace collisions. Cite features.md L218. |
 | D-Slug-Uniqueness | **Uniqueness enforcement** | **DB `unique` constraint + service pre-check → `CONFLICT`/409** | DB constraint is authoritative; service pre-check yields a clean error envelope with `details` naming the slug. Cite `envelope.ts:5-12`. |
-| D-Creator-FK | **`creator_id` column** | **Add `creator_id uuid NOT NULL REFERENCES "Users"(id)`** | PRD omits; aligns with §8.3 Tickets (creator/owner FK). Audit trail + future permission checks. **Sign-off (§9c) — schema delta vs PRD.** |
-| D-Timestamps | **`created_at`/`updated_at`** | **Add both as `timestamptz NOT NULL`; `updated_at` via `$onUpdate`** | Aligns with `Users` schema (`schema.ts:9-34`). UTC. **Sign-off (§9d) — schema delta vs PRD.** |
+| D-Creator-FK | **`creator_id` column** | **Add `creator_id uuid NOT NULL REFERENCES "Users"(id)`** | PRD omits; aligns with §8.3 Tickets (creator/owner FK). Audit trail + future permission checks. **Confirmed (§9c) — schema delta vs PRD.** |
+| D-Timestamps | **`created_at`/`updated_at`** | **Add both as `timestamptz NOT NULL`; `updated_at` via `$onUpdate`** | Aligns with `Users` schema (`schema.ts:9-34`). UTC. **Confirmed (§9d) — schema delta vs PRD.** |
 | D-Current-Project | **Current project persistence** | **URL param `/projects/:slug` primary; Zustand `useProjectStore` for "last selected" → `/` redirect** | URL is the source of truth (shareable, reloadable); store is a UX convenience for the `/` landing. Cite features.md L215. |
 | D-Data-Access-Layer | **Data-access module** | **`services/projectService.ts` (NOT `repositories/`)** | `repositories/` empty by convention; F07 established `services/` pattern. Cite codebase convention. |
 | D-Default-Columns | **Default columns** | **`[{name:'To Do'},{name:'In Progress'},{name:'Done'}]` with randomUUID ids if caller omits** | Sensible Kanban default; caller may supply a custom ordered list. REQ-2.2 L53. |
@@ -115,7 +115,7 @@
 > - **Column add/remove/reorder API** → F09+. F08 defines columns at create-time only (the `{id,name}` scheme makes future mutation safe).
 > - **Project update/delete/archive** → future feature.
 
-> **Owner sign-off needed:** D-Who-Creates (ADMIN-only POST?), D-ProjectMembers (defer membership?), D-Creator-FK (add `creator_id` vs PRD?), D-Timestamps (add timestamps vs PRD?). See §9.
+> **Owner sign-off OBTAINED 2026-06-22:** D-Who-Creates (ADMIN-only ✅), D-ProjectMembers (defer ✅), D-Creator-FK (add ✅), D-Timestamps (add ✅). See §9.
 
 ---
 
@@ -1213,16 +1213,16 @@ F08 owns the `Projects` table (PRD §8.2) with three deltas vs the PRD: `columns
 | --- | --- | --- |
 | `Projects` table | `id uuid PK defaultRandom`, `name text`, `slug text unique`, `columns jsonb $type<Column[]>`, `creator_id uuid FK→Users.id`, `created_at timestamptz NOT NULL defaultNow`, `updated_at timestamptz NOT NULL defaultNow $onUpdate` | `CREATE TABLE "Projects" (...) + unique index on slug + FK creator_id→Users(id)` — `0003_*.sql` |
 | `columns` shape (vs PRD) | PRD §8.2: string array. F08: `{id, name}[]` with `id = crypto.randomUUID()`. Stable identity across renames so F09+ tickets reference `id`. | Schema-level (`$type<Column[]>`); no extra migration (jsonb). |
-| `creator_id` (vs PRD) | PRD §8.2 omits. F08 adds `creator_id uuid NOT NULL REFERENCES "Users"(id)`. Aligns with §8.3 Tickets. Audit trail + future permission checks. | `ALTER TABLE` / inline in CREATE TABLE. **Sign-off §9c.** |
-| `created_at` / `updated_at` (vs PRD) | PRD §8.2 omits. F08 adds both `timestamptz NOT NULL`. Aligns with `Users` schema. `updated_at` via `$onUpdate(() => new Date())`. | Inline in CREATE TABLE. **Sign-off §9d.** |
+| `creator_id` (vs PRD) | PRD §8.2 omits. F08 adds `creator_id uuid NOT NULL REFERENCES "Users"(id)`. Aligns with §8.3 Tickets. Audit trail + future permission checks. | `ALTER TABLE` / inline in CREATE TABLE. **Confirmed §9c.** |
+| `created_at` / `updated_at` (vs PRD) | PRD §8.2 omits. F08 adds both `timestamptz NOT NULL`. Aligns with `Users` schema. `updated_at` via `$onUpdate(() => new Date())`. | Inline in CREATE TABLE. **Confirmed §9d.** |
 
 ---
 
 ## 9. Sign-off list
 
-Owner sign-off needed on these irreversible / cross-cutting decisions (surface in chat):
+Owner sign-off OBTAINED 2026-06-22 — all four confirmed as recommended. Decisions below are LOCKED:
 
-- **(a) D-Who-Creates:** ADMIN-only `POST /api/projects` (vs any authed user). Rationale: PRD REQ-1.3 two-role model; `requireRole` exists (F07) unmounted — F08 is its first mount. **Default if no response: ADMIN-only.**
-- **(b) D-ProjectMembers:** Defer per-project membership — all authed users see all projects (no `ProjectMembers` table). Rationale: PRD §8 omits; MVP flat workspace. **Default if no response: defer.**
-- **(c) D-Creator-FK:** Add `creator_id uuid NOT NULL REFERENCES "Users"(id)` (PRD §8.2 omits). Rationale: aligns with §8.3 Tickets; audit trail. **Schema delta vs PRD — explicit sign-off required. Default if no response: add it.**
-- **(d) D-Timestamps:** Add `created_at` / `updated_at timestamptz NOT NULL` (PRD §8.2 omits). Rationale: aligns with `Users` schema; every entity should be auditable. **Schema delta vs PRD — explicit sign-off required. Default if no response: add them.**
+- **(a) D-Who-Creates — CONFIRMED:** ADMIN-only `POST /api/projects` (vs any authed user). `requireRole('ADMIN')` mounted on the create route (its first real mount, validating the F07 investment).
+- **(b) D-ProjectMembers — CONFIRMED:** Defer per-project membership — all authed users see all projects (no `ProjectMembers` table). Ship flat workspace; a later feature owns membership if isolation is ever required.
+- **(c) D-Creator-FK — CONFIRMED:** Add `creator_id uuid NOT NULL REFERENCES "Users"(id)` (PRD §8.2 omits). Aligns with §8.3 Tickets; audit trail. **Schema delta vs PRD.**
+- **(d) D-Timestamps — CONFIRMED:** Add `created_at` / `updated_at timestamptz NOT NULL` (PRD §8.2 omits). Aligns with `Users` schema. **Schema delta vs PRD.**
