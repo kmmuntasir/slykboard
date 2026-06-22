@@ -12,7 +12,7 @@ description: Ruleset that MUST be followed when executing ANY git command
 - **Rebase and Merge ONLY** — Repo uses "Rebase and Merge" policy
 - **No merge commits** — Never `git merge`
 - **No squash merging** — Never `--squash` flag
-- **No local branch merging** — All merging via PR rebase on GitHub
+- **No local branch merging** — All merging via PR rebase on GitHub - Except the user explicitly gives you approval for a local merge.
 
 ## Project Slug:
 - PROJECTSLUG: short project abbreviation (e.g., JIRA tickets)
