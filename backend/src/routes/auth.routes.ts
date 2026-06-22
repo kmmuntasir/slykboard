@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import { success } from '../utils/envelope';
+import { success, ErrorCode } from '../utils/envelope';
+import { AppError } from '../utils/appError';
+import { signJwt } from '../utils/jwt';
 import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
-import { signJwt } from '../utils/jwt';
 import { exchangeCodeForUser } from '../services/googleOAuth';
-import { upsertByGoogleId } from '../services/userService';
+import { upsertByGoogleId, findUserById } from '../services/userService';
+import { assertDomainAllowed } from '../services/accessControl';
 import { authCodeSchema } from './auth.schema';
 
 export const authRouter = Router();
@@ -16,6 +18,10 @@ authRouter.post(
   async (req, res): Promise<void> => {
     const { code } = req.body as { code: string };
     const info = await exchangeCodeForUser(code);
+    // D3 — workspace gate. Throws AppError(FORBIDDEN) on domain mismatch;
+    // no-ops when env.allowedDomain is unset. Runs AFTER Google verifies the
+    // email (D2) and BEFORE we persist it. errorHandler turns the throw into 403.
+    assertDomainAllowed(info.email);
     const user = await upsertByGoogleId(info);
     const token = await signJwt({ sub: user.id, email: user.email, role: user.role });
     res.json(
@@ -33,11 +39,28 @@ authRouter.post(
   },
 );
 
-// GET /api/auth/me — requires valid Bearer token; re-signs a fresh 8h JWT.
+// GET /api/auth/me — requires valid Bearer token. D4: re-fetch the DB row by
+// req.user.id (DB-authoritative role, future-proofs against role changes) and
+// re-sign a fresh 8h JWT. Returns the FULL user row (note b) to preserve F05's
+// AuthResponseUser contract {id, email, fullName, avatarUrl, role}.
 authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
-  const user = req.user!;
+  const user = await findUserById(req.user!.id);
+  if (!user) {
+    throw new AppError(ErrorCode.UNAUTHENTICATED, 'User no longer exists');
+  }
   const token = await signJwt({ sub: user.id, email: user.email, role: user.role });
-  res.json(success({ token, user }));
+  res.json(
+    success({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        role: user.role,
+      },
+    }),
+  );
 });
 
 // POST /api/auth/logout — D10: stateless JWT, logout is client-side. No denylist.
