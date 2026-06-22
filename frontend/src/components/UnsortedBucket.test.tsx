@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { UnsortedBucket } from './UnsortedBucket';
+import { renderInDnd } from '@/test/dndWrapper';
 import type { Ticket } from '@/types/ticket';
 
 describe('UnsortedBucket', () => {
@@ -18,7 +19,7 @@ describe('UnsortedBucket', () => {
             createdAt: '2026-06-01T00:00:00.000Z',
             updatedAt: '2026-06-01T00:00:00.000Z',
         };
-        render(<UnsortedBucket tickets={[ticket]} projectSlug="SLYK" />);
+        renderInDnd(<UnsortedBucket tickets={[ticket]} projectSlug="SLYK" />);
         const column = screen.getByLabelText('Column Unsorted');
         expect(column).toHaveAttribute('data-column-id', '__unsorted__');
         expect(screen.getByText('SLYK-7')).toBeInTheDocument();

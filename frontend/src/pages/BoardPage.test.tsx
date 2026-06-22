@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { BoardPage } from './BoardPage';
+import { renderInDnd } from '@/test/dndWrapper';
 import { ApiClientError } from '@/api/client';
 import type { BoardPayload } from '@/types/board';
 import type { Ticket } from '@/types/ticket';
@@ -36,8 +37,12 @@ const ticket101: Ticket = {
     updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
+// T4 wraps TicketCard in a pangea <Draggable>; until T5 adds the real
+// <DragDropContext>/<Droppable> to BoardPage, the Draggables need a context
+// ancestor to mount in tests. renderInDnd provides a throwaway context+droppable
+// purely for rendering — it does NOT simulate drag (T5 wires the real context).
 function renderBoard() {
-    return render(
+    return renderInDnd(
         <MemoryRouter initialEntries={['/projects/SLYK']}>
             <Routes>
                 <Route path="/projects/:slug" element={<BoardPage />} />

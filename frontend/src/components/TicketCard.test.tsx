@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { TicketCard } from './TicketCard';
+import { renderInDnd } from '@/test/dndWrapper';
 import type { Ticket } from '@/types/ticket';
 
 describe('TicketCard', () => {
@@ -19,7 +20,7 @@ describe('TicketCard', () => {
     };
 
     it('renders ticket id (SLUG-NNN), title, priority badge, labels, and avatar', () => {
-        render(<TicketCard ticket={baseTicket} projectSlug="SLYK" />);
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
         expect(screen.getByText('SLYK-101')).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Render board' })).toBeInTheDocument();
         expect(screen.getByLabelText('Priority: High')).toBeInTheDocument();
@@ -29,7 +30,7 @@ describe('TicketCard', () => {
 
     it('renders Unassigned avatar when assignee is null', () => {
         const unassigned = { ...baseTicket, assignee: null };
-        render(<TicketCard ticket={unassigned} projectSlug="SLYK" />);
+        renderInDnd(<TicketCard ticket={unassigned} projectSlug="SLYK" index={0} />);
         expect(screen.getByLabelText('Unassigned')).toBeInTheDocument();
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });

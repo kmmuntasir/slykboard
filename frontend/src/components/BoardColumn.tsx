@@ -32,9 +32,9 @@ export function BoardColumn({ id, name, tickets, projectSlug }: BoardColumnProps
                 </div>
             ) : (
                 <ul className="flex flex-col gap-2">
-                    {tickets.map((ticket) => (
+                    {tickets.map((ticket, index) => (
                         <li key={ticket.id}>
-                            <TicketCard ticket={ticket} projectSlug={projectSlug} />
+                            <TicketCard ticket={ticket} projectSlug={projectSlug} index={index} />
                         </li>
                     ))}
                 </ul>
