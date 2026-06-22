@@ -12,6 +12,23 @@ vi.mock('@react-oauth/google', () => ({
     useGoogleLogin: vi.fn(() => () => {}),
 }));
 
+// F09: BoardPage now reads :slug + calls useBoard. The shell test renders a
+// real board, so mock the hook and route at /projects/:slug to exercise the
+// success path (heading = project name "Board").
+const { mockBoardValue } = vi.hoisted(() => ({
+    mockBoardValue: {
+        data: {
+            project: { id: 'p1', name: 'Board', slug: 'SLYK' },
+            columns: [],
+        },
+        isLoading: false,
+    },
+}));
+
+vi.mock('@/hooks/useBoard', () => ({
+    useBoard: () => mockBoardValue,
+}));
+
 function renderShell(initialEntry = '/') {
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -24,6 +41,7 @@ function renderShell(initialEntry = '/') {
                     <Route element={<RequireAuth />}>
                         <Route element={<AppLayout />}>
                             <Route path="/" element={<BoardPage />} />
+                            <Route path="/projects/:slug" element={<BoardPage />} />
                         </Route>
                     </Route>
                 </Routes>
@@ -61,7 +79,7 @@ describe('App shell', () => {
             }
             return new Response(JSON.stringify({ status: 'ok', service: 'x' }), { status: 200 });
         });
-        renderShell('/');
+        renderShell('/projects/SLYK');
         expect(screen.getByRole('link', { name: 'Board' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Board' })).toBeInTheDocument();
     });
