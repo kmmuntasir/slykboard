@@ -45,7 +45,7 @@
 - [x] **F07** Session lifecycle & auth guards — ✨ Feature · _deps: F05, F06_ — DONE (T1-T7 ✅; backend live smoke passed 2026-06-22; frontend browser smokes pending)
 
 **Phase 2 — Projects & Board**
-- [ ] **F08** Projects: create, list, select, slug, columns — ✨ Feature · _deps: F07_
+- [x] **F08** Projects: create, list, select, slug, columns — ✨ Feature · _deps: F07_
 - [ ] **F09** Board read (columns + cards) — ✨ Feature · _deps: F08_
 - [ ] **F10** Board auto-polling (30s) & conflict handling — ⬆ Enhancement · _deps: F09_
 - [ ] **F11** Drag-and-drop with order persistence — ✨ Feature · _deps: F09_
