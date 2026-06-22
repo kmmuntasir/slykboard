@@ -75,7 +75,7 @@ describe('createProject', () => {
     const result = await createProject({ name: 'Slyk', slug: 'slyk', creatorId: 'u1' });
 
     expect(result.slug).toBe('SLYK');
-    expect((bag.dbInsertValuesArg.slug as string)).toBe('SLYK');
+    expect(bag.dbInsertValuesArg.slug as string).toBe('SLYK');
     expect(result.columns).toHaveLength(3);
     result.columns.forEach((column) => {
       expect(typeof column.id).toBe('string');
@@ -136,7 +136,9 @@ describe('createProject', () => {
   it('rejects with CONFLICT on existing slug (no insert)', async () => {
     bag.dbSelectLimit.mockResolvedValueOnce([{ id: 'p9', slug: 'TAKEN' }]);
 
-    const error = await createProject({ name: 'X', slug: 'taken', creatorId: 'u5' }).catch((e) => e);
+    const error = await createProject({ name: 'X', slug: 'taken', creatorId: 'u5' }).catch(
+      (e) => e,
+    );
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe(ErrorCode.CONFLICT);
