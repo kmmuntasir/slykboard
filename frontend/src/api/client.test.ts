@@ -148,6 +148,44 @@ describe('apiFetch 401 interceptor', () => {
     expect((retryInit?.headers as Headers).get('Authorization')).toBe('Bearer fresh');
   });
 
+  it('N concurrent 401s, refresh succeeds → all retry+succeed (1 refresh)', async () => {
+    authStore.getState().setUser(MOCK_USER_STALE);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    let calls = 0;
+    fetchSpy.mockImplementation(async () => {
+      calls += 1;
+      if (calls <= 3) {
+        return new Response(
+          JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }),
+          { status: 401 },
+        );
+      }
+      return new Response(JSON.stringify({ data: { ok: true } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const refresh = vi.fn(async () => {
+      authStore.getState().setUser({ ...MOCK_USER_STALE, token: 'fresh' });
+      return true;
+    });
+    registerLogoutHandlers({ refresh, logout: vi.fn() });
+
+    const results = await Promise.allSettled([
+      apiFetch<{ ok: boolean }>('/a'),
+      apiFetch<{ ok: boolean }>('/b'),
+      apiFetch<{ ok: boolean }>('/c'),
+    ]);
+
+    results.forEach((r) => {
+      expect(r.status).toBe('fulfilled');
+      if (r.status === 'fulfilled') expect(r.value).toEqual({ ok: true });
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(6); // 3 initial 401s + 3 retries
+  });
+
   it('refresh fails → calls logout once and throws 401', async () => {
     authStore.getState().setUser(MOCK_USER_STALE);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -198,6 +236,84 @@ describe('apiFetch 401 interceptor', () => {
       }
     });
     expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshPromise cleared post-resolution: two sequential cycles → 2 refreshes', async () => {
+    authStore.getState().setUser(MOCK_USER_STALE);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }),
+          { status: 401 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { ok: 1 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }),
+          { status: 401 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { ok: 2 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+    const refresh = vi.fn(async () => {
+      authStore.getState().setUser({ ...MOCK_USER_STALE, token: 'fresh' });
+      return true;
+    });
+    registerLogoutHandlers({ refresh, logout: vi.fn() });
+
+    const first = await apiFetch<{ ok: number }>('/x');
+    const second = await apiFetch<{ ok: number }>('/y');
+
+    expect(first).toEqual({ ok: 1 });
+    expect(second).toEqual({ ok: 2 });
+    // Two distinct refresh calls ⇒ refreshPromise was cleared between cycles.
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+  });
+
+  it('retry re-passes original init incl. signal; aborted retry does not hang', async () => {
+    authStore.getState().setUser(MOCK_USER_STALE);
+    const controller = new AbortController();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementation(async (_input, init) => {
+      const sig = (init as RequestInit | undefined)?.signal;
+      if (sig?.aborted) {
+        throw new DOMException('aborted', 'AbortError');
+      }
+      return new Response(
+        JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'expired' } }),
+        { status: 401 },
+      );
+    });
+
+    const refresh = vi.fn(async () => {
+      // Abort AFTER the initial 401 but BEFORE the retry fetch.
+      controller.abort();
+      authStore.getState().setUser({ ...MOCK_USER_STALE, token: 'fresh' });
+      return true;
+    });
+    registerLogoutHandlers({ refresh, logout: vi.fn() });
+
+    await expect(
+      apiFetch('/x', { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
+
+    // The retry call received the SAME signal object — proves init re-passed (L8).
+    const retryInit = fetchSpy.mock.calls[1]?.[1];
+    expect(retryInit?.signal).toBe(controller.signal);
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // initial 401 + 1 aborted retry
   });
 
   it('/auth/* paths exempt: no refresh, no logout', async () => {
