@@ -67,7 +67,7 @@
 | # | Decision | Choice | Rationale (cite source) |
 |---|----------|--------|-----------|
 | D1 | **Where to set the 30s interval** | **Per-query `refetchInterval` on `useBoard`** (NOT a global `QueryClient` default) | The board is the only resource that polls; a global default would force a 30s cadence on `useProjects`/`useProject` too (waste + token churn). Per-query keeps blast radius minimal. Codebase: `useBoard.ts:5-11` is the single touch point. TanStack v5: per-query options override defaults. |
-| D2 | **Env var name + layer** | **`VITE_POLL_INTERVAL_SECONDS` (frontend)**, NOT backend `POLL_INTERVAL_SECONDS` | Vite inlines only `VITE_`-prefixed vars at build time (persona.md / Vercel deploy). The poll runs in the browser, so the var is consumed client-side. `POLL_INTERVAL_SECONDS` appears NOWHERE in `backend/src` (grep NONE) and is mis-categorized in `js-development-rules.md:145` + `features.md:243`. **Delta from rules doc — owner Q1.** |
+| D2 | **Env var name + layer** | **`VITE_POLL_INTERVAL_SECONDS` (frontend)**, NOT backend `POLL_INTERVAL_SECONDS` | Vite inlines only `VITE_`-prefixed vars at build time (persona.md / Vercel deploy). The poll runs in the browser, so the var is consumed client-side. `POLL_INTERVAL_SECONDS` appears NOWHERE in `backend/src` (grep NONE) and is mis-categorized in `js-development-rules.md:145` + `features.md:243`. **Delta from rules doc — Q1 resolved YES (T4 corrects the rules doc).** |
 | D3 | **Pause/resume mechanism** | **Rely on v5 default `refetchIntervalInBackground:false` + existing global `refetchOnWindowFocus:true`** (no manual `visibilitychange` listener) | v5 `refetchIntervalInBackground` DEFAULTS to `false` → polling auto-pauses on `document.hidden`, resumes on focus (TanStack Polling guide, Agent D). The existing global `refetchOnWindowFocus:true` (`queryClient.ts:8`) handles resume-on-focus for free. No listener = less code, less churn. F10 sets `refetchInterval` + inherits the in-background default; explicitly sets `refetchIntervalInBackground: false` for readability/clarity (matches intent even though it's the default). |
 | D4 | **Mid-drag pause seam** | **New `useBoardUiStore` (Zustand) `{ dragInProgress: boolean; setDragInProgress }`** consumed by `refetchInterval`, populated by F11 | F10 creates + consumes the seam; F11 wires `onDragStart`/`onDragEnd`. `useBoard` reads `useBoardUiStore.getState().dragInProgress` inside the `refetchInterval` callback → returns `false` to DEFER (not discard). Returning `false` means the next tick after drag-end fires normally (TanStack guide). No DnD lib in F10 (`@hello-pangea/dnd` is F11). `dragInProgress` defaults `false` so read-only F10 behavior is unaffected. |
 | D5 | **Stale-data conflict policy** | **Client-side last-write-wins** (no ETag / `If-Match` / version column in MVP) | PRD §4 out-of-scope explicitly chooses polling over WebSocket push (implicit LWW). F10 spec accepts LWW. Per-ticket `updatedAt` exists in the payload but is unused in F10 MVP. ETag/If-Match escalation is a future F11 concern. |
@@ -82,11 +82,11 @@
 > - **Board virtualization** → later.
 > - **Backend changes** → none.
 
-> **Owner sign-off needed (Q1–Q4, §9):**
-> - **Q1:** Correct `js-development-rules.md:145` — move/add `VITE_POLL_INTERVAL_SECONDS` to a frontend env table (convention change)? **Recommend YES.**
-> - **Q2:** Git — F10 has no SLYK ticket number. Commit message-only (`Add board 30s auto-polling with conflict rollback`) + branch `feature/add-board-auto-polling`? Or treat F10 as ticket (`SLYK-F10`)? **Recommend message-only** per git rule "if ticket unidentifiable, omit prefix." Flag ambiguity.
-> - **Q3:** Add the optimistic-rollback `useMutation` scaffold now vs defer fully to F11? **Recommend DEFER** (no write API exists).
-> - **Q4:** Surface `project.updatedAt` board-level watermark for cheaper change-detection now, or keep pure LWW? **Recommend KEEP LWW** (YAGNI for MVP).
+> **Owner sign-off — RESOLVED (see §9 for final answers):**
+> - **Q1 = YES:** Correct `js-development-rules.md:145` — add a frontend `VITE_POLL_INTERVAL_SECONDS` env row (T4 will perform this edit).
+> - **Q2 = repo convention:** Commits use `SLYK-F10: <msg>` and branch `feature/SLYK-F10-board-auto-polling` (matches repo log — feature ID treated as ticket equivalent, per `SLYK-F09:` history).
+> - **Q3 = DEFER:** No optimistic-rollback scaffold in F10 — F11 owns it; F10 documents the recipe only.
+> - **Q4 = KEEP LWW:** No `project.updatedAt` board-level watermark; pure client-side last-write-wins.
 
 ---
 
@@ -371,7 +371,7 @@ Create / Modify:
 
 **Batch:** B1 · **Depends on:** F09 (merged) · **Parallel with:** T1, T2
 
-**Description:** Resolve the F10 edge cases into documented decisions + record the F11 forward contract (stable queryKey, `boardKeys.all` invalidation seam, canonical optimistic-rollback recipe F11 implements, LWW decision). This is the "glue" task that makes F11's job turnkey. Optionally (gated on owner Q1 sign-off) correct `js-development-rules.md:145` to add a frontend `VITE_POLL_INTERVAL_SECONDS` row (convention correction).
+**Description:** Resolve the F10 edge cases into documented decisions + record the F11 forward contract (stable queryKey, `boardKeys.all` invalidation seam, canonical optimistic-rollback recipe F11 implements, LWW decision). This is the "glue" task that makes F11's job turnkey. Per Q1 (approved), correct `js-development-rules.md:145` to add a frontend `VITE_POLL_INTERVAL_SECONDS` env row (convention correction).
 
 Create / Modify:
 
@@ -400,16 +400,12 @@ Create / Modify:
         F10's refetchInterval reads useBoardUiStore.getState().dragInProgress and returns false to DEFER.
   ```
 
-- **`.claude/rules/js-development-rules.md`** (MODIFY — **gated on owner Q1**). If approved, the backend env table at `:145` lists `POLL_INTERVAL_SECONDS | No | 30`. F10 is a frontend var. Correction options:
-  - **(preferred)** Add a new frontend env table section documenting `VITE_POLL_INTERVAL_SECONDS | No | 30` and note that `POLL_INTERVAL_SECONDS` (backend) is NOT used by F10 (the value lives client-side).
-  - **(minimal)** Add a one-line note under the existing row: "Note: F10 consumes this as the frontend `VITE_POLL_INTERVAL_SECONDS` (Vite-inlined)."
-  - If Q1 is declined, **skip this edit** (T4 still completes via the docs above).
+- **`.claude/rules/js-development-rules.md`** (MODIFY — **Q1 approved**). The backend env table at `:145` lists `POLL_INTERVAL_SECONDS | No | 30`; F10 consumes this client-side. Apply the **preferred** correction: add a new frontend env section documenting `VITE_POLL_INTERVAL_SECONDS | No | 30` and note that `POLL_INTERVAL_SECONDS` (backend) is NOT used by F10 (the value lives client-side).
 
 **Acceptance Criteria:**
 - [ ] This tasks doc records the 3 edge-case resolutions (mid-drag DEFER, read-only no-409, LWW) as explicit decisions.
 - [ ] F11 forward contract (stable queryKey, `boardKeys.all` invalidation, optimistic recipe, 409 ownership, drag-seam wiring) is documented.
-- [ ] (If Q1 approved) `js-development-rules.md` corrected to document `VITE_POLL_INTERVAL_SECONDS` as the frontend var; backend `POLL_INTERVAL_SECONDS` noted as unused-by-F10.
-- [ ] (If Q1 declined) the rules-doc edit is skipped and the decision recorded here.
+- [ ] `js-development-rules.md` corrected (Q1 approved): frontend `VITE_POLL_INTERVAL_SECONDS` env row added; backend `POLL_INTERVAL_SECONDS` noted as unused-by-F10.
 
 **Dependencies:** F09. (Q1 sign-off is external.)
 
@@ -475,7 +471,7 @@ Steps:
 
 **Integration record (fill during T5):**
 - Feature commit SHA: `________`
-- Branch: `feature/add-board-auto-polling` (Q2 — message-only commits, no SLYK ticket prefix).
+- Branch: `feature/SLYK-F10-board-auto-polling` (commits: `SLYK-F10: <msg>` per repo convention — Q2 resolved).
 - Observed poll interval (Network tab): `________` ms (expect 30000 default).
 - Card-move-within-one-poll observed: `yes / no` (timestamp: `________`).
 - Pause-on-hidden observed (no requests for 60s+): `yes / no`.
@@ -494,11 +490,11 @@ Steps:
 
 ---
 
-## 9. Sign-off list (owner questions — NOT yet obtained)
+## 9. Sign-off list (owner questions — RESOLVED)
 
-F10 has **4 open owner questions**. None block drafting this plan, but Q1 (rules-doc correction) and Q2 (git convention) should be resolved before T4 / commits respectively.
+All 4 owner questions resolved. Final answers below.
 
-- **Q1 — Rules-doc correction (RECOMMEND YES):** `js-development-rules.md:145` lists `POLL_INTERVAL_SECONDS` in the **backend** env table, but F10 consumes it as the **frontend** `VITE_POLL_INTERVAL_SECONDS` (Vite-inlined). Correct the rules doc to add a frontend env row + note the backend var is unused by F10? **Recommend YES** (convention accuracy; T4 gated on this).
-- **Q2 — Git convention (RECOMMEND message-only):** F10 has no SLYK ticket number. Per git-guidelines.md "If ticket unidentifiable, omit prefix — message only," commits should be message-only (`Add board 30s auto-polling with conflict rollback`) and branch `feature/add-board-auto-polling`. **OR** treat the feature index (F10) as the ticket → `SLYK-F10: ...` + `feature/SLYK-F10-board-auto-polling`. **Recommend message-only** per the literal rule. **Flag: ambiguity between feature-ID (F10) and ticket-ID (SLYK-NNN) — owner to disambiguate.**
-- **Q3 — Optimistic scaffold now vs F11 (RECOMMEND DEFER):** Add the `useMutation` optimistic-rollback scaffold now (empty/unused) vs defer fully to F11? **Recommend DEFER** — no write API exists until F11; scaffolding now adds dead code. F10 documents the recipe (T4) so F11 is turnkey.
-- **Q4 — `project.updatedAt` watermark now vs LWW (RECOMMEND KEEP LWW):** Surface `BoardPayload.project.updatedAt` (column exists in schema but not in the payload — Agent B) as a cheap board-level change-detection watermark, or keep pure last-write-wins? **Recommend KEEP LWW** (YAGNI for MVP; 30s polling is cheap; the watermark adds payload surface + a backend change F10 explicitly avoids).
+- **Q1 — Rules-doc correction → YES:** `js-development-rules.md:145` lists `POLL_INTERVAL_SECONDS` in the **backend** env table, but F10 consumes it as the **frontend** `VITE_POLL_INTERVAL_SECONDS` (Vite-inlined). **T4 corrects the rules doc** — adds a frontend env row + notes the backend var is unused by F10.
+- **Q2 — Git convention → repo convention (`SLYK-F10:`):** Commits use `SLYK-F10: <msg>` and branch `feature/SLYK-F10-board-auto-polling`. Repo log treats the feature ID (F10) as the ticket equivalent (matches the `SLYK-F09:` commit history) — the feature-ID-vs-ticket-ID ambiguity is resolved in favor of `SLYK-F<NN>`.
+- **Q3 — Optimistic scaffold → DEFER:** No `useMutation` optimistic-rollback scaffold in F10 — F11 owns it. F10 documents the recipe (T4) so F11 is turnkey.
+- **Q4 — `project.updatedAt` watermark → KEEP LWW:** No board-level watermark; pure client-side last-write-wins. 30s polling is cheap; the watermark would add payload surface + a backend change F10 explicitly avoids.
