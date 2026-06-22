@@ -63,6 +63,7 @@ Prefix with `VITE_` for client-side access:
 ```
 VITE_API_BASE_URL=https://your-api.onrender.com/api
 VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+VITE_POLL_INTERVAL_SECONDS=30
 ```
 
 ### Deployment (Frontend)
@@ -142,7 +143,7 @@ All config via environment variables:
 | `GOOGLE_CALLBACK_URL` | Yes | — |
 | `JWT_SECRET` | Yes | — |
 | `ALLOWED_DOMAIN` | No | — (G-Suite workspace restriction) |
-| `POLL_INTERVAL_SECONDS` | No | `30` |
+| `POLL_INTERVAL_SECONDS` | No | `30` (not used by F10 board auto-polling; F10 reads the frontend `VITE_POLL_INTERVAL_SECONDS` instead) |
 
 ### Deployment (Backend)
 
