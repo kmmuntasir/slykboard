@@ -25,7 +25,11 @@ export function TopNav() {
     const navigate = useNavigate();
 
     const handleSignOut = async () => {
-        await logout();
+        try {
+            await logout();
+        } catch {
+            // /logout 401/500 === already logged out; clear locally regardless.
+        }
         clear();
         broadcastLogout();
         navigate('/login', { replace: true });

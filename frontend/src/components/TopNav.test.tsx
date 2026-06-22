@@ -87,6 +87,21 @@ describe('TopNav', () => {
         expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
     });
 
+    it('clears local state + navigates even when logout rejects', async () => {
+        logoutMock.mockRejectedValue(new Error('500'));
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        });
+
+        expect(logoutMock).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().user).toBeNull();
+        expect(broadcastLogoutMock).toHaveBeenCalledTimes(1);
+        expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
+    });
+
     it('renders Settings link when role is ADMIN', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
