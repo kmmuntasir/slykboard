@@ -1,5 +1,14 @@
 import { eq } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, pgEnum, uniqueIndex, integer } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  pgEnum,
+  uniqueIndex,
+  integer,
+  jsonb,
+} from 'drizzle-orm/pg-core';
 
 // PRD §8.1 — role enum. Admin manages settings; Member is default.
 export const roleEnum = pgEnum('Role', ['ADMIN', 'MEMBER']);
@@ -32,3 +41,29 @@ export const users = pgTable(
     usersOneAdminIdx: uniqueIndex('users_one_admin').on(table.role).where(eq(table.role, 'ADMIN')),
   }),
 );
+
+// F08 D-Column-Identity: column identity is {id, name}, NOT a bare string.
+// id = crypto.randomUUID() (stable across renames); name is the display label.
+// PRD §8.2 specified a string array; F08 upgrades to {id, name} (schema delta §8).
+export interface Column {
+  id: string;
+  name: string;
+}
+
+export const projects = pgTable('Projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  // F08 D-Column-Identity: ordered array of {id, name}. JSONB; Drizzle $type for TS shape.
+  columns: jsonb('columns').$type<Column[]>().notNull(),
+  // F08 D-Creator-FK: PRD omits; aligns with §8.3 Tickets creator FK.
+  creatorId: uuid('creator_id')
+    .notNull()
+    .references(() => users.id),
+  // F08 D-Timestamps: PRD omits; aligns with Users schema.
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
