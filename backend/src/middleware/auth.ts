@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { verifyJwt } from '../utils/jwt';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
+import { findUserTokenVersion } from '../services/tokenVersion';
 
 // D12: reads Authorization: Bearer <jwt> (case-insensitive scheme).
 // On success, attaches req.user = { id, email, role }.
@@ -21,11 +22,20 @@ export async function authenticate(
   }
   const token = match[1]!;
 
+  let payload;
   try {
-    const payload = await verifyJwt(token);
-    req.user = { id: payload.sub, email: payload.email, role: payload.role };
-    next();
+    payload = await verifyJwt(token);
   } catch {
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Missing or invalid token');
   }
+
+  // F07 D3: compare JWT `ver` to DB tokenVersion. Mismatch → 401 (hard
+  // mid-session invalidation). Covers: logout (bumped), future F25 role demotion.
+  const dbTokenVersion = await findUserTokenVersion(payload.sub);
+  if (dbTokenVersion === undefined || dbTokenVersion !== payload.ver) {
+    throw new AppError(ErrorCode.UNAUTHENTICATED, 'Token version mismatch');
+  }
+
+  req.user = { id: payload.sub, email: payload.email, role: payload.role };
+  next();
 }

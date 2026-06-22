@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
+import { decodeJwt } from 'jose';
 import type * as JwtModule from '../utils/jwt';
 
 // Hoisted mutable test env. accessControl reads env.allowedDomain at call time;
@@ -13,6 +14,7 @@ const { TEST_ENV } = vi.hoisted(() => ({
     nodeEnv: 'test',
     databaseUrl: 'postgresql://test:test@localhost:5432/test',
     jwtSecret: 'test-jwt-secret-test-jwt-secret-0000',
+    jwtTtl: '8h',
     googleClientId: 'test-client-id.apps.googleusercontent.com',
     googleClientSecret: 'test-client-secret',
     googleCallbackUrl: 'http://localhost:3000/api/auth/google/callback',
@@ -30,6 +32,10 @@ vi.mock('../services/userService', () => ({
   upsertByGoogleId: vi.fn(),
   findUserById: vi.fn(),
 }));
+vi.mock('../services/tokenVersion', () => ({
+  findUserTokenVersion: vi.fn(),
+  bumpTokenVersion: vi.fn(),
+}));
 // Keep the REAL verifyJwt (authenticate needs it) — only mock signJwt.
 vi.mock('../utils/jwt', async (importOriginal) => {
   const actual = await importOriginal<typeof JwtModule>();
@@ -39,6 +45,7 @@ vi.mock('../utils/jwt', async (importOriginal) => {
 import { app } from '../index';
 import { exchangeCodeForUser } from '../services/googleOAuth';
 import { upsertByGoogleId, findUserById } from '../services/userService';
+import { bumpTokenVersion, findUserTokenVersion } from '../services/tokenVersion';
 import { signJwt } from '../utils/jwt';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
@@ -46,6 +53,8 @@ import { ErrorCode } from '../utils/envelope';
 const mockedExchange = vi.mocked(exchangeCodeForUser);
 const mockedUpsert = vi.mocked(upsertByGoogleId);
 const mockedFindById = vi.mocked(findUserById);
+const mockedFindVersion = vi.mocked(findUserTokenVersion);
+const mockedBump = vi.mocked(bumpTokenVersion);
 const mockedSign = vi.mocked(signJwt);
 
 beforeEach(() => {
@@ -115,6 +124,35 @@ describe('auth routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.user.role).toBe('ADMIN');
     expect(mockedUpsert).toHaveBeenCalled();
+  });
+
+  it('POST /google returns token whose decoded JWT ver === user.tokenVersion', async () => {
+    const { signJwt: realSignJwt } =
+      await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
+    mockedSign.mockImplementation((claims) => realSignJwt(claims));
+    mockedExchange.mockResolvedValue({
+      googleId: 'g1',
+      email: 'user@example.com',
+      fullName: 'User One',
+      avatarUrl: 'https://img/u.png',
+    });
+    mockedUpsert.mockResolvedValue({
+      id: 'u1',
+      googleId: 'g1',
+      email: 'user@example.com',
+      fullName: 'User One',
+      avatarUrl: 'https://img/u.png',
+      role: 'MEMBER',
+      tokenVersion: 2,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(200);
+    const decoded = decodeJwt(res.body.data.token);
+    expect(decoded.ver).toBe(2);
   });
 
   it('POST /google returns 403 FORBIDDEN on domain mismatch', async () => {
@@ -216,7 +254,9 @@ describe('auth routes', () => {
       sub: 'u1',
       email: 'user@example.com',
       role: 'MEMBER',
+      ver: 0,
     });
+    mockedFindVersion.mockResolvedValue(0);
     mockedFindById.mockResolvedValue({
       id: 'u1',
       googleId: 'g1',
@@ -250,7 +290,9 @@ describe('auth routes', () => {
       sub: 'u1',
       email: 'user@example.com',
       role: 'MEMBER',
+      ver: 0,
     });
+    mockedFindVersion.mockResolvedValue(0);
     mockedFindById.mockResolvedValue({
       id: 'u1',
       googleId: 'g1',
@@ -272,6 +314,38 @@ describe('auth routes', () => {
     expect(mockedFindById).toHaveBeenCalledWith('u1');
   });
 
+  it('GET /me returns token whose decoded JWT ver === DB tokenVersion', async () => {
+    const { signJwt: realSignJwt } =
+      await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
+    mockedSign.mockImplementation((claims) => realSignJwt(claims));
+    // Request JWT carries ver:0; DB-authoritative tokenVersion is 3.
+    const realToken = await realSignJwt({
+      sub: 'u1',
+      email: 'user@example.com',
+      role: 'MEMBER',
+      ver: 0,
+    });
+    mockedFindVersion.mockResolvedValue(0);
+    mockedFindById.mockResolvedValue({
+      id: 'u1',
+      googleId: 'g1',
+      email: 'user@example.com',
+      fullName: 'User One',
+      avatarUrl: 'https://img/u.png',
+      role: 'MEMBER',
+      tokenVersion: 3,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof findUserById>>);
+
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
+
+    expect(res.status).toBe(200);
+    const decoded = decodeJwt(res.body.data.token);
+    // /me re-signs from the DB row, so ver follows DB tokenVersion (3), not the request token's 0.
+    expect(decoded.ver).toBe(3);
+  });
+
   it('GET /me returns 401 UNAUTHENTICATED when user not found in DB', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
@@ -279,7 +353,9 @@ describe('auth routes', () => {
       sub: 'ghost',
       email: 'ghost@example.com',
       role: 'MEMBER',
+      ver: 0,
     });
+    mockedFindVersion.mockResolvedValue(0);
     mockedFindById.mockResolvedValue(undefined);
 
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
@@ -289,10 +365,31 @@ describe('auth routes', () => {
     expect(res.body.error.message).toBe('User no longer exists');
   });
 
-  it('POST /logout returns 200 with success:true', async () => {
+  it('POST /logout returns 401 UNAUTHENTICATED without Bearer token', async () => {
     const res = await request(app).post('/api/auth/logout');
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('POST /logout bumps tokenVersion + returns success:true', async () => {
+    const { signJwt: realSignJwt } =
+      await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
+    const realToken = await realSignJwt({
+      sub: 'u1',
+      email: 'user@example.com',
+      role: 'MEMBER',
+      ver: 0,
+    });
+    mockedFindVersion.mockResolvedValue(0);
+    mockedBump.mockResolvedValue(undefined);
+
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${realToken}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.success).toBe(true);
+    expect(mockedBump).toHaveBeenCalledWith('u1');
   });
 });
