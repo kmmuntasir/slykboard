@@ -7,18 +7,49 @@ An open-source, minimal Kanban board with built-in time tracking and reporting. 
 
 - Node.js 24 (see `.nvmrc`)
 - npm (ships with Node)
+- Docker + Docker Compose (local Postgres — see `docker-compose.yml`)
 
 ### Getting Started
 
-```bash
-# Switch to the correct Node version
-nvm use
+The fastest path from a fresh clone to a running app is the `Makefile`. It handles Node version checks, dependency install, env file creation, Postgres startup, and migrations in one step.
 
-# Install dependencies for all workspaces (run at repo root)
-npm install
+```bash
+make bootstrap
 ```
 
-`npm install` at the repo root installs dependencies for both `frontend/` and `backend/` workspaces once they exist.
+What `make bootstrap` does:
+
+1. Verifies Node 24+
+2. Installs workspace dependencies (`npm install`)
+3. Copies `.env.example` → `.env` for each package and generates a local `JWT_SECRET`
+4. Starts the local Postgres container and waits until healthy
+5. Applies Drizzle migrations
+
+After bootstrap, fill in your Google OAuth credentials (see [Environment Setup](#environment-setup)) and start the app:
+
+```bash
+make dev
+```
+
+Run `make` (or `make help`) to list every available target.
+
+### The Makefile
+
+Common targets:
+
+| Target | Description |
+| --- | --- |
+| `make bootstrap` | Fresh-clone setup: deps, env, DB, migrations |
+| `make dev` | Run backend (:3000) + frontend (:5173) concurrently |
+| `make up` / `make down` | Start / stop the Postgres container |
+| `make db-psql` | Open a `psql` shell in the Postgres container |
+| `make migrate` | Apply pending Drizzle migrations |
+| `make studio` | Open Drizzle Studio (DB GUI) |
+| `make test` | Run all tests (backend + frontend) |
+| `make lint` / `make typecheck` | Lint / type-check the monorepo |
+| `make health` | Probe the backend health endpoint |
+
+> The `Makefile` wraps the underlying npm workspace scripts — each target maps to an `npm run -w <pkg>` command, so you can drop down to npm directly whenever you need more control.
 
 ### Running the App
 
