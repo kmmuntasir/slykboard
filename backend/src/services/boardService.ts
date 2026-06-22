@@ -1,0 +1,149 @@
+import { and, asc, eq } from 'drizzle-orm';
+import { db } from '../db/client';
+import { tickets, users } from '../db/schema';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
+import { logger } from '../config/logger';
+import { getProjectBySlug } from './projectService';
+
+// F09 D-Unsorted-Bucket: stable id for the orphan pseudo-column.
+export const UNSORTED_BUCKET_ID = '__unsorted__';
+const UNSORTED_BUCKET_NAME = 'Unsorted';
+
+// F09 D-Soft-Cap: warn-only (no truncate). Full virtualization is F10+.
+export const BOARD_SOFT_CAP = Object.freeze({ tickets: 200, columns: 12 });
+
+export interface BoardAssignee {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+}
+
+export interface BoardTicket {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  statusColumn: string;
+  position: number;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
+  labels: string[];
+  assignee: BoardAssignee | null;
+  creatorId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BoardColumn {
+  id: string;
+  name: string;
+  isUnsorted: boolean;
+  tickets: BoardTicket[];
+}
+
+export interface BoardPayload {
+  project: { id: string; name: string; slug: string };
+  columns: BoardColumn[];
+}
+
+export async function getBoard(slug: string): Promise<BoardPayload> {
+  // F08: project lookup by slug.
+  const project = await getProjectBySlug(slug);
+  if (!project) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`);
+  }
+
+  // F09: load this project's tickets ordered by position ASC (parameterized —
+  // never string-concat SQL). Left-join users for assignee.
+  const rows = await db
+    .select({
+      id: tickets.id,
+      ticketNumber: tickets.ticketNumber,
+      title: tickets.title,
+      statusColumn: tickets.statusColumn,
+      position: tickets.position,
+      priority: tickets.priority,
+      labels: tickets.labels,
+      assigneeId: tickets.assigneeId,
+      creatorId: tickets.creatorId,
+      createdAt: tickets.createdAt,
+      updatedAt: tickets.updatedAt,
+      assigneeFullName: users.fullName,
+      assigneeAvatarUrl: users.avatarUrl,
+      assigneeRowId: users.id,
+    })
+    .from(tickets)
+    .leftJoin(users, eq(users.id, tickets.assigneeId))
+    .where(and(eq(tickets.projectId, project.id)))
+    .orderBy(asc(tickets.position));
+
+  const allTickets: BoardTicket[] = rows.map((r) => ({
+    id: r.id,
+    ticketNumber: r.ticketNumber,
+    title: r.title,
+    statusColumn: r.statusColumn,
+    position: r.position,
+    priority: r.priority,
+    labels: r.labels ?? [],
+    assignee: r.assigneeId
+      ? {
+          id: r.assigneeRowId!,
+          fullName: r.assigneeFullName!,
+          avatarUrl: r.assigneeAvatarUrl,
+        }
+      : null,
+    creatorId: r.creatorId,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  }));
+
+  // F09 D-Soft-Cap: warn (not truncate).
+  if (
+    allTickets.length > BOARD_SOFT_CAP.tickets ||
+    project.columns.length > BOARD_SOFT_CAP.columns
+  ) {
+    logger.warn(
+      {
+        projectId: project.id,
+        ticketCount: allTickets.length,
+        columnCount: project.columns.length,
+      },
+      'board exceeds soft cap',
+    );
+  }
+
+  // F09 D-Unsorted-Bucket: group by Column.id; orphans → trailing bucket.
+  const columnIds = new Set(project.columns.map((c) => c.id));
+  const byColumn = new Map<string, BoardTicket[]>();
+  const unsorted: BoardTicket[] = [];
+
+  for (const t of allTickets) {
+    if (columnIds.has(t.statusColumn)) {
+      const list = byColumn.get(t.statusColumn) ?? [];
+      list.push(t);
+      byColumn.set(t.statusColumn, list);
+    } else {
+      unsorted.push(t);
+    }
+  }
+
+  const columns: BoardColumn[] = project.columns.map((c) => ({
+    id: c.id,
+    name: c.name,
+    isUnsorted: false,
+    tickets: byColumn.get(c.id) ?? [],
+  }));
+
+  if (unsorted.length > 0) {
+    columns.push({
+      id: UNSORTED_BUCKET_ID,
+      name: UNSORTED_BUCKET_NAME,
+      isUnsorted: true,
+      tickets: unsorted,
+    });
+  }
+
+  return {
+    project: { id: project.id, name: project.name, slug: project.slug },
+    columns,
+  };
+}
