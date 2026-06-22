@@ -1005,26 +1005,26 @@ F12 owns two schema deltas: a new `project_sequences` table (per-project counter
 
 ---
 
-## 9. Owner sign-off needed (cross-cutting decisions)
+## 9. Cross-cutting decisions — RESOLVED (owner-approved 2026-06-23)
 
-Surface these in chat before/as Batch 1 merges:
+All five decisions below were owner-approved on 2026-06-23; the recommended option was chosen in each case. The plan body (§3 Key Technical Decisions, tasks T1–T9) already reflects these locks — no change to task scope. **No further sign-off required before Batch 1.** Alternatives retained below for traceability.
 
-- **Q1 — `ticket_number` strategy (D1):** **counter-row + `FOR UPDATE`** (recommended) vs **unique-constraint + insert-retry** (simpler schema, no new table).
+- **Q1 — `ticket_number` strategy (D1):** **counter-row + `FOR UPDATE`** ✅ APPROVED vs **unique-constraint + insert-retry** (simpler schema, no new table).
     - **Recommend:** counter-row + `FOR UPDATE` — matches [F09-tasks.md §8](../F09-board-read-columns-cards/F09-board-read-columns-cards-tasks.md) `FOR UPDATE` contract; deadlocks near-zero (1 row locked per tx); gap-tolerant (`nextNumber` monotonic); backed by the unique constraint as defense-in-depth. Drizzle transactions doc (https://orm.drizzle.team/docs/transactions) + PG explicit-locking (https://www.postgresql.org/docs/current/explicit-locking.html). Retry-only is worst under load (retry storms; Drizzle #2474 returning()+onConflictDoNothing misbehaves).
     - **Unblocks:** T1 (schema), T2 (allocator), T4 (route).
 
-- **Q2 — Starting number (D2):** **1 + zero-pad** (recommended, `SLYK-001`) vs **101** (seed/PRD-example convention).
+- **Q2 — Starting number (D2):** **1 + zero-pad** ✅ APPROVED (`SLYK-001`) vs **101** (seed/PRD-example convention).
     - **Recommend:** 1 — Jira default is `PROJ-1`; no documented "start at 100" convention (Atlassian community). Zero-pad is display-only (no storage change). The seed's 101/102/103 was a placeholder. If the team prefers 101 for aesthetic reasons, flip `START_TICKET_NUMBER` + update the seed — one constant.
     - **Unblocks:** T1 (seed + constant), T2 (allocator reads from the seeded default), FE display formatting.
 
-- **Q3 — New-card placement (D3):** **bottom of first column** (recommended, `max + POSITION_GAP`) vs **top** (common kanban UX, `min - POSITION_GAP`).
+- **Q3 — New-card placement (D3):** **bottom of first column** ✅ APPROVED (`max + POSITION_GAP`) vs **top** (common kanban UX, `min - POSITION_GAP`).
     - **Recommend:** bottom — simpler position math (no negative positions, no precision-exhaustion drift from repeated prepends); F11 rebalance machinery unchanged; `POSITION_GAP=65536` reused. Top is a UX preference; if chosen, note the negative-position drift tradeoff.
     - **Unblocks:** T2 (position math), T6 (`applyCreateToBoard` appends vs prepends).
 
-- **Q4 — Route shape (D6):** **nested `POST /api/projects/:slug/tickets`** (recommended, handler in `projects.routes.ts`) vs **flat `POST /api/tickets`** body `{ projectSlug, ... }` (F11 precedent, handler in `tickets.routes.ts`).
+- **Q4 — Route shape (D6):** **nested `POST /api/projects/:slug/tickets`** ✅ APPROVED (handler in `projects.routes.ts`) vs **flat `POST /api/tickets`** body `{ projectSlug, ... }` (F11 precedent, handler in `tickets.routes.ts`).
     - **Recommend:** nested — binds the slug cleanly (same param as `GET /:slug/board`), RESTful per `js-development-rules.md`, keeps the create route discoverable next to the board read. Flat is viable and matches F11's `PATCH /api/tickets/:ticketId` precedent, but requires a `projectSlug` body field + duplicate slug validation.
     - **Unblocks:** T4 (route + Zod), T5 (FE client path).
 
-- **Q5 — `displayId` immutability (D8):** **defer snapshot to F27** (recommended, render-time Model A now) vs **add immutable `displayId` column now** (Model B).
+- **Q5 — `displayId` immutability (D8):** **defer snapshot to F27** ✅ APPROVED (render-time Model A now) vs **add immutable `displayId` column now** (Model B).
     - **Recommend:** defer — no slug-rename path exists until F27; Model A (render-time `${currentSlug}-${ticketNumber}`) is already implemented at `TicketCard.tsx:13`; Model B requires a schema column now for a future feature and is reversible (switching later is one migration). If "historical IDs should not change" is a hard requirement the owner wants guaranteed now, choose Model B and add the column in T1.
     - **Unblocks:** T1 (whether to add a `display_id` text column), F27 scope boundary.
