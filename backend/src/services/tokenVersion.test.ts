@@ -74,8 +74,14 @@ describe('bumpTokenVersion', () => {
 
     await bumpTokenVersion('u1');
 
-    expect(bag.updateSetArg).toEqual(expect.objectContaining({ tokenVersion: expect.anything() }));
-    expect(bag.updateSetArg.tokenVersion).toBeTruthy();
+    // Regression guard (L5): the bump MUST use an atomic Drizzle SQL increment
+    // (sql`token_version + 1`), NOT a hardcoded literal like { tokenVersion: 1 }.
+    // A primitive literal would silently pass the old "truthy" assertion.
+    const setArg = bag.updateSetArg.tokenVersion;
+    expect(typeof setArg).not.toBe('number'); // Drizzle SQL is an object, not a primitive
+    expect(setArg).toEqual(expect.objectContaining({ queryChunks: expect.any(Array) }));
+    expect((setArg as { queryChunks: unknown[] }).queryChunks.length).toBeGreaterThan(0);
+    expect(setArg?.constructor?.name).toBe('SQL');
     expect(bag.updateWhere).toHaveBeenCalledTimes(1);
   });
 
