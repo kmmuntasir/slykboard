@@ -1196,12 +1196,12 @@ Steps:
 - [ ] Typecheck + test pass (backend + frontend).
 - [ ] `npm run build` (frontend) succeeds.
 
-**Integration record (fill during T11):**
-- Feature commit SHA: `________`
-- `0003_*.sql` applied; `\d "Projects"` output captured: `________`
-- Sample POST /api/projects response (201): `________`
-- Sample CONFLICT (409) response: `________`
-- Lint/format/typecheck/test/build exit codes: `0 / 0 / 0 / 0 / 0`
+**Integration record (T11, 2026-06-23):**
+- Feature commits (`8b20091..01114a2`, 12 commits, branch `feature/SLYK-F08-projects-task-plan`): T1 `8b20091`, T2 `2e25ee3`, T3 `7b0458c`, T4 `9194489`, T5 `1eb5232`, T6 `eccec16`, T7 `e2a4db7`, T8 `3300637`, T9 `f09e278`, T10 `91bba50`, format `d345480`+`01114a2`.
+- `0003_curly_golden_guardian.sql` applied (T1: "migrations applied successfully!"). Table shape (authoritative DDL): `id uuid PK default gen_random_uuid`, `name text`, `slug text UNIQUE` (`Projects_slug_unique`), `columns jsonb`, `creator_id uuid FK→Users(id)` (`Projects_creator_id_Users_id_fk`), `created_at`/`updated_at` timestamptz default now(). **No `$1` regression** (clean literal SQL; the `usersOneAdminIdx` `$1` in `0001/0002` snapshots is pre-existing drift, untouched). `db.test.ts` (10 tests) connects to the real DB and passes → DB connectivity + schema confirmed. (`psql` not installed in the verify env; `\d "Projects"` not captured directly — DDL + db.test stand as proof.)
+- HTTP DoD proven by `projects.routes.test.ts` (10 supertest scenarios against the real mounted app via `index.ts`, **REAL `authenticate` + `requireRole`**, only `projectService` mocked): POST ADMIN→201 (`body.data.slug==='SLYK'`, `createProject` called with `creatorId===req.user.id`), MEMBER→403 FORBIDDEN (**requireRole first-mount proof**), no-Bearer→401, empty-name→400 VALIDATION_FAILED, CONFLICT→409, GET list→200, GET :slug found→200 / not-found→404, GET `slyk` (lowercase)→400 (strict `slugParamSchema`). Column `{id,name}` round-trip + default-columns-with-uuid-ids proven in `projectService.test.ts` (8 scenarios).
+- Live HTTP/browser smoke: **not run** in the headless verify env (no OAuth-issued ADMIN/MEMBER JWTs available; `DATABASE_URL` present in `backend/.env` but not exported to the shell). HTTP-level DoD is covered by the supertest suite above; a manual browser smoke (admin create flow, member no-form, picker nav, URL reload persistence) is recommended post-merge.
+- Lint/format/typecheck/test/build exit codes: `0 / 0 / 0 / 0 / 0` (backend test 190/190 — 3 consecutive clean runs after one transient F05/F07 DB/timing flake; frontend test 95/95, build OK). NOTE: `format:check` via the RTK hook masks the prettier exit code (reports false success) — verified with `rtk proxy npx prettier --check .` for ground truth.
 
 ---
 
