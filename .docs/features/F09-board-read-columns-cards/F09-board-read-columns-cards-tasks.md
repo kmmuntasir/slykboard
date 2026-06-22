@@ -104,9 +104,9 @@
 
 | # | Decision | Choice | Rationale (cite source) |
 |---|----------|--------|-----------|
-| D-Slug-Route | **Board route param** | **`GET /api/projects/:slug/board`** (spec's `:id` reinterpreted as slug) | features.md:229 says `:id`, but this codebase routes projects by slug everywhere (`projects.routes.ts:19-31`, `routes/index.tsx:49`). The project's URL identifier IS the slug. **Delta from features.md:229 — documented; flag (§9c).** |
-| D-Tickets-Table | **`Tickets` table ownership** | **F09 creates `Tickets` (read-render slice of PRD §8.3)** | features.md:278 attributes `Tickets` to F12, but F09 acceptance requires rendering tickets and no intervening feature owns the table. F09 ships the table + a seed; NO creation endpoint. **Delta from features.md:278 — owner sign-off (§9b).** |
-| D-Position-Column | **`Tickets.position`** | **`doublePrecision('position').notNull().default(0)`; sort ASC for read** | features.md:263 attributes `position` to F11, but F09 needs read-sort. F11 owns the reorder write; F09 adds the column + read-sort. **Delta from features.md:263 — owner sign-off (§9a).** |
+| D-Slug-Route | **Board route param** | **`GET /api/projects/:slug/board`** (spec's `:id` reinterpreted as slug) | features.md:229 says `:id`, but this codebase routes projects by slug everywhere (`projects.routes.ts:19-31`, `routes/index.tsx:49`). The project's URL identifier IS the slug. **Delta from features.md:229 — LOCKED §9c (owner: "slug routing is better").** |
+| D-Tickets-Table | **`Tickets` table ownership** | **F09 creates `Tickets` (read-render slice of PRD §8.3)** | features.md:278 attributes `Tickets` to F12, but F09 acceptance requires rendering tickets and no intervening feature owns the table. F09 ships the table + a seed; NO creation endpoint. **Delta from features.md:278 — LOCKED §9b.** |
+| D-Position-Column | **`Tickets.position`** | **`doublePrecision('position').notNull().default(0)`; sort ASC for read** | features.md:263 attributes `position` to F11, but F09 needs read-sort. F11 owns the reorder write; F09 adds the column + read-sort. **Delta from features.md:263 — LOCKED §9a.** |
 | D-Priority-Enum | **Priority storage vs display** | **pgEnum `('LOW','MEDIUM','HIGH','URGENT','CRITICAL')` default `'MEDIUM'` (SCREAMING_SNAKE); Title-Case is UI-only via `PRIORITY_DISPLAY`** | Style guide mandates SCREAMING_SNAKE for enums/constants; PRD REQ-3.2 Title-Case is display formatting. decision #4. |
 | D-Unsorted-Bucket | **Orphaned `status_column`** | **Trailing pseudo-column `{id: UNSORTED_BUCKET_ID, name: 'Unsorted', isUnsorted: true}` in the payload; grouping is deterministic; payload never drops orphans** | features.md:234 — "still render rather than disappear". Integrity is read-time (no Columns table to FK against — `statusColumn` is text). |
 | D-Soft-Cap | **Large-board cap** | **Warn-only soft cap: `BOARD_SOFT_CAP = {tickets: 200, columns: 12}`; `logger.warn` + full payload returned; no truncate/virtualize in F09** | features.md:235 — "decide a soft cap and log it". Full virtualization deferred to F10+. |
@@ -124,11 +124,11 @@
 > - **Ticket detail / edit / checklist / comments** → later features.
 > - **Board virtualization** → F10+ if soft-cap warnings prove insufficient.
 
-> **Owner sign-off NEEDED (3 deviations from features.md):**
-> - **(a) D-Position-Column** — F09 adds `Tickets.position` (features.md:263 attributes it to F11).
-> - **(b) D-Tickets-Table** — F09 creates the `Tickets` table (features.md:278 attributes it to F12).
-> - **(c) D-Slug-Route** — endpoint is `:slug` not `:id` (features.md:229).
-> See §9 for the sign-off block.
+> **Owner decisions OBTAINED 2026-06-23 (3 deviations from features.md — all LOCKED):**
+> - **(a) D-Position-Column** — F09 adds `Tickets.position` (features.md:263 attributes it to F11). Locked.
+> - **(b) D-Tickets-Table** — F09 creates the `Tickets` table (features.md:278 attributes it to F12). Locked.
+> - **(c) D-Slug-Route** — endpoint is `:slug` not `:id` (features.md:229). Locked.
+> See §9 for the resolved sign-off block.
 
 ---
 
@@ -1343,8 +1343,8 @@ F09 owns the `Tickets` table (PRD §8.3 read-render slice) + the `Priority` enum
 
 ## 9. Sign-off list
 
-Owner sign-off NEEDED (3 deviations from features.md). Surface these in chat before merging. Once obtained, mark LOCKED and record the date.
+Owner decisions OBTAINED 2026-06-23 (3 deviations from features.md). LOCKED — proceed.
 
-- **(a) D-Position-Column — NEEDS SIGN-OFF:** F09 adds `Tickets.position double precision NOT NULL default 0` and read-sorts ASC by it. features.md:263 attributes `position` to F11. Rationale: F09 acceptance ("sorted by position") cannot be met without the column; F11 continues to own the reorder *write* (drag-persist). **Schema/attribution delta vs features.md:263.**
-- **(b) D-Tickets-Table — NEEDS SIGN-OFF:** F09 creates the `Tickets` table (PRD §8.3 read-render slice) + ships a seed, but NO creation endpoint. features.md:278 attributes `Tickets` to F12; no intervening feature between F08 and F12 owns the table, so F09 pulls the read slice forward. The empty-board state is an explicitly-accepted outcome until F12 lands. **Attribution delta vs features.md:278.**
-- **(c) D-Slug-Route — NEEDS SIGN-OFF (document-and-proceed likely):** Endpoint is `GET /api/projects/:slug/board`, not `GET /projects/:id/board`. The spec's `:id` is interpreted as the project's URL identifier, which is the slug in this codebase (consistent with F08's slug-everywhere routing). **Delta vs features.md:229.**
+- **(a) D-Position-Column — LOCKED (owner: "decide what's best" → confirmed):** F09 adds `Tickets.position double precision NOT NULL default 0` and read-sorts ASC by it. features.md:263 attributes `position` to F11; F11 continues to own the reorder *write* (drag-persist). F09 owns the column + read-sort only. **Schema/attribution delta vs features.md:263 — accepted.**
+- **(b) D-Tickets-Table — LOCKED (owner: "decide what's best" → confirmed):** F09 creates the `Tickets` table (PRD §8.3 read-render slice) + ships a seed, NO creation endpoint. features.md:278 attributes `Tickets` to F12; no intervening feature between F08 and F12 owns the table, so F09 pulls the read slice forward. Empty-board state is an explicitly-accepted outcome until F12 lands. **Attribution delta vs features.md:278 — accepted.**
+- **(c) D-Slug-Route — LOCKED (owner: "slug routing is better"):** Endpoint is `GET /api/projects/:slug/board`, not `GET /projects/:id/board`. The spec's `:id` is interpreted as the project's URL identifier, which is the slug in this codebase (consistent with F08's slug-everywhere routing). **Delta vs features.md:229 — accepted.**
