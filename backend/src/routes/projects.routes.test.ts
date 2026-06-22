@@ -1,0 +1,196 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import request from 'supertest';
+
+// Hoisted mutable test env. accessControl reads env.allowedDomain at call time;
+// jwt reads env.jwtSecret at module load. Mocking the '../config' barrel with a
+// full Config keeps REAL accessControl + REAL verifyJwt working while each test
+// controls allowedDomain.
+const { TEST_ENV } = vi.hoisted(() => ({
+  TEST_ENV: {
+    port: 3000,
+    frontendUrl: 'http://localhost:5173',
+    nodeEnv: 'test',
+    databaseUrl: 'postgresql://test:test@localhost:5432/test',
+    jwtSecret: 'test-jwt-secret-test-jwt-secret-0000',
+    jwtTtl: '8h',
+    googleClientId: 'test-client-id.apps.googleusercontent.com',
+    googleClientSecret: 'test-client-secret',
+    googleCallbackUrl: 'http://localhost:3000/api/auth/google/callback',
+    allowedDomain: undefined as string | undefined,
+  },
+}));
+
+vi.mock('../config', () => ({
+  env: TEST_ENV,
+}));
+vi.mock('../services/tokenVersion', () => ({
+  findUserTokenVersion: vi.fn(),
+  bumpTokenVersion: vi.fn(),
+}));
+vi.mock('../services/projectService', () => ({
+  createProject: vi.fn(),
+  listProjects: vi.fn(),
+  getProjectBySlug: vi.fn(),
+}));
+
+import { app } from '../index';
+import { signJwt } from '../utils/jwt';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
+import { findUserTokenVersion } from '../services/tokenVersion';
+import * as projectService from '../services/projectService';
+
+const mockedFindVersion = vi.mocked(findUserTokenVersion);
+const mockedCreate = vi.mocked(projectService.createProject);
+const mockedList = vi.mocked(projectService.listProjects);
+const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  TEST_ENV.allowedDomain = undefined;
+});
+
+function tokenFor(role: 'ADMIN' | 'MEMBER') {
+  return signJwt({ sub: 'u1', email: 'user@example.com', role, ver: 0 });
+}
+
+describe('projectsRouter (F08)', () => {
+  it('GET / returns 200 + list of projects (authed ADMIN)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedList.mockResolvedValue([
+      { id: 'p1', name: 'Slyk', slug: 'SLYK' },
+      { id: 'p2', name: 'Other', slug: 'OTHER' },
+    ] as unknown as Awaited<ReturnType<typeof projectService.listProjects>>);
+
+    const res = await request(app)
+      .get('/api/projects')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(2);
+  });
+
+  it('GET / returns 401 UNAUTHENTICATED without Bearer', async () => {
+    const res = await request(app).get('/api/projects');
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('GET /:slug returns 200 when found', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue({
+      id: 'p1',
+      name: 'Slyk',
+      slug: 'SLYK',
+    } as unknown as Awaited<ReturnType<typeof projectService.getProjectBySlug>>);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.slug).toBe('SLYK');
+  });
+
+  it('GET /:slug returns 404 NOT_FOUND when not found', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('GET /:slug returns 400 VALIDATION_FAILED on invalid slug format', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/slyk')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetBySlug).not.toHaveBeenCalled();
+  });
+
+  it('POST / returns 201 + created project (ADMIN)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreate.mockResolvedValue({
+      id: 'p1',
+      name: 'Slyk',
+      slug: 'SLYK',
+      columns: [{ id: 'c1', name: 'To Do' }],
+      creatorId: 'u1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof projectService.createProject>>);
+
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ name: 'Slyk', slug: 'slyk' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.slug).toBe('SLYK');
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ creatorId: 'u1', name: 'Slyk', slug: 'slyk' }),
+    );
+  });
+
+  it('POST / returns 403 FORBIDDEN for MEMBER', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ name: 'Slyk', slug: 'slyk' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  it('POST / returns 401 UNAUTHENTICATED without Bearer', async () => {
+    const res = await request(app).post('/api/projects').send({ name: 'Slyk', slug: 'slyk' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('POST / returns 400 VALIDATION_FAILED on invalid body', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ name: '' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  it('POST / propagates CONFLICT (409) from service on duplicate slug', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreate.mockRejectedValue(
+      new AppError(ErrorCode.CONFLICT, 'Project slug SLYK already exists', {
+        details: { slug: 'SLYK' },
+      }),
+    );
+
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ name: 'Slyk', slug: 'slyk' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+  });
+});
