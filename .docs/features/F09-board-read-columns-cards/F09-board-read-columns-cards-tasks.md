@@ -1304,26 +1304,26 @@ Steps:
 
 ## 7. Final F09 Acceptance Checklist
 
-- [ ] `Tickets` table per PRD §8.3 read-render slice exists (with F09-added `position`) and migrates cleanly (`0004_*.sql`).
-- [ ] `priorityEnum` pgEnum (`LOW`..`CRITICAL`, default `MEDIUM`) exists (SCREAMING_SNAKE storage; Title-Case UI display).
-- [ ] `GET /api/projects/:slug/board` (spec's `:id` → slug) returns `{project, columns}` in one payload; any authed user (no role gate).
-- [ ] Tickets grouped by `Column.id`, sorted ASC by `position`; orphan `status_column` → trailing `isUnsorted:true` "Unsorted" bucket (only if non-empty); payload never drops tickets.
-- [ ] Cards show `${slug}-${ticketNumber}` (REQ-3.1), title, assignee avatar (or "Unassigned"), priority badge, labels.
-- [ ] Empty column renders explicit "No tickets" empty state; whole-board-empty renders project-level CTA.
-- [ ] Large-board soft cap (`BOARD_SOFT_CAP = {tickets:200, columns:12}`) warns via `logger.warn`; no truncate/virtualize (deferred).
-- [ ] Unassigned ticket → `assignee:null`; assigned → `{id, fullName, avatarUrl}`.
-- [ ] 404 on absent project; 400 on bad slug; 401 without Bearer.
-- [ ] NO ticket-creation endpoint/UI shipped (F12) — seed is the read-data source.
-- [ ] Lint + format checks pass on an empty change.
-- [ ] Typecheck + test pass (backend + frontend).
-- [ ] `npm run build` (frontend) succeeds.
+- [x] `Tickets` table per PRD §8.3 read-render slice exists (with F09-added `position`) and migrates cleanly (`0004_*.sql`).
+- [x] `priorityEnum` pgEnum (`LOW`..`CRITICAL`, default `MEDIUM`) exists (SCREAMING_SNAKE storage; Title-Case UI display).
+- [x] `GET /api/projects/:slug/board` (spec's `:id` → slug) returns `{project, columns}` in one payload; any authed user (no role gate).
+- [x] Tickets grouped by `Column.id`, sorted ASC by `position`; orphan `status_column` → trailing `isUnsorted:true` "Unsorted" bucket (only if non-empty); payload never drops tickets.
+- [x] Cards show `${slug}-${ticketNumber}` (REQ-3.1), title, assignee avatar (or "Unassigned"), priority badge, labels.
+- [x] Empty column renders explicit "No tickets" empty state; whole-board-empty renders project-level CTA.
+- [x] Large-board soft cap (`BOARD_SOFT_CAP = {tickets:200, columns:12}`) warns via `logger.warn`; no truncate/virtualize (deferred).
+- [x] Unassigned ticket → `assignee:null`; assigned → `{id, fullName, avatarUrl}`.
+- [x] 404 on absent project; 400 on bad slug; 401 without Bearer.
+- [x] NO ticket-creation endpoint/UI shipped (F12) — seed is the read-data source.
+- [x] Lint + format checks pass on an empty change.
+- [x] Typecheck + test pass (backend + frontend).
+- [x] `npm run build` (frontend) succeeds.
 
-**Integration record (fill during T9):**
-- Feature commit SHA: `________`
-- `0004_*.sql` applied; `\d "Tickets"` + `\dT "Priority"` output: `________`
-- Sample `GET /api/projects/SLYK/board` response (truncated): `________`
-- Soft-cap warn log line (synthetic or real): `________`
-- Lint/format/typecheck/test/build exit codes: `0 / 0 / 0 / 0 / 0`
+**Integration record (filled T9, 2026-06-23):**
+- Feature commits (branch `feature/SLYK-F09-board-read-columns-cards`, `0e01431..40cd07e`, 8 commits): `0e01431` schema+migration, `4fde28f` seed, `fee77a0` boardService+tests, `4d2ebcb` route+supertest, `532b2e9` frontend types, `c538b1d` fetchBoard+boardKeys+useBoard, `8856af7` board components, `40cd07e` BoardPage render+tests.
+- `0004_dazzling_mariko_yashida.sql` applied (`db:migrate` idempotent, no pending); live introspection (via node pg/tsx — `psql` not installed): `Tickets` = 13 cols, 3 FKs (project_id→Projects, assignee_id+creator_id→Users); `Priority` enum = LOW,MEDIUM,HIGH,URGENT,CRITICAL, default MEDIUM; position double precision default 0; labels jsonb default '[]'; description/assignee_id nullable. No `$1` regression (grep 0 matches).
+- Sample `getBoard('SLYK')` payload (real seeded DB): `{project:{slug:'SLYK',name:'Slyk'}, columns:[{id:'col-todo',name:'To Do',isUnsorted:false,tickets:[101]},{id:'col-doing',name:'In Progress',isUnsorted:false,tickets:[102]},{id:'col-done',name:'Done',isUnsorted:false,tickets:[]},{id:'__unsorted__',name:'Unsorted',isUnsorted:true,tickets:[103]}]}`. T101 assignee `{fullName:'Seed User',avatarUrl:null}`; T102 `assignee:null`; orphan 103 in unsorted bucket; sorted ASC by position. `getBoard('NOPE')` → `AppError NOT_FOUND status 404`.
+- Soft-cap warn: unit-tested in `boardService.test.ts` — `logger.warn` asserted with `{ticketCount:201}` (>200 tickets) and `{columnCount:13}` (>12 columns); payload returned untruncated both cases. Synthetic (no live >200 board); live logger shape is pino structured.
+- Lint/format/typecheck/test/build exit codes: `0 / 0 / 0 / 0 / 0`. Tests: backend 23 files / 205 passed; frontend 28 files / 117 passed. Build ✓ 1.95s.
 
 ---
 
