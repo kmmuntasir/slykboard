@@ -5,6 +5,7 @@ import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
 import * as projectService from '../services/projectService';
+import * as boardService from '../services/boardService';
 import { createProjectBodySchema, slugParamSchema } from './projects.schema';
 
 export const projectsRouter = Router();
@@ -27,6 +28,19 @@ projectsRouter.get(
       throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`);
     }
     res.json(success(project));
+  },
+);
+
+// F09 D-Slug-Route: spec's GET /projects/:id/board → :slug (project URL identifier).
+// Any authenticated user (D-ProjectMembers: no membership yet).
+projectsRouter.get(
+  '/:slug/board',
+  authenticate,
+  validateRequest({ params: slugParamSchema }),
+  async (req, res) => {
+    const slug = req.params.slug as string;
+    const board = await boardService.getBoard(slug);
+    res.json(success(board));
   },
 );
 

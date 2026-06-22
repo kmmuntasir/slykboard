@@ -32,6 +32,9 @@ vi.mock('../services/projectService', () => ({
   listProjects: vi.fn(),
   getProjectBySlug: vi.fn(),
 }));
+vi.mock('../services/boardService', () => ({
+  getBoard: vi.fn(),
+}));
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
@@ -39,11 +42,13 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
 import * as projectService from '../services/projectService';
+import * as boardService from '../services/boardService';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedCreate = vi.mocked(projectService.createProject);
 const mockedList = vi.mocked(projectService.listProjects);
 const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
+const mockedGetBoard = vi.mocked(boardService.getBoard);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -192,5 +197,85 @@ describe('projectsRouter (F08)', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
+  });
+});
+
+describe('GET /:slug/board (F09)', () => {
+  const boardPayload = {
+    project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
+    columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [] }],
+  };
+
+  it('returns 200 + board payload (authed)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBoard.mockResolvedValue(
+      boardPayload as unknown as Awaited<ReturnType<typeof boardService.getBoard>>,
+    );
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/board')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.project.slug).toBe('SLYK');
+    expect(res.body.data.columns).toHaveLength(1);
+  });
+
+  it('returns 404 NOT_FOUND when project absent', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBoard.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, "Project 'SLYK' not found"));
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/board')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns 400 VALIDATION_FAILED on invalid slug', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/slyk/board')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetBoard).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer', async () => {
+    const res = await request(app).get('/api/projects/SLYK/board');
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedGetBoard).not.toHaveBeenCalled();
+  });
+
+  it('works for MEMBER (no role gate)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBoard.mockResolvedValue(
+      boardPayload as unknown as Awaited<ReturnType<typeof boardService.getBoard>>,
+    );
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/board')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('works for ADMIN', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBoard.mockResolvedValue(
+      boardPayload as unknown as Awaited<ReturnType<typeof boardService.getBoard>>,
+    );
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/board')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+
+    expect(res.status).toBe(200);
   });
 });
