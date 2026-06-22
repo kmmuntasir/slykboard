@@ -23,6 +23,13 @@ vi.mock('@/hooks/useBoard', () => ({
     useBoard: () => mockState.boardValue,
 }));
 
+// T5 wires useMoveTicket(slug) into BoardPage; the real hook calls
+// useQueryClient(), so mock it here (these are static-render assertions, not
+// mutation-behavior tests — the mutation is unit-tested in useMoveTicket.test).
+vi.mock('@/hooks/useMoveTicket', () => ({
+    useMoveTicket: () => ({ mutate: vi.fn() }),
+}));
+
 const ticket101: Ticket = {
     id: 't101',
     ticketNumber: 101,

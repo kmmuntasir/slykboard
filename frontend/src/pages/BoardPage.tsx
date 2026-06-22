@@ -1,5 +1,9 @@
 import { useParams } from 'react-router';
+import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useBoard } from '@/hooks/useBoard';
+import { useMoveTicket } from '@/hooks/useMoveTicket';
+import { computeDestinationPosition, type MoveDescriptor } from '@/utils/boardReorder';
+import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import { BoardColumn } from '@/components/BoardColumn';
 import { UnsortedBucket } from '@/components/UnsortedBucket';
 import { ApiClientError } from '@/api/client';
@@ -7,6 +11,8 @@ import { ApiClientError } from '@/api/client';
 export function BoardPage() {
     const { slug } = useParams<{ slug: string }>();
     const { data: board, isLoading, error } = useBoard(slug);
+    const { mutate } = useMoveTicket(slug);
+    const setDragInProgress = useBoardUiStore((s) => s.setDragInProgress);
 
     if (!slug) {
         return <div className="p-4">No project selected.</div>;
@@ -23,6 +29,33 @@ export function BoardPage() {
     if (!board) {
         return null;
     }
+
+    const handleDragStart = () => setDragInProgress(true);
+
+    const handleDragEnd = (result: DropResult) => {
+        if (!result.destination) {
+            return;
+        }
+        const { source, destination, draggableId } = result;
+        if (source.droppableId === destination.droppableId && source.index === destination.index) {
+            return;
+        }
+        if (!board) {
+            return;
+        }
+
+        const move: MoveDescriptor = {
+            ticketId: draggableId,
+            srcColumnId: source.droppableId,
+            srcIndex: source.index,
+            dstColumnId: destination.droppableId,
+            dstIndex: destination.index,
+        };
+        const position = computeDestinationPosition(board, move);
+        mutate({ ...move, position });
+        // D5: release the poll-pause AFTER kicking off the optimistic persist.
+        setDragInProgress(false);
+    };
 
     const totalTickets = board.columns.reduce((sum, c) => sum + c.tickets.length, 0);
     const isWholeBoardEmpty = totalTickets === 0;
@@ -42,25 +75,27 @@ export function BoardPage() {
                     No tickets yet — F12 will add creation.
                 </div>
             ) : (
-                <div className="flex gap-4 overflow-x-auto">
-                    {board.columns.map((column) =>
-                        column.isUnsorted ? (
-                            <UnsortedBucket
-                                key={column.id}
-                                tickets={column.tickets}
-                                projectSlug={board.project.slug}
-                            />
-                        ) : (
-                            <BoardColumn
-                                key={column.id}
-                                id={column.id}
-                                name={column.name}
-                                tickets={column.tickets}
-                                projectSlug={board.project.slug}
-                            />
-                        ),
-                    )}
-                </div>
+                <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                    <div className="flex gap-4 overflow-x-auto">
+                        {board.columns.map((column) =>
+                            column.isUnsorted ? (
+                                <UnsortedBucket
+                                    key={column.id}
+                                    tickets={column.tickets}
+                                    projectSlug={board.project.slug}
+                                />
+                            ) : (
+                                <BoardColumn
+                                    key={column.id}
+                                    id={column.id}
+                                    name={column.name}
+                                    tickets={column.tickets}
+                                    projectSlug={board.project.slug}
+                                />
+                            ),
+                        )}
+                    </div>
+                </DragDropContext>
             )}
         </div>
     );
