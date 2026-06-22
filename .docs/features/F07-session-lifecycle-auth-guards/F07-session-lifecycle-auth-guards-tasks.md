@@ -1674,7 +1674,7 @@ ALTER TABLE "Users" ADD COLUMN "token_version" integer NOT NULL DEFAULT 0;
 
 ## 9. Cross-cutting decisions needing owner sign-off
 
-The following are irreversible or cross-cutting choices that F07 cannot silently pick. Surfaced here for explicit owner approval BEFORE T1/T2 merge. The recommended default is non-binding until the owner confirms.
+The following are irreversible or cross-cutting choices that F07 cannot silently pick. Surfaced here for explicit owner approval BEFORE T1/T2 merge. **All three sign-offs received from the owner on 2026-06-22 — see each item's Status line. The recommended defaults are now binding.**
 
 ### (a) Token storage: stay on localStorage vs migrate to HttpOnly-cookie now
 
@@ -1686,7 +1686,7 @@ The following are irreversible or cross-cutting choices that F07 cannot silently
   - The accepted XSS tradeoff (F05 D2) is mitigated by: CSP (F28), short-ish 8h TTL, sliding refresh (active users get fresh tokens), and `token_version` invalidation (F07 D3 — a stolen token can be hard-expired via logout/role-change bump).
   - F07 hardens the SESSION LIFECYCLE (refresh, invalidation, interceptors, role-gate) on the existing transport — delivering the F07 acceptance criteria without a transport rewrite.
 - **If owner wants HTTPONLY NOW:** this becomes a much larger feature — pull F29 forward or split into F07a (lifecycle on localStorage, this plan) + F07b (cookie migration). The refresh-token-rotation + reuse-detection pattern (Auth0 family pattern) requires the new table + endpoint + cookie wiring. Recommend deferring.
-- **Status: PENDING SIGN-OFF (confirm D1 acceptable).** T1-T8 proceed with D1.
+- **Status: ✅ RESOLVED (2026-06-22) — owner confirmed STAY on localStorage (D1).** HttpOnly-cookie + refresh-rotation migration deferred to F29. T1-T8 proceed with D1.
 
 ### (b) `JWT_TTL` default value
 
@@ -1697,7 +1697,7 @@ The following are irreversible or cross-cutting choices that F07 cannot silently
   - 8h inactive-expiry is reasonable for an internal team tool (Slykboard is a Trello-like board for a single workspace). A 15m TTL would force re-login every 15min of inactivity — hostile UX for the target user.
   - Owners who want stricter security set `JWT_TTL=15m` via env (no code change).
 - **If owner wants `'15m'` default:** change `env.ts` default to `'15m'`; document the UX impact (more frequent re-login for inactive sessions).
-- **Status: PENDING SIGN-OFF (confirm `'8h'` acceptable, or pick a different default).** T1 proceeds with `'8h'`.
+- **Status: ✅ RESOLVED (2026-06-22) — owner confirmed `'8h'` default acceptable.** T1 proceeds with `'8h'`.
 
 ### (c) `authenticate` DB-lookup-per-request cost
 
@@ -1707,7 +1707,7 @@ The following are irreversible or cross-cutting choices that F07 cannot silently
   - Adding Redis introduces infrastructure (a cache to deploy/operate), cache-invalidation complexity (the cache must invalidate on `bumpTokenVersion`), and a new failure mode (cache down → fallback to DB).
   - F29 can add Redis if/when volume warrants.
 - **If owner wants REDIS NOW:** add a Redis client + a `getCachedTokenVersion(userId)` with TTL 30s + invalidation in `bumpTokenVersion`. ~2 extra tasks. Recommend deferring to F29.
-- **Status: PENDING SIGN-OFF (confirm DB-direct acceptable).** T3 proceeds with DB-direct.
+- **Status: ✅ RESOLVED (2026-06-22) — owner confirmed DB-direct (no Redis).** Redis cache deferred to F29. T3 proceeds with DB-direct.
 
 ---
 
