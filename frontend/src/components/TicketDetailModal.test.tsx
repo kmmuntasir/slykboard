@@ -45,7 +45,6 @@ vi.mock('./UserSelect', () => ({
 vi.mock('./LabelMultiSelect', () => ({
     LabelMultiSelect: ({
         value,
-        onChange,
     }: {
         projectSlug: string;
         value: string[];

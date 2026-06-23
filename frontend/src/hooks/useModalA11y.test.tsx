@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useRef } from 'react';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 
 import { useModalA11y } from './useModalA11y';

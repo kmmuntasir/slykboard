@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 
@@ -43,10 +43,9 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     // F16 D6: block route navigation (back/forward) while the form is dirty.
     const blocker = useBlocker(isDirty);
 
-    // When route-nav is blocked, surface the confirm (in an effect, not during render).
-    useEffect(() => {
-        if (blocker.state === 'blocked') setConfirmOpen(true);
-    }, [blocker.state]);
+    // The confirm shows when the user tried to close (Esc/backdrop/button) while
+    // dirty, OR when route navigation was blocked — derived, no setState-in-effect.
+    const showConfirm = confirmOpen || blocker.state === 'blocked';
 
     // Esc / backdrop / close-button: confirm before close when dirty.
     const requestClose = () => {
@@ -124,7 +123,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             </Modal>
 
             <ConfirmDiscardDialog
-                isOpen={confirmOpen}
+                isOpen={showConfirm}
                 onDiscard={handleDiscard}
                 onCancel={handleCancelConfirm}
             />
