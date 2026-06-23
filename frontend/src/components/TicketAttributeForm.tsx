@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -38,6 +39,9 @@ interface TicketAttributeFormProps {
     defaultValues: FormValues;
     onSubmit: (values: UpdateTicketDto) => void | Promise<void>;
     onCancel: () => void;
+    /** F16: notifies the host (e.g. TicketDetailModal) when dirty state changes,
+     *  so it can drive an unsaved-changes guard. Optional — omitted by create/edit modals. */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function TicketAttributeForm({
@@ -46,18 +50,24 @@ export function TicketAttributeForm({
     defaultValues,
     onSubmit,
     onCancel,
+    onDirtyChange,
 }: TicketAttributeFormProps) {
     const {
         register,
         handleSubmit,
         watch,
         setValue,
-        formState: { errors, isSubmitting },
+        formState: { errors, isSubmitting, isDirty },
     } = useForm<FormValues>({
         // zod@3.25 output widened; resolver lib expects narrower shape. Cast bridges gap.
         resolver: zodResolver(schema as never),
         defaultValues,
     });
+
+    // F16: surface dirty state to the host so it can guard close/navigation.
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
 
     const submitLabel = mode === 'create' ? 'Create ticket' : 'Save changes';
 
