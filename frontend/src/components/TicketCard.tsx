@@ -36,7 +36,19 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                     </header>
                     <h4 className="font-medium leading-snug">{ticket.title}</h4>
                     <footer className="flex items-center justify-between gap-2">
-                        <AssigneeAvatar assignee={ticket.assignee} />
+                        <div className="flex items-center gap-2">
+                            <AssigneeAvatar assignee={ticket.assignee} />
+                            {ticket.checklist.length > 0 && (
+                                <span
+                                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                    aria-label={`Checklist progress ${ticket.checklist.filter((i) => i.done).length} of ${ticket.checklist.length} done`}
+                                >
+                                    <span aria-hidden="true">✓</span>
+                                    {ticket.checklist.filter((i) => i.done).length}/
+                                    {ticket.checklist.length}
+                                </span>
+                            )}
+                        </div>
                         {ticket.labels.length > 0 && (
                             <ul className="flex flex-wrap gap-1" aria-label="Labels">
                                 {ticket.labels.map((label) => (
