@@ -18,6 +18,8 @@ const bag = vi.hoisted(() => ({
   sanitizeMock: vi.fn(
     (input: string | null | undefined): string => `<clean>${input ?? ''}</clean>`,
   ), // mocked sanitizeDescription
+  // F14: replaceTicketLabels mock (from ./labelService)
+  replaceTicketLabels: vi.fn(),
 }));
 
 vi.mock('../db/client', async () => {
@@ -101,6 +103,11 @@ vi.mock('../utils/sanitizeHtml', () => ({
   sanitizeDescription: (input: string | null | undefined) => bag.sanitizeMock(input),
 }));
 
+vi.mock('./labelService', () => ({
+  replaceTicketLabels: (args: { ticketId: string; labelIds: string[] }) =>
+    bag.replaceTicketLabels(args),
+}));
+
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import {
@@ -132,6 +139,7 @@ function resetBag() {
   bag.sanitizeMock.mockImplementation(
     (input: string | null | undefined) => `<clean>${input ?? ''}</clean>`,
   );
+  bag.replaceTicketLabels.mockReset();
 }
 
 const TICKET_ID = 't1';
@@ -149,7 +157,6 @@ function makeTicket(over: Partial<Record<string, unknown>> = {}) {
     assigneeId: null,
     creatorId: 'u1',
     priority: 'MEDIUM',
-    labels: [] as string[],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
@@ -631,5 +638,120 @@ describe('ticketService updateTicket (F13 T6)', () => {
     expect(setArg.priority).toBe('HIGH');
     expect(setArg.assigneeId).toBe('u3');
     expect(setArg.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('ticketService updateTicket label patch (F14)', () => {
+  beforeEach(resetBag);
+
+  it('calls replaceTicketLabels with the new labelIds and returns {old, new}', async () => {
+    const before = makeTicket({ id: TICKET_ID, title: 'T1' });
+    const after = makeTicket({ id: TICKET_ID, title: 'T1' });
+    bag.loadTicket.mockResolvedValue([before]);
+    bag.updateReturn = [after];
+    bag.replaceTicketLabels.mockResolvedValue(undefined);
+
+    const result = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { labelIds: ['l1', 'l2'] },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.replaceTicketLabels).toHaveBeenCalledTimes(1);
+    expect(bag.replaceTicketLabels).toHaveBeenCalledWith({
+      ticketId: TICKET_ID,
+      labelIds: ['l1', 'l2'],
+    });
+    expect(result.old).toBe(before);
+    expect(result.new).toBe(after);
+  });
+
+  it('foreign-project label surfaces VALIDATION_FAILED from replaceTicketLabels', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+    bag.replaceTicketLabels.mockRejectedValue(
+      new AppError(ErrorCode.VALIDATION_FAILED, 'One or more labels do not belong to this project'),
+    );
+
+    const error = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { labelIds: ['foreign'] },
+      actingUserId: 'u1',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    expect(bag.replaceTicketLabels).toHaveBeenCalledWith({
+      ticketId: TICKET_ID,
+      labelIds: ['foreign'],
+    });
+  });
+
+  it('empty labelIds array clears the set (calls replaceTicketLabels with [])', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+    bag.replaceTicketLabels.mockResolvedValue(undefined);
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { labelIds: [] },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.replaceTicketLabels).toHaveBeenCalledWith({
+      ticketId: TICKET_ID,
+      labelIds: [],
+    });
+  });
+
+  it('does NOT call replaceTicketLabels when labelIds is absent from patch', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'X' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'X' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
+  });
+});
+
+describe('ticketService createTicket label linking (F14)', () => {
+  beforeEach(resetBag);
+
+  it('links labels via replaceTicketLabels after insert when labelIds provided', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    const inserted = makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' });
+    bag.insertReturn = [inserted];
+    bag.replaceTicketLabels.mockResolvedValue(undefined);
+
+    const result = await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      labelIds: ['l1', 'l2'],
+    });
+
+    expect(result.id).toBe('t-new');
+    expect(bag.replaceTicketLabels).toHaveBeenCalledTimes(1);
+    expect(bag.replaceTicketLabels).toHaveBeenCalledWith({
+      ticketId: 't-new',
+      labelIds: ['l1', 'l2'],
+    });
+  });
+
+  it('does NOT call replaceTicketLabels when labelIds is omitted', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1 })];
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+
+    expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
   });
 });

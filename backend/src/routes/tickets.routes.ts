@@ -44,7 +44,8 @@ ticketsRouter.patch(
             body.title !== undefined ||
             body.description !== undefined ||
             body.priority !== undefined ||
-            body.assigneeId !== undefined
+            body.assigneeId !== undefined ||
+            body.labelIds !== undefined
 
         if (hasAttributeFields) {
             const { new: updated } = await ticketService.updateTicket({
@@ -54,6 +55,7 @@ ticketsRouter.patch(
                     description: body.description,
                     priority: body.priority,
                     assigneeId: body.assigneeId,
+                    labelIds: body.labelIds,
                 },
                 actingUserId: req.user!.id,
             })

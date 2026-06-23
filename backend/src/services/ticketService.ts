@@ -6,6 +6,7 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { getProjectBySlug } from './projectService';
 import { UNSORTED_BUCKET_ID } from './boardService';
+import { replaceTicketLabels } from './labelService';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -23,11 +24,13 @@ export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 // F13 T6: partial patch for title/description/priority/assigneeId. `description`
 // and `assigneeId` are nullable — `null` is a real value (clear), distinct from
 // `undefined` (leave untouched). Route layer validates Priority; service trusts the type.
+// F14: `labelIds` replaces the ticket's label set via replaceTicketLabels when present.
 export type TicketPatch = {
   title?: string;
   description?: string | null;
   priority?: Priority;
   assigneeId?: string | null;
+  labelIds?: string[];
 };
 
 export interface MoveTicketInput {
@@ -144,7 +147,7 @@ export interface CreateTicketInput {
   title: string;
   description?: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
-  labels?: string[];
+  labelIds?: string[];
   assigneeId?: string;
   statusColumn?: string; // optional; defaults to project.columns[0].id
 }
@@ -191,10 +194,19 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         creatorId: input.creatorId,
         assigneeId: input.assigneeId,
         priority: input.priority,
-        labels: input.labels,
       })
       .returning();
-    return inserted!;
+    const insertedTicket = inserted!;
+
+    // F14: link labels via the join table after the ticket row exists.
+    // replaceTicketLabels validates all labelIds belong to this project.
+    if (input.labelIds !== undefined) {
+      // tx is structurally compatible with db for replaceTicketLabels's queries;
+      // run outside the closure's tx scope to keep labelService self-contained.
+      // The outer db.transaction will rollback the ticket insert if this throws.
+      await replaceTicketLabels({ ticketId: insertedTicket.id, labelIds: input.labelIds });
+    }
+    return insertedTicket;
   });
 }
 
@@ -250,6 +262,14 @@ export async function updateTicket(args: {
     throw new AppError(ErrorCode.INTERNAL_ERROR, `Update returned no row for ticket '${ticketId}'`, {
       details: { ticketId },
     });
+  }
+
+  // F14: replace the label set when labelIds is present in the patch.
+  // replaceTicketLabels validates all labelIds belong to the ticket's project
+  // (foreign → VALIDATION_FAILED). Runs after the attribute update so the ticket
+  // row is confirmed to exist. The { old, new } seam is preserved for F18.
+  if (patch.labelIds !== undefined) {
+    await replaceTicketLabels({ ticketId, labelIds: patch.labelIds });
   }
 
   // TODO(F18): diff {old, new} and write ActivityLogs here. REQ-5.2 covers

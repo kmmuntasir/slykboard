@@ -5,6 +5,8 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { logger } from '../config/logger';
 import { getProjectBySlug } from './projectService';
+import { hydrateLabelsForTickets } from './labelService';
+import type { HydratedLabel } from './labelService';
 
 // F09 D-Unsorted-Bucket: stable id for the orphan pseudo-column.
 export const UNSORTED_BUCKET_ID = '__unsorted__';
@@ -26,7 +28,7 @@ export interface BoardTicket {
   statusColumn: string;
   position: number;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
-  labels: string[];
+  labels: HydratedLabel[];
   assignee: BoardAssignee | null;
   creatorId: string;
   createdAt: Date;
@@ -62,7 +64,6 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
       statusColumn: tickets.statusColumn,
       position: tickets.position,
       priority: tickets.priority,
-      labels: tickets.labels,
       assigneeId: tickets.assigneeId,
       creatorId: tickets.creatorId,
       createdAt: tickets.createdAt,
@@ -76,6 +77,10 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
     .where(and(eq(tickets.projectId, project.id)))
     .orderBy(asc(tickets.position));
 
+  // F14 D8: batch-hydrate labels for all board tickets in a single query (no N+1).
+  // Tickets with no label rows default to [] at the read site.
+  const labelMap = await hydrateLabelsForTickets(rows.map((r) => r.id));
+
   const allTickets: BoardTicket[] = rows.map((r) => ({
     id: r.id,
     ticketNumber: r.ticketNumber,
@@ -83,7 +88,7 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
     statusColumn: r.statusColumn,
     position: r.position,
     priority: r.priority,
-    labels: r.labels ?? [],
+    labels: labelMap.get(r.id) ?? [],
     assignee:
       r.assigneeId === null
         ? null

@@ -327,6 +327,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
         description: undefined,
         priority: undefined,
         assigneeId: undefined,
+        labelIds: undefined,
       },
       actingUserId: 'u1',
     })
@@ -503,5 +504,76 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
       statusColumn: 'c2',
       position: 50,
     })
+  })
+})
+
+describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
+  it('200 replaces the label set via updateTicket', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow(),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({
+        labelIds: [
+          '11111111-1111-4111-8111-111111111111',
+          '22222222-2222-4222-8222-222222222222',
+        ],
+      })
+
+    expect(res.status).toBe(200)
+    expect(mockedUpdateTicket).toHaveBeenCalledWith({
+      ticketId: VALID_TICKET_ID,
+      patch: {
+        title: undefined,
+        description: undefined,
+        priority: undefined,
+        assigneeId: undefined,
+        labelIds: [
+          '11111111-1111-4111-8111-111111111111',
+          '22222222-2222-4222-8222-222222222222',
+        ],
+      },
+      actingUserId: 'u1',
+    })
+    expect(mockedMoveTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for non-uuid labelId', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ labelIds: ['not-a-uuid'] })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedUpdateTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for empty labelIds array is NOT raised (empty set clears)', async () => {
+    // Empty array is a valid patch (clears labels) — should reach the service.
+    mockedFindVersion.mockResolvedValue(0)
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow(),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ labelIds: [] })
+
+    expect(res.status).toBe(200)
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({ labelIds: [] }),
+      }),
+    )
   })
 })

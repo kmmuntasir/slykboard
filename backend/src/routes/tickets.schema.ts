@@ -21,6 +21,7 @@ const attributeFields = {
     description: z.string().max(5000).nullable().optional(),
     priority: priorityEnum.optional(),
     assigneeId: z.uuid().nullable().optional(),
+    labelIds: z.array(z.string().uuid()).optional(), // F14: replace ticket's label set
 }
 
 export const updateTicketBody = z

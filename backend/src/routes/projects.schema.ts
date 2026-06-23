@@ -34,11 +34,13 @@ export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 
 // F12 D-Ticket-Create: body for POST /:slug/tickets. statusColumn is validated
 // against the project's columns in the service (needs the project to be loaded first).
+// F14: labelIds widened to uuid().array() (label catalog IDs, not free-text).
+// Renamed labels -> labelIds for symmetry with updateTicketBody + createTicket input.
 export const createTicketBody = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']).optional(),
-  labels: z.array(z.string()).optional(),
+  labelIds: z.array(z.string().uuid()).optional(),
   assigneeId: z.uuid().optional(),
   statusColumn: z.string().min(1).optional(),
 });

@@ -15,6 +15,8 @@ const bag = vi.hoisted(() => ({
   dbSelectOrderBy: vi.fn(),
   getProjectBySlug: vi.fn(),
   loggerWarn: vi.fn(),
+  // F14: hydrateLabelsForTickets mock (from ./labelService)
+  hydrateLabels: new Map<string, Array<{ id: string; name: string; color: string }>>(),
 }));
 
 vi.mock('../db/client', () => {
@@ -45,6 +47,10 @@ vi.mock('../config/logger', () => ({
   },
 }));
 
+vi.mock('./labelService', () => ({
+  hydrateLabelsForTickets: () => Promise.resolve(bag.hydrateLabels),
+}));
+
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { BOARD_SOFT_CAP, UNSORTED_BUCKET_ID, getBoard } from './boardService';
@@ -53,6 +59,7 @@ function resetBag() {
   bag.dbSelectOrderBy.mockReset();
   bag.getProjectBySlug.mockReset();
   bag.loggerWarn.mockReset();
+  bag.hydrateLabels = new Map();
 }
 
 // --- Fixtures ----------------------------------------------------------------
@@ -68,7 +75,6 @@ type Row = {
   statusColumn: string;
   position: number;
   priority: Priority;
-  labels: string[];
   assigneeId: string | null;
   creatorId: string;
   createdAt: Date;
@@ -89,7 +95,6 @@ function makeTicket(
   return {
     title: `T${over.ticketNumber}`,
     priority: 'MEDIUM' as Priority,
-    labels: [],
     assigneeId: null,
     assigneeFullName: null,
     assigneeAvatarUrl: null,
@@ -388,6 +393,68 @@ describe('boardService getBoard', () => {
       const assignee = (result as Awaited<ReturnType<typeof getBoard>>).columns[0]!.tickets[0]!
         .assignee;
       expect(assignee).toEqual({ id: 'ghost', fullName: 'Unknown user', avatarUrl: null });
+    });
+  });
+
+  describe('F14 label hydration', () => {
+    it('renders hydrated labels {id, name, color}[] per ticket', async () => {
+      const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+      const rows = [
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ];
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+      bag.hydrateLabels = new Map([
+        [
+          't1',
+          [
+            { id: 'l1', name: 'bug', color: '#FF0000' },
+            { id: 'l2', name: 'api', color: '#00FF00' },
+          ],
+        ],
+      ]);
+
+      const result = await getBoard('SLYK');
+
+      const labels = result.columns[0]!.tickets[0]!.labels;
+      expect(labels).toEqual([
+        { id: 'l1', name: 'bug', color: '#FF0000' },
+        { id: 'l2', name: 'api', color: '#00FF00' },
+      ]);
+    });
+
+    it('renders labels: [] for a ticket with no label rows', async () => {
+      const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+      const rows = [
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ];
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+      // No entry for 't1' in the hydrate map → defaults to [] at the read site.
+      bag.hydrateLabels = new Map();
+
+      const result = await getBoard('SLYK');
+
+      expect(result.columns[0]!.tickets[0]!.labels).toEqual([]);
+    });
+
+    it('mixes labeled and unlabeled tickets in one batch', async () => {
+      const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+      const rows = [
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+        makeTicket({ id: 't2', ticketNumber: 2, statusColumn: 'c1', position: 20 }),
+      ];
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+      bag.hydrateLabels = new Map([
+        ['t1', [{ id: 'l1', name: 'bug', color: '#FF0000' }]],
+      ]);
+
+      const result = await getBoard('SLYK');
+
+      const ts = result.columns[0]!.tickets;
+      expect(ts[0]!.labels).toEqual([{ id: 'l1', name: 'bug', color: '#FF0000' }]);
+      expect(ts[1]!.labels).toEqual([]);
     });
   });
 });
