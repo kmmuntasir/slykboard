@@ -183,3 +183,38 @@ export const ticketLabels = pgTable(
     labelIdx: index('ticket_labels_label_id_idx').on(table.labelId),
   }),
 );
+
+// F18 — Activity log capture (PRD §8.5, REQ-5.2/5.3). Append-only audit trail;
+// every row is stamped inside the mutation's own transaction so logs never diverge.
+// No updatedAt (append-only); no jsonb metadata — §8.5 mandates String old/new_value.
+export const activityActionEnum = pgEnum('ActivityAction', [
+  'CREATED',
+  'STATUS_CHANGED',
+  'PRIORITY_CHANGED',
+  'ASSIGNEE_CHANGED',
+  'LABELS_CHANGED', // F18-added per features.md deltas table
+  'CONTENT_UPDATED',
+]);
+
+// PRD §8.5 — ActivityLogs. user_id nullable + ON DELETE SET NULL preserves audit
+// history when an acting user is deleted. ticket_id ON DELETE CASCADE (owned by ticket).
+export const activityLogs = pgTable(
+  'ActivityLogs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ticketId: uuid('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    actionType: activityActionEnum('action_type').notNull(),
+    oldValue: text('old_value'),
+    newValue: text('new_value'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    // F19 feed query: WHERE ticket_id = $1 ORDER BY created_at.
+    ticketIdx: index('activity_logs_ticket_id_idx').on(table.ticketId),
+  }),
+);
