@@ -92,9 +92,14 @@ vi.mock('../db/client', async () => {
             return { where: () => undefined };
           },
         }),
-        insert: () => ({
+        insert: (table: unknown) => ({
           values: (vals: Record<string, unknown>) => {
-            bag.lastInsert = vals;
+            // F18 T3: recordActivity now inserts activityLogs after the tickets
+            // row inside the same txn. Capture ONLY the tickets insert so the
+            // spy still reflects the ticket row, not the clobbering log insert.
+            if (table === tickets) {
+              bag.lastInsert = vals;
+            }
             return { returning: () => bag.insertReturn };
           },
         }),

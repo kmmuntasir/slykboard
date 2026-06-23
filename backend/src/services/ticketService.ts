@@ -8,6 +8,7 @@ import { ErrorCode } from '../utils/envelope';
 import { getProjectBySlug } from './projectService';
 import { UNSORTED_BUCKET_ID } from './boardService';
 import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
+import { recordActivity } from './activityLogService';
 import type { HydratedLabel } from './labelService';
 import type { ChecklistItem } from '../db/schema';
 
@@ -216,6 +217,9 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         checklist: input.checklist,
       })
       .returning();
+    // F18 T3: stamp a CREATED activity log inside the same txn so a rollback
+    // discards both the ticket row and its log atomically. old/new default null.
+    await recordActivity(tx, { ticketId: inserted!.id, actorId: input.creatorId, action: 'CREATED' });
     return inserted!;
   });
 
