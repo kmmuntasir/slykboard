@@ -286,4 +286,37 @@ describe('useUpdateTicket', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: boardKeys.all });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ticketKeys.detail('t1') });
   });
+
+  it('optimistically updates the board cache on checklist patch (client-owned data)', async () => {
+    const board = seedBoard();
+    const checklist = [
+      { id: 'i1', text: 'Build', done: false },
+      { id: 'i2', text: 'Test', done: true },
+    ];
+    const serverUpdated = makeTicket('t1', { checklist });
+    vi.mocked(updateTicket).mockResolvedValue(serverUpdated);
+
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(BOARD_KEY, board);
+
+    const setSpy = vi.spyOn(queryClient, 'setQueryData');
+
+    const { result } = renderHook(() => useUpdateTicket(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const vars: UpdateTicketVariables = { ticketId: 't1', dto: { checklist }, slug: SLUG };
+    await act(async () => {
+      await result.current.mutateAsync(vars);
+    });
+
+    // Checklist is client-owned → applied optimistically (unlike labelIds).
+    const optimisticCall = setSpy.mock.calls.find(
+      ([key, value]) =>
+        JSON.stringify(key) === JSON.stringify(BOARD_KEY) && typeof value === 'function',
+    );
+    expect(optimisticCall).toBeDefined();
+    const updater = optimisticCall?.[1] as (curr: BoardPayload | undefined) => BoardPayload;
+    expect(updater(board).columns[0]?.tickets[0]?.checklist).toEqual(checklist);
+  });
 });

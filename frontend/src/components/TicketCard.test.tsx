@@ -62,4 +62,23 @@ describe('TicketCard', () => {
         fireEvent.click(screen.getByRole('heading', { name: 'Render board' }));
         expect(onEdit).toHaveBeenCalledWith('t1');
     });
+
+    it('renders checklist progress chip (done/total) when checklist non-empty', () => {
+        const withChecklist: Ticket = {
+            ...baseTicket,
+            checklist: [
+                { id: 'i1', text: 'A', done: true },
+                { id: 'i2', text: 'B', done: false },
+                { id: 'i3', text: 'C', done: true },
+            ],
+        };
+        renderInDnd(<TicketCard ticket={withChecklist} projectSlug="SLYK" index={0} />);
+        // The chip's aria-label encodes the counts.
+        expect(screen.getByLabelText('Checklist progress 2 of 3 done')).toBeInTheDocument();
+    });
+
+    it('renders no checklist chip when checklist is empty', () => {
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
+        expect(screen.queryByLabelText(/^Checklist progress/)).not.toBeInTheDocument();
+    });
 });

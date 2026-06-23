@@ -293,4 +293,53 @@ describe('TicketAttributeForm', () => {
         expect(onCancel).toHaveBeenCalledTimes(1);
         expect(onSubmit).not.toHaveBeenCalled();
     });
+
+    it('edit mode renders the ChecklistEditor seeded from defaults', () => {
+        render(
+            <TicketAttributeForm
+                mode="edit"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={{
+                    ...baseDefaults,
+                    checklist: [
+                        { id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: true },
+                        { id: '22222222-2222-4222-8222-222222222222', text: 'Build', done: false },
+                    ],
+                }}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        expect(screen.getByRole('checkbox', { name: 'Toggle "Design"' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Toggle "Build"' })).not.toBeChecked();
+        expect(screen.getByLabelText('Checklist progress: 1 of 2 done')).toBeInTheDocument();
+    });
+
+    it('edit mode submit includes the (edited) checklist', async () => {
+        const onSubmit = vi.fn<(dto: UpdateTicketDto) => void>();
+        render(
+            <TicketAttributeForm
+                mode="edit"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={{
+                    ...baseDefaults,
+                    title: 'Existing',
+                    checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false }],
+                }}
+                onSubmit={onSubmit}
+                onCancel={vi.fn()}
+            />,
+        );
+        // Toggle the item done before saving.
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle "Design"' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+        await waitFor(() => {
+            expect(onSubmit).toHaveBeenCalledTimes(1);
+        });
+        expect(onSubmit).toHaveBeenCalledWith(
+            expect.objectContaining({
+                checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: true }],
+            }),
+        );
+    });
 });

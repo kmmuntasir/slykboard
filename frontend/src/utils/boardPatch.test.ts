@@ -110,4 +110,20 @@ describe('applyPatchToBoard', () => {
     // untouched fields stay
     expect(t?.description).toBe('<p>old</p>');
   });
+
+  it('patches checklist (full-array replace)', () => {
+    const board = seedBoard();
+    const checklist = [
+      { id: 'i1', text: 'Build', done: false },
+      { id: 'i2', text: 'Test', done: true },
+    ];
+    const next = applyPatchToBoard(board, 't1', { checklist });
+    expect(next.columns[0]?.tickets[0]?.checklist).toEqual(checklist);
+  });
+
+  it('leaves checklist untouched when the patch omits it', () => {
+    const board = seedBoard();
+    const next = applyPatchToBoard(board, 't1', { title: 'New' });
+    expect(next.columns[0]?.tickets[0]?.checklist).toEqual([]);
+  });
 });
