@@ -54,6 +54,7 @@ vi.mock('./labelService', () => ({
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { BOARD_SOFT_CAP, UNSORTED_BUCKET_ID, getBoard } from './boardService';
+import type { ChecklistItem } from '../db/schema';
 
 function resetBag() {
   bag.dbSelectOrderBy.mockReset();
@@ -75,6 +76,7 @@ type Row = {
   statusColumn: string;
   position: number;
   priority: Priority;
+  checklist: ChecklistItem[];
   assigneeId: string | null;
   creatorId: string;
   createdAt: Date;
@@ -95,6 +97,7 @@ function makeTicket(
   return {
     title: `T${over.ticketNumber}`,
     priority: 'MEDIUM' as Priority,
+    checklist: [] as ChecklistItem[],
     assigneeId: null,
     assigneeFullName: null,
     assigneeAvatarUrl: null,
@@ -455,6 +458,38 @@ describe('boardService getBoard', () => {
       const ts = result.columns[0]!.tickets;
       expect(ts[0]!.labels).toEqual([{ id: 'l1', name: 'bug', color: '#FF0000' }]);
       expect(ts[1]!.labels).toEqual([]);
+    });
+  });
+
+  describe('F15 checklist payload', () => {
+    it('renders hydrated checklist items {id, text, done}[] per ticket', async () => {
+      const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+      const checklist = [
+        { id: 'i1', text: 'Design', done: true },
+        { id: 'i2', text: 'Build', done: false },
+      ];
+      const rows = [
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10, checklist }),
+      ];
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+
+      const result = await getBoard('SLYK');
+
+      expect(result.columns[0]!.tickets[0]!.checklist).toEqual(checklist);
+    });
+
+    it('renders checklist: [] for a ticket with no items', async () => {
+      const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+      const rows = [
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ];
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+
+      const result = await getBoard('SLYK');
+
+      expect(result.columns[0]!.tickets[0]!.checklist).toEqual([]);
     });
   });
 });

@@ -69,6 +69,7 @@ function makeTicketRow(over: Partial<Record<string, unknown>> = {}) {
     creatorId: '33333333-3333-4333-8333-333333333333',
     priority: 'MEDIUM' as const,
     labels: [] as string[],
+    checklist: [] as Array<{ id: string; text: string; done: boolean }>,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
@@ -328,6 +329,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
         priority: undefined,
         assigneeId: undefined,
         labelIds: undefined,
+        checklist: undefined,
       },
       actingUserId: 'u1',
     })
@@ -537,6 +539,7 @@ describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
           '11111111-1111-4111-8111-111111111111',
           '22222222-2222-4222-8222-222222222222',
         ],
+        checklist: undefined,
       },
       actingUserId: 'u1',
     })
@@ -574,6 +577,140 @@ describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
       expect.objectContaining({
         patch: expect.objectContaining({ labelIds: [] }),
       }),
+    )
+  })
+})
+
+describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
+  const item = { id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false }
+  const checklist = [item]
+
+  it('200 replaces the checklist via updateTicket (member role — no admin gate, REQ-3.3)', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow({ checklist }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ checklist })
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.checklist).toEqual(checklist)
+    expect(mockedUpdateTicket).toHaveBeenCalledWith({
+      ticketId: VALID_TICKET_ID,
+      patch: {
+        title: undefined,
+        description: undefined,
+        priority: undefined,
+        assigneeId: undefined,
+        labelIds: undefined,
+        checklist,
+      },
+      actingUserId: 'u1',
+    })
+    expect(mockedMoveTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for non-uuid item id', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ checklist: [{ id: 'not-a-uuid', text: 'x', done: false }] })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedUpdateTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for empty item text', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({
+        checklist: [
+          { id: '11111111-1111-4111-8111-111111111111', text: '', done: false },
+        ],
+      })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedUpdateTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for text over 200 chars', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({
+        checklist: [
+          { id: '11111111-1111-4111-8111-111111111111', text: 'x'.repeat(201), done: false },
+        ],
+      })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedUpdateTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for more than 50 items', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    const tooMany = Array.from({ length: 51 }, (_, i) => ({
+      id: `11111111-1111-4111-8111-${String(i).padStart(12, '1')}`,
+      text: `item ${i}`,
+      done: false,
+    }))
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ checklist: tooMany })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedUpdateTicket).not.toHaveBeenCalled()
+  })
+
+  it('400 VALIDATION_FAILED for non-boolean done', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({
+        checklist: [
+          { id: '11111111-1111-4111-8111-111111111111', text: 'x', done: 'yes' },
+        ],
+      })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedUpdateTicket).not.toHaveBeenCalled()
+  })
+
+  it('200 empty [] checklist clears all items (no min count)', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow({ checklist: [] }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>)
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ checklist: [] })
+
+    expect(res.status).toBe(200)
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: expect.objectContaining({ checklist: [] }) }),
     )
   })
 })

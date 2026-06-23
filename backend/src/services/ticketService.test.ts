@@ -773,3 +773,53 @@ describe('ticketService createTicket label linking (F14)', () => {
     expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
   });
 });
+
+describe('ticketService updateTicket checklist patch (F15)', () => {
+  beforeEach(resetBag);
+
+  it('writes checklist into updateSet when patch.checklist is provided (full-array replace)', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+    const checklist = [
+      { id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false },
+    ];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { checklist },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets.length).toBe(1);
+    expect(bag.updateSets[0]!.checklist).toEqual(checklist);
+    // No sanitization or label linking on a checklist-only patch.
+    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+    expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
+  });
+
+  it('does NOT set checklist when patch omits it', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'X' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'X' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.checklist).toBeUndefined();
+  });
+
+  it('replaces the checklist with [] when an empty array is provided', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { checklist: [] },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.checklist).toEqual([]);
+  });
+});
