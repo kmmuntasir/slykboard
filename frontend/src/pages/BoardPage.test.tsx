@@ -36,6 +36,14 @@ vi.mock('@/hooks/useCreateTicket', () => ({
     useCreateTicket: () => ({ mutate: vi.fn() }),
 }));
 
+// F13 T14 wires EditTicketModal into BoardPage; it calls useQuery +
+// useUpdateTicket (which need QueryClient). The modal's behavior is unit-tested
+// in EditTicketModal.test.tsx — here we stub it so BoardPage's static-render
+// tests don't need a QueryClient provider.
+vi.mock('@/components/EditTicketModal', () => ({
+    EditTicketModal: () => null,
+}));
+
 const ticket101: Ticket = {
     id: 't101',
     ticketNumber: 101,

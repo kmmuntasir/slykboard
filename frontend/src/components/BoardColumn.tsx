@@ -8,9 +8,10 @@ interface BoardColumnProps {
     tickets: Ticket[];
     projectSlug: string;
     isUnsorted?: boolean;
+    onEdit?: (ticketId: string) => void;
 }
 
-export function BoardColumn({ id, name, tickets, projectSlug, isUnsorted }: BoardColumnProps) {
+export function BoardColumn({ id, name, tickets, projectSlug, isUnsorted, onEdit }: BoardColumnProps) {
     return (
         <section
             className="flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/40 p-2"
@@ -44,6 +45,7 @@ export function BoardColumn({ id, name, tickets, projectSlug, isUnsorted }: Boar
                                         ticket={ticket}
                                         projectSlug={projectSlug}
                                         index={index}
+                                        onEdit={onEdit}
                                     />
                                 </li>
                             ))

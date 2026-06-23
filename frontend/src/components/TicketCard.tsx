@@ -12,9 +12,10 @@ interface TicketCardProps {
     ticket: Ticket;
     projectSlug: string;
     index: number;
+    onEdit?: (ticketId: string) => void;
 }
 
-export function TicketCard({ ticket, projectSlug, index }: TicketCardProps) {
+export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardProps) {
     const ticketId = `${projectSlug}-${String(ticket.ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`; // REQ-3.1, F12 D2
     return (
         <Draggable draggableId={ticket.id} index={index}>
@@ -24,7 +25,8 @@ export function TicketCard({ ticket, projectSlug, index }: TicketCardProps) {
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
                     style={provided.draggableProps.style}
-                    className="space-y-2 rounded border bg-card p-2 text-sm shadow-sm"
+                    onClick={() => onEdit?.(ticket.id)}
+                    className="cursor-pointer space-y-2 rounded border bg-card p-2 text-sm shadow-sm"
                     aria-label={`Ticket ${ticketId}: ${ticket.title}`}
                 >
                     <header className="flex items-center justify-between gap-2">

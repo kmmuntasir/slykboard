@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { screen, fireEvent } from '@testing-library/react';
 import { TicketCard } from './TicketCard';
 import { renderInDnd } from '@/test/dndWrapper';
 import type { Ticket } from '@/types/ticket';
@@ -34,5 +34,12 @@ describe('TicketCard', () => {
         renderInDnd(<TicketCard ticket={unassigned} projectSlug="SLYK" index={0} />);
         expect(screen.getByLabelText('Unassigned')).toBeInTheDocument();
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    it('calls onEdit with ticket.id when card is clicked', () => {
+        const onEdit = vi.fn();
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} onEdit={onEdit} />);
+        fireEvent.click(screen.getByRole('heading', { name: 'Render board' }));
+        expect(onEdit).toHaveBeenCalledWith('t1');
     });
 });
