@@ -31,3 +31,16 @@ export const slugParamSchema = z.object({
 });
 
 export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
+
+// F12 D-Ticket-Create: body for POST /:slug/tickets. statusColumn is validated
+// against the project's columns in the service (needs the project to be loaded first).
+export const createTicketBody = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']).optional(),
+  labels: z.array(z.string()).optional(),
+  assigneeId: z.uuid().optional(),
+  statusColumn: z.string().min(1).optional(),
+});
+
+export type CreateTicketBody = z.infer<typeof createTicketBody>;

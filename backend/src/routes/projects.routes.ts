@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { success, ErrorCode } from '../utils/envelope';
 import { AppError } from '../utils/appError';
 import { validateRequest } from '../middleware/validateRequest';
@@ -6,7 +7,8 @@ import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
-import { createProjectBodySchema, slugParamSchema } from './projects.schema';
+import * as ticketService from '../services/ticketService';
+import { createProjectBodySchema, slugParamSchema, createTicketBody } from './projects.schema';
 
 export const projectsRouter = Router();
 
@@ -41,6 +43,24 @@ projectsRouter.get(
     const slug = req.params.slug as string;
     const board = await boardService.getBoard(slug);
     res.json(success(board));
+  },
+);
+
+// F12 D6: nested POST /:slug/tickets — binds slug, mirrors GET /:slug/board.
+// Any authenticated user (REQ-3.3). TODO(F17): per-column permission check.
+projectsRouter.post(
+  '/:slug/tickets',
+  authenticate,
+  validateRequest({ params: slugParamSchema, body: createTicketBody }),
+  async (req, res) => {
+    const { slug } = req.params as z.infer<typeof slugParamSchema>;
+    const body = req.body as z.infer<typeof createTicketBody>;
+    const ticket = await ticketService.createTicket({
+      slug,
+      creatorId: req.user!.id,
+      ...body,
+    });
+    res.status(201).json(success(ticket));
   },
 );
 

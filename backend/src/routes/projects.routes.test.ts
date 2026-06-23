@@ -35,6 +35,9 @@ vi.mock('../services/projectService', () => ({
 vi.mock('../services/boardService', () => ({
   getBoard: vi.fn(),
 }));
+vi.mock('../services/ticketService', () => ({
+  createTicket: vi.fn(),
+}));
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
@@ -43,12 +46,14 @@ import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
+import * as ticketService from '../services/ticketService';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedCreate = vi.mocked(projectService.createProject);
 const mockedList = vi.mocked(projectService.listProjects);
 const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
 const mockedGetBoard = vi.mocked(boardService.getBoard);
+const mockedCreateTicket = vi.mocked(ticketService.createTicket);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -277,5 +282,121 @@ describe('GET /:slug/board (F09)', () => {
       .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
 
     expect(res.status).toBe(200);
+  });
+});
+
+describe('POST /:slug/tickets (F12)', () => {
+  const ticketPayload = {
+    id: 't1',
+    ticketNumber: 1,
+    title: 'New',
+    statusColumn: 'c1',
+    position: 65536,
+    creatorId: 'u1',
+  };
+
+  it('returns 201 + ticket (authed MEMBER)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'New' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.ticketNumber).toBe(1);
+    expect(res.body.data.title).toBe('New');
+  });
+
+  it('sets creatorId from req.user.id', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'New' });
+    expect(mockedCreateTicket).toHaveBeenCalledWith({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+  });
+
+  it('returns 404 NOT_FOUND on unknown slug (service throws)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockRejectedValue(
+      new AppError(ErrorCode.NOT_FOUND, "Project 'BAD' not found"),
+    );
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'New' });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns 400 VALIDATION_FAILED on empty title (createTicket NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: '' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedCreateTicket).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on invalid priority BOGUS', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'X', priority: 'BOGUS' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('returns 400 VALIDATION_FAILED on invalid slug (lowercase slyk)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .post('/api/projects/slyk/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'New' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer (createTicket NOT called)', async () => {
+    const res = await request(app).post('/api/projects/SLYK/tickets').send({ title: 'New' });
+    expect(res.status).toBe(401);
+    expect(mockedCreateTicket).not.toHaveBeenCalled();
+  });
+
+  it('works for MEMBER (201) — proves not admin-gated (REQ-3.3)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'New' });
+    expect(res.status).toBe(201);
+  });
+
+  it('works for ADMIN (201)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ title: 'New' });
+    expect(res.status).toBe(201);
+  });
+
+  it('returns 409 CONFLICT when project has no columns (service throws)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockRejectedValue(
+      new AppError(ErrorCode.CONFLICT, "Project 'SLYK' has no columns"),
+    );
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ title: 'New' });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
   });
 });
