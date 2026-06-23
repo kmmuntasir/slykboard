@@ -2,16 +2,19 @@ import { useParams } from 'react-router';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useBoard } from '@/hooks/useBoard';
 import { useMoveTicket } from '@/hooks/useMoveTicket';
+import { useCreateTicket } from '@/hooks/useCreateTicket';
 import { computeDestinationPosition, type MoveDescriptor } from '@/utils/boardReorder';
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import { BoardColumn } from '@/components/BoardColumn';
 import { UnsortedBucket } from '@/components/UnsortedBucket';
+import { NewTicketButton } from '@/components/NewTicketButton';
 import { ApiClientError } from '@/api/client';
 
 export function BoardPage() {
     const { slug } = useParams<{ slug: string }>();
     const { data: board, isLoading, error } = useBoard(slug);
     const { mutate } = useMoveTicket(slug);
+    const { mutate: createTicket } = useCreateTicket(slug);
     const setDragInProgress = useBoardUiStore((s) => s.setDragInProgress);
 
     if (!slug) {
@@ -62,9 +65,12 @@ export function BoardPage() {
 
     return (
         <div className="flex h-full flex-col gap-4 p-4">
-            <header className="flex items-center justify-between">
-                <h1 className="text-2xl font-semibold">{board.project.name}</h1>
-                <span className="text-sm text-muted-foreground">{board.project.slug}</span>
+            <header className="flex items-center justify-between gap-4">
+                <div className="flex items-baseline gap-2">
+                    <h1 className="text-2xl font-semibold">{board.project.name}</h1>
+                    <span className="text-sm text-muted-foreground">{board.project.slug}</span>
+                </div>
+                <NewTicketButton onCreate={(dto) => createTicket(dto)} />
             </header>
 
             {isWholeBoardEmpty ? (
@@ -72,7 +78,7 @@ export function BoardPage() {
                     role="status"
                     className="rounded border border-dashed p-8 text-center text-muted-foreground"
                 >
-                    No tickets yet — F12 will add creation.
+                    No tickets yet. Create one to get started.
                 </div>
             ) : (
                 <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

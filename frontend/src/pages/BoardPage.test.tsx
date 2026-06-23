@@ -30,6 +30,12 @@ vi.mock('@/hooks/useMoveTicket', () => ({
     useMoveTicket: () => ({ mutate: vi.fn() }),
 }));
 
+// F12/T8 wires useCreateTicket(slug) into BoardPage; the real hook calls
+// useQueryClient(), so mock it here (consistent with useMoveTicket above).
+vi.mock('@/hooks/useCreateTicket', () => ({
+    useCreateTicket: () => ({ mutate: vi.fn() }),
+}));
+
 const ticket101: Ticket = {
     id: 't101',
     ticketNumber: 101,
