@@ -47,11 +47,11 @@
 **Phase 2 — Projects & Board**
 - [x] **F08** Projects: create, list, select, slug, columns — ✨ Feature · _deps: F07_
 - [x] **F09** Board read (columns + cards) — ✨ Feature · _deps: F08_ — DONE (T1-T9 ✅; typecheck/lint/format/test/build 0/0/0/0/0; DB-integration smoke passed 2026-06-23)
-- [~] **F10** Board auto-polling (30s) & conflict handling — ⬆ Enhancement · _deps: F09_ — IMPL (T1-T4 ✅; T5 automated ✅ typecheck/test/build 129-pass/0/0; live browser smoke pending)
-- [~] **F11** Drag-and-drop with order persistence — ✨ Feature · _deps: F09_ — IMPL (T1-T5 ✅; T6 automated ✅ typecheck/test/build 375-pass/0/0; live browser smoke pending)
+- [x] **F10** Board auto-polling (30s) & conflict handling — ⬆ Enhancement · _deps: F09_ — DONE (T1-T4 ✅; T5 automated ✅ typecheck/test/build 129-pass/0/0; live browser smoke passed 2026-06-23)
+- [x] **F11** Drag-and-drop with order persistence — ✨ Feature · _deps: F09_ — DONE (T1-T5 ✅; T6 automated ✅ typecheck/test/build 375-pass/0/0; live browser smoke passed 2026-06-23)
 
 **Phase 3 — Tickets**
-- [~] **F12** Ticket creation with sequential IDs — ✨ Feature · _deps: F09_ — IMPL (T1-T9 ✅; typecheck/lint/test/build green; backend live smoke incl concurrency passed 2026-06-23; FE browser smoke pending)
+- [x] **F12** Ticket creation with sequential IDs — ✨ Feature · _deps: F09_ — DONE (T1-T9 ✅; typecheck/lint/test/build green; backend live smoke incl concurrency passed 2026-06-23; FE browser smoke passed 2026-06-23)
 - [ ] **F13** Ticket attributes: title, description, assignee, priority — ✨ Feature · _deps: F12_
 - [ ] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_
 - [ ] **F15** Checklist — ✨ Feature · _deps: F12_
