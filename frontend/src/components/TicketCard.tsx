@@ -18,9 +18,11 @@ interface TicketCardProps {
 
 export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardProps) {
     const ticketId = `${projectSlug}-${String(ticket.ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`; // REQ-3.1, F12 D2
-    // F15: defend against a stale board cache (tickets fetched before the
-    // checklist field shipped) — never crash the whole column on a missing field.
+    // F15: defend against a stale board cache / a raw create response inserted
+    // optimistically (missing labels/assignee/checklist joins) — never crash the
+    // whole column on an undefined field.
     const checklist = ticket.checklist ?? [];
+    const labels = ticket.labels ?? [];
     return (
         <Draggable draggableId={ticket.id} index={index}>
             {(provided) => (
@@ -52,9 +54,9 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                                 </span>
                             )}
                         </div>
-                        {ticket.labels.length > 0 && (
+                        {labels.length > 0 && (
                             <ul className="flex flex-wrap gap-1" aria-label="Labels">
-                                {ticket.labels.map((label) => (
+                                {labels.map((label) => (
                                     <li key={label.id}>
                                         <LabelChip label={label} />
                                     </li>

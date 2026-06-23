@@ -131,4 +131,23 @@ describe('applyCreateToBoard', () => {
     expect(result.columns).not.toBe(board.columns);
     expect(result.columns[0]).not.toBe(board.columns[0]);
   });
+
+  it('normalizes a raw create response (missing labels/assignee) so the card renders', () => {
+    const board = buildBoard([{ id: 'c1', tickets: [] }]);
+    // Raw DB row from createTicket: carries assigneeId but NO nested `assignee`
+    // and NO `labels` array (those come from joins in getBoard). Without
+    // normalization this crashes TicketCard on `ticket.labels.length`.
+    const raw = {
+      ...makeTicket({ id: 'new1', statusColumn: 'c1' }),
+      labels: undefined,
+      assignee: undefined,
+    } as unknown as Ticket;
+
+    const result = applyCreateToBoard(board, raw);
+
+    const inserted = result.columns[0]?.tickets[0];
+    expect(inserted?.id).toBe('new1');
+    expect(inserted?.labels).toEqual([]);
+    expect(inserted?.assignee).toBeNull();
+  });
 });
