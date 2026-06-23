@@ -51,7 +51,7 @@
 - [~] **F11** Drag-and-drop with order persistence — ✨ Feature · _deps: F09_ — IMPL (T1-T5 ✅; T6 automated ✅ typecheck/test/build 375-pass/0/0; live browser smoke pending)
 
 **Phase 3 — Tickets**
-- [ ] **F12** Ticket creation with sequential IDs — ✨ Feature · _deps: F09_
+- [~] **F12** Ticket creation with sequential IDs — ✨ Feature · _deps: F09_ — IMPL (T1-T9 ✅; typecheck/lint/test/build green; backend live smoke incl concurrency passed 2026-06-23; FE browser smoke pending)
 - [ ] **F13** Ticket attributes: title, description, assignee, priority — ✨ Feature · _deps: F12_
 - [ ] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_
 - [ ] **F15** Checklist — ✨ Feature · _deps: F12_
