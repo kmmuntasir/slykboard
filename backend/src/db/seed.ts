@@ -4,6 +4,8 @@ import {
   projects,
   projectSequences,
   users,
+  labels,
+  ticketLabels,
   START_TICKET_NUMBER,
   type Column,
 } from './schema';
@@ -85,43 +87,80 @@ export async function seedBoard(): Promise<void> {
   await db.delete(tickets).where(eq(tickets.projectId, project!.id));
 
   const now = new Date();
-  await db.insert(tickets).values([
-    {
-      projectId: project!.id,
-      ticketNumber: 1,
-      title: 'Render board columns',
-      statusColumn: 'col-todo',
-      position: 10,
-      assigneeId: user!.id,
-      creatorId: user!.id,
-      priority: 'HIGH',
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      projectId: project!.id,
-      ticketNumber: 2,
-      title: 'Group tickets by column',
-      statusColumn: 'col-doing',
-      position: 20,
-      assigneeId: null,
-      creatorId: user!.id,
-      priority: 'MEDIUM',
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      projectId: project!.id,
-      ticketNumber: 3,
-      title: 'Orphan ticket (deleted column)',
-      statusColumn: ORPHAN_COLUMN_ID, // matches no project column → Unsorted
-      position: 30,
-      assigneeId: user!.id,
-      creatorId: user!.id,
-      priority: 'LOW',
-      createdAt: now,
-      updatedAt: now,
-    },
+  const inserted = await db
+    .insert(tickets)
+    .values([
+      {
+        projectId: project!.id,
+        ticketNumber: 1,
+        title: 'Render board columns',
+        statusColumn: 'col-todo',
+        position: 10,
+        assigneeId: user!.id,
+        creatorId: user!.id,
+        priority: 'HIGH',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        projectId: project!.id,
+        ticketNumber: 2,
+        title: 'Group tickets by column',
+        statusColumn: 'col-doing',
+        position: 20,
+        assigneeId: null,
+        creatorId: user!.id,
+        priority: 'MEDIUM',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        projectId: project!.id,
+        ticketNumber: 3,
+        title: 'Orphan ticket (deleted column)',
+        statusColumn: ORPHAN_COLUMN_ID, // matches no project column → Unsorted
+        position: 30,
+        assigneeId: user!.id,
+        creatorId: user!.id,
+        priority: 'LOW',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ])
+    .returning();
+
+  // F14: seed a color-coded label catalog + link some to tickets so the board
+  // renders LabelChips out of the box. Wiping labels by project is idempotent;
+  // ticket_labels for old tickets already cascaded on the ticket delete above.
+  await db.delete(labels).where(eq(labels.projectId, project!.id));
+  const labelRows = await db
+    .insert(labels)
+    .values([
+      { projectId: project!.id, name: 'Bug', color: '#EF4444' },
+      { projectId: project!.id, name: 'Feature', color: '#10B981' },
+      { projectId: project!.id, name: 'Urgent', color: '#F59E0B' },
+      { projectId: project!.id, name: 'Frontend', color: '#3B82F6' },
+      { projectId: project!.id, name: 'Backend', color: '#8B5CF6' },
+    ])
+    .returning();
+  const labelByName = new Map(labelRows.map((l) => [l.name, l.id]));
+  const ticketByNumber = new Map(inserted.map((t) => [t.ticketNumber, t.id]));
+  const labelId = (name: string): string => {
+    const id = labelByName.get(name);
+    if (!id) throw new Error(`seed label missing: ${name}`);
+    return id;
+  };
+  const ticketId = (num: number): string => {
+    const id = ticketByNumber.get(num);
+    if (!id) throw new Error(`seed ticket missing: ${num}`);
+    return id;
+  };
+  await db.insert(ticketLabels).values([
+    { ticketId: ticketId(1), labelId: labelId('Feature') },
+    { ticketId: ticketId(1), labelId: labelId('Frontend') },
+    { ticketId: ticketId(2), labelId: labelId('Bug') },
+    { ticketId: ticketId(2), labelId: labelId('Urgent') },
+    { ticketId: ticketId(3), labelId: labelId('Backend') },
   ]);
 
   // F12: seed the per-project counter AFTER the ticket inserts so it points PAST
