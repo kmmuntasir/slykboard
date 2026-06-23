@@ -12,3 +12,20 @@ export function moveTicket(ticketId: string, dto: MoveTicketRequest): Promise<Ti
     body: JSON.stringify(dto),
   });
 }
+
+// F12 T5: createTicket — POST /projects/:slug/tickets. apiFetch unwraps {data}.
+export interface CreateTicketDto {
+  title: string;
+  description?: string;
+  priority?: Ticket['priority'];
+  labels?: string[];
+  assigneeId?: string;
+  statusColumn?: string;
+}
+
+export function createTicket(slug: string, dto: CreateTicketDto): Promise<Ticket> {
+  return apiFetch<Ticket>(`/projects/${slug}/tickets`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
