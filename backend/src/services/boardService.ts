@@ -84,13 +84,16 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
     position: r.position,
     priority: r.priority,
     labels: r.labels ?? [],
-    assignee: r.assigneeId
-      ? {
-          id: r.assigneeRowId!,
-          fullName: r.assigneeFullName!,
-          avatarUrl: r.assigneeAvatarUrl,
-        }
-      : null,
+    assignee:
+      r.assigneeId === null
+        ? null
+        : r.assigneeFullName === null
+          ? { id: r.assigneeId, fullName: 'Unknown user', avatarUrl: null }
+          : {
+              id: r.assigneeId,
+              fullName: r.assigneeFullName,
+              avatarUrl: r.assigneeAvatarUrl,
+            },
     creatorId: r.creatorId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,

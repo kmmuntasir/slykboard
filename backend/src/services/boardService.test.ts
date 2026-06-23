@@ -306,4 +306,88 @@ describe('boardService getBoard', () => {
     const logObj = bag.loggerWarn.mock.calls[0]![0] as Record<string, unknown>;
     expect(logObj.columnCount).toBe(overCap);
   });
+
+  describe('buildAssignee FK-dangle guard', () => {
+    const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+
+    const cases = [
+      {
+        name: 'assigned ticket renders populated assignee',
+        row: {
+          id: 't1',
+          ticketNumber: 1,
+          statusColumn: 'c1',
+          position: 10,
+          assigneeId: 'u1',
+          assigneeFullName: 'Jane Doe',
+          assigneeAvatarUrl: 'http://x/a.png',
+          assigneeRowId: 'u1',
+        },
+        expected: { id: 'u1', fullName: 'Jane Doe', avatarUrl: 'http://x/a.png' },
+      },
+      {
+        name: 'unassigned ticket renders null',
+        row: {
+          id: 't2',
+          ticketNumber: 2,
+          statusColumn: 'c1',
+          position: 20,
+          assigneeId: null,
+          assigneeFullName: null,
+          assigneeAvatarUrl: null,
+          assigneeRowId: null,
+        },
+        expected: null,
+      },
+      {
+        name: 'FK-dangling assignee (id present, joined row null) renders Unknown user',
+        row: {
+          id: 't3',
+          ticketNumber: 3,
+          statusColumn: 'c1',
+          position: 30,
+          assigneeId: 'ghost',
+          assigneeFullName: null,
+          assigneeAvatarUrl: null,
+          assigneeRowId: null,
+        },
+        expected: { id: 'ghost', fullName: 'Unknown user', avatarUrl: null },
+      },
+    ];
+
+    cases.forEach(({ name, row, expected }) => {
+      it(name, async () => {
+        bag.getProjectBySlug.mockResolvedValue(project);
+        bag.dbSelectOrderBy.mockResolvedValue([makeTicket(row)]);
+
+        const result = await getBoard('SLYK');
+
+        const assignee = result.columns[0]!.tickets[0]!.assignee;
+        expect(assignee).toEqual(expected);
+      });
+    });
+
+    it('FK-dangle path never throws (renders Unknown user, no 500)', async () => {
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({
+          id: 't3',
+          ticketNumber: 3,
+          statusColumn: 'c1',
+          position: 30,
+          assigneeId: 'ghost',
+          assigneeFullName: null,
+          assigneeAvatarUrl: null,
+          assigneeRowId: null,
+        }),
+      ]);
+
+      const result = await getBoard('SLYK').catch((e) => e);
+
+      expect(result).not.toBeInstanceOf(Error);
+      const assignee = (result as Awaited<ReturnType<typeof getBoard>>).columns[0]!.tickets[0]!
+        .assignee;
+      expect(assignee).toEqual({ id: 'ghost', fullName: 'Unknown user', avatarUrl: null });
+    });
+  });
 });
