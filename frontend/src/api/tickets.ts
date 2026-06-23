@@ -14,11 +14,12 @@ export function moveTicket(ticketId: string, dto: MoveTicketRequest): Promise<Ti
 }
 
 // F12 T5: createTicket — POST /projects/:slug/tickets. apiFetch unwraps {data}.
+// F14 T5: labels (string[]) replaced by labelIds (uuid[]) referencing the catalog.
 export interface CreateTicketDto {
   title: string;
   description?: string;
   priority?: Ticket['priority'];
-  labels?: string[];
+  labelIds?: string[];
   assigneeId?: string;
   statusColumn?: string;
 }

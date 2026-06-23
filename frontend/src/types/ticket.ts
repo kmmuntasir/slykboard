@@ -1,3 +1,5 @@
+import type { Label } from './label';
+
 // F09 D-Priority-Enum: SCREAMING_SNAKE storage; Title-Case display via map.
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 
@@ -26,7 +28,7 @@ export interface Ticket {
   statusColumn: string;
   position: number;
   priority: Priority;
-  labels: string[];
+  labels: Label[]; // F14: hydrated { id, name, color }[] (was bare string[])
   assignee: Assignee | null;
   creatorId: string;
   createdAt: string; // ISO
@@ -38,4 +40,5 @@ export interface UpdateTicketDto {
   description?: string | null;
   priority?: Priority;
   assigneeId?: string | null;
+  labelIds?: string[]; // F14: replace a ticket's label set
 }
