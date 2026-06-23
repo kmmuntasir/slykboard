@@ -1,5 +1,12 @@
 import { db } from './client';
-import { tickets, projects, users, type Column } from './schema';
+import {
+  tickets,
+  projects,
+  projectSequences,
+  users,
+  START_TICKET_NUMBER,
+  type Column,
+} from './schema';
 import { eq } from 'drizzle-orm';
 
 // F09: read-render seed. F12 owns creation; this gives the board endpoint data.
@@ -7,6 +14,11 @@ import { eq } from 'drizzle-orm';
 const SEED_PROJECT_SLUG = 'SLYK';
 const SEED_USER_EMAIL = 'seed@slykboard.local';
 const ORPHAN_COLUMN_ID = 'orphan-column-id-not-in-project'; // D-Unsorted-Bucket proof
+// F12: number of seeded tickets, numbered START_TICKET_NUMBER..START_TICKET_NUMBER+this-1
+// (1..3). project_sequences.nextNumber must point PAST them so the next
+// allocateTicketNumber returns the first unused number — mirrors the 0005 backfill
+// COALESCE(MAX(ticket_number),0)+1. Bump this if the seed gains a ticket.
+const SEED_TICKET_COUNT = 3;
 
 // Local OAuth-bypass dev fixtures (idempotent — no overwrite, no dupes).
 const DEV_USERS = [
@@ -76,7 +88,7 @@ export async function seedBoard(): Promise<void> {
   await db.insert(tickets).values([
     {
       projectId: project!.id,
-      ticketNumber: 101,
+      ticketNumber: 1,
       title: 'Render board columns',
       statusColumn: 'col-todo',
       position: 10,
@@ -89,7 +101,7 @@ export async function seedBoard(): Promise<void> {
     },
     {
       projectId: project!.id,
-      ticketNumber: 102,
+      ticketNumber: 2,
       title: 'Group tickets by column',
       statusColumn: 'col-doing',
       position: 20,
@@ -102,7 +114,7 @@ export async function seedBoard(): Promise<void> {
     },
     {
       projectId: project!.id,
-      ticketNumber: 103,
+      ticketNumber: 3,
       title: 'Orphan ticket (deleted column)',
       statusColumn: ORPHAN_COLUMN_ID, // matches no project column → Unsorted
       position: 30,
@@ -114,6 +126,21 @@ export async function seedBoard(): Promise<void> {
       updatedAt: now,
     },
   ]);
+
+  // F12: seed the per-project counter AFTER the ticket inserts so it points PAST
+  // the seeded tickets (1..3). nextNumber = START_TICKET_NUMBER + SEED_TICKET_COUNT
+  // = 4 → the first UNUSED number, so allocateTicketNumber never returns 1..3 and
+  // never trips the unique (project_id, ticket_number) backstop (23505). Mirrors
+  // the 0005 backfill rule COALESCE(MAX(ticket_number),0)+1. Idempotent via
+  // onConflictDoUpdate. (T3's createProject seeds START_TICKET_NUMBER for FRESH
+  // projects with no tickets — different, correct case.)
+  await db
+    .insert(projectSequences)
+    .values({ projectId: project!.id, nextNumber: START_TICKET_NUMBER + SEED_TICKET_COUNT })
+    .onConflictDoUpdate({
+      target: projectSequences.projectId,
+      set: { nextNumber: START_TICKET_NUMBER + SEED_TICKET_COUNT },
+    });
 }
 
 seedBoard()
