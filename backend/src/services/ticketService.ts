@@ -8,6 +8,7 @@ import { getProjectBySlug } from './projectService';
 import { UNSORTED_BUCKET_ID } from './boardService';
 import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
 import type { HydratedLabel } from './labelService';
+import type { ChecklistItem } from '../db/schema';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -26,12 +27,14 @@ export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 // and `assigneeId` are nullable — `null` is a real value (clear), distinct from
 // `undefined` (leave untouched). Route layer validates Priority; service trusts the type.
 // F14: `labelIds` replaces the ticket's label set via replaceTicketLabels when present.
+// F15: `checklist` replaces the ticket's checklist JSONB array (full-array replace).
 export type TicketPatch = {
   title?: string;
   description?: string | null;
   priority?: Priority;
   assigneeId?: string | null;
   labelIds?: string[];
+  checklist?: ChecklistItem[];
 };
 
 export interface MoveTicketInput {
@@ -257,6 +260,9 @@ export async function updateTicket(args: {
   }
   if (patch.assigneeId !== undefined) {
     updateSet.assigneeId = patch.assigneeId;
+  }
+  if (patch.checklist !== undefined) {
+    updateSet.checklist = patch.checklist;
   }
 
   const updated = await db

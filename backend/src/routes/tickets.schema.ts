@@ -16,12 +16,22 @@ const moveFields = {
     position: z.number().finite().optional(),
 }
 
+// F15: checklist sub-item shape. id is a client-generated UUID
+// (crypto.randomUUID); validated as uuid() here. Text capped 200 (title parity),
+// max 50 items. Whole array is replaced on every save (last-write-wins, D4).
+const checklistItemSchema = z.object({
+    id: z.uuid(),
+    text: z.string().min(1).max(200),
+    done: z.boolean(),
+})
+
 const attributeFields = {
     title: z.string().min(1).max(200).optional(),
     description: z.string().max(5000).nullable().optional(),
     priority: priorityEnum.optional(),
     assigneeId: z.uuid().nullable().optional(),
     labelIds: z.array(z.string().uuid()).optional(), // F14: replace ticket's label set
+    checklist: z.array(checklistItemSchema).max(50).optional(), // F15: replace checklist array
 }
 
 export const updateTicketBody = z
