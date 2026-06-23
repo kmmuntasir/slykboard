@@ -297,7 +297,9 @@ describe('POST /:slug/tickets (F12)', () => {
 
   it('returns 201 + ticket (authed MEMBER)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
@@ -309,12 +311,18 @@ describe('POST /:slug/tickets (F12)', () => {
 
   it('sets creatorId from req.user.id', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
     await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
       .send({ title: 'New' });
-    expect(mockedCreateTicket).toHaveBeenCalledWith({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+    expect(mockedCreateTicket).toHaveBeenCalledWith({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+    });
   });
 
   it('returns 404 NOT_FOUND on unknown slug (service throws)', async () => {
@@ -369,7 +377,9 @@ describe('POST /:slug/tickets (F12)', () => {
 
   it('works for MEMBER (201) — proves not admin-gated (REQ-3.3)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
@@ -379,7 +389,9 @@ describe('POST /:slug/tickets (F12)', () => {
 
   it('works for ADMIN (201)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedCreateTicket.mockResolvedValue(ticketPayload as any);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)

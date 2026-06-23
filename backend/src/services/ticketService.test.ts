@@ -92,7 +92,6 @@ import {
   POSITION_EPSILON,
   POSITION_GAP,
   moveTicket,
-  type CreateTicketInput,
 } from './ticketService';
 import { UNSORTED_BUCKET_ID } from './boardService';
 
