@@ -119,3 +119,14 @@ export async function findUserByGoogleId(googleId: string): Promise<UserRow | nu
   const [row] = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
   return row ?? null;
 }
+
+// F13 T5: minimal-PII user list for assignee picker. Excludes email/role.
+export type UserOption = { id: string; fullName: string; avatarUrl: string | null };
+
+export async function listUsers(): Promise<UserOption[]> {
+  const rows = await db
+    .select({ id: users.id, fullName: users.fullName, avatarUrl: users.avatarUrl })
+    .from(users)
+    .orderBy(users.fullName);
+  return rows;
+}

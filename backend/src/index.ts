@@ -13,6 +13,7 @@ import { pingRouter } from './middleware/pingRoute';
 import { authRouter } from './routes/auth.routes';
 import { projectsRouter } from './routes/projects.routes';
 import { ticketsRouter } from './routes/tickets.routes';
+import { usersRouter } from './routes/users.routes';
 
 const app: Express = express();
 
@@ -50,6 +51,7 @@ app.use('/api', pingRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/tickets', ticketsRouter);
+app.use('/api/users', usersRouter);
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);

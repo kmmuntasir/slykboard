@@ -50,6 +50,7 @@ const bag = vi.hoisted(() => ({
   txInsertReturning: vi.fn(),
   txUpdateReturning: vi.fn(),
   dbSelectLimit: vi.fn(),
+  dbSelectOrderBy: vi.fn(),
   txUpdateSetArg: {} as Record<string, unknown>,
   txInsertValuesArg: {} as Record<string, unknown>,
 }));
@@ -87,7 +88,12 @@ vi.mock('../db/client', () => {
 
   const db = {
     transaction: vi.fn(async (cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx)),
-    select: vi.fn(() => {
+    select: vi.fn((arg?: unknown) => {
+      if (arg !== undefined) {
+        // F13 T5: select({id, fullName, avatarUrl}).from(users).orderBy(...)
+        // — .orderBy is the terminal.
+        return { from: () => ({ orderBy: () => bag.dbSelectOrderBy() }) };
+      }
       const chain = {
         from: () => chain,
         where: () => chain,
@@ -100,7 +106,7 @@ vi.mock('../db/client', () => {
   return { db };
 });
 
-import { findUserById, findUserByGoogleId, upsertByGoogleId } from './userService';
+import { findUserById, findUserByGoogleId, listUsers, upsertByGoogleId } from './userService';
 
 function resetBag() {
   bag.txRowSelectLimit.mockReset();
@@ -108,6 +114,7 @@ function resetBag() {
   bag.txInsertReturning.mockReset();
   bag.txUpdateReturning.mockReset();
   bag.dbSelectLimit.mockReset();
+  bag.dbSelectOrderBy.mockReset();
   bag.txUpdateSetArg = {};
   bag.txInsertValuesArg = {};
 }
@@ -259,5 +266,60 @@ describe('findUserByGoogleId', () => {
     const result = await findUserByGoogleId('nope');
 
     expect(result).toBeNull();
+  });
+});
+
+describe('listUsers', () => {
+  beforeEach(resetBag);
+
+  it('returns [] when there are no users', async () => {
+    bag.dbSelectOrderBy.mockResolvedValueOnce([]);
+
+    const result = await listUsers();
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns a single user with only id/fullName/avatarUrl (no PII)', async () => {
+    // Mock returns ONLY the three columns — the select shape itself enforces
+    // PII exclusion at the SQL layer (route test verifies by mocking service).
+    const row = { id: 'u-admin', fullName: 'Admin', avatarUrl: null };
+    bag.dbSelectOrderBy.mockResolvedValueOnce([row]);
+
+    const result = await listUsers();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(row);
+    expect(result[0]).not.toHaveProperty('email');
+    expect(result[0]).not.toHaveProperty('role');
+  });
+
+  it('passes rows through in the order the mock returns them', async () => {
+    const rows = [
+      { id: 'u-a', fullName: 'Alice', avatarUrl: 'http://a' },
+      { id: 'u-b', fullName: 'Bob', avatarUrl: null },
+      { id: 'u-c', fullName: 'Carol', avatarUrl: 'http://c' },
+    ];
+    bag.dbSelectOrderBy.mockResolvedValueOnce(rows);
+
+    const result = await listUsers();
+
+    expect(result).toEqual(rows);
+    expect(result.map((r) => r.id)).toEqual(['u-a', 'u-b', 'u-c']);
+  });
+
+  it('excludes email and role keys from every item (PII guard)', async () => {
+    const rows = [
+      { id: 'u-a', fullName: 'Alice', avatarUrl: null },
+      { id: 'u-b', fullName: 'Bob', avatarUrl: 'http://b' },
+    ];
+    bag.dbSelectOrderBy.mockResolvedValueOnce(rows);
+
+    const result = await listUsers();
+
+    for (const item of result) {
+      expect(item).not.toHaveProperty('email');
+      expect(item).not.toHaveProperty('role');
+    }
   });
 });
