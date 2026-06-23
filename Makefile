@@ -3,7 +3,7 @@
 # Requires: Docker, Node 24 (see .nvmrc), npm.
 
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap env up down restart db-logs db-psql \
+.PHONY: help bootstrap env env-force up down restart db-logs db-psql \
         install migrate migrate-push migrate-generate studio seed \
         dev dev-api dev-web build start \
         test test-api test-web lint typecheck format format-check \
@@ -119,6 +119,20 @@ env: ## Copy .env.example -> .env for each package (skips if .env exists)
 	  echo "  created frontend/.env"; \
 	else echo "  frontend/.env exists — skipping"; fi
 	@echo "\n\033[33mNext: fill GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in backend/.env\nand VITE_GOOGLE_CLIENT_ID in frontend/.env, then \`make dev\`.\033[0m"
+
+env-force: ## Add missing keys from .env.example into .env (preserves existing values)
+	@touch backend/.env frontend/.env
+	@awk -v j="$$(openssl rand -base64 48)" '\
+		FILENAME==ARGV[1] { if ($$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { k=$$0; sub(/=.*/, "", k); seen[k]=1 } print; next }\
+		/^JWT_SECRET=/ { if (seen["JWT_SECRET"]) next; if (!h) { print ""; print "# Added by make env-force"; h=1 } print "JWT_SECRET="j; next }\
+		/^[A-Za-z_][A-Za-z0-9_]*=/ { k=$$0; sub(/=.*/, "", k); if (seen[k]) next; if (!h) { print ""; print "# Added by make env-force"; h=1 } print }\
+	' backend/.env backend/.env.example > backend/.env.tmp && mv backend/.env.tmp backend/.env
+	@awk '\
+		FILENAME==ARGV[1] { if ($$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { k=$$0; sub(/=.*/, "", k); seen[k]=1 } print; next }\
+		/^[A-Za-z_][A-Za-z0-9_]*=/ { k=$$0; sub(/=.*/, "", k); if (seen[k]) next; if (!h) { print ""; print "# Added by make env-force"; h=1 } print }\
+	' frontend/.env frontend/.env.example > frontend/.env.tmp && mv frontend/.env.tmp frontend/.env
+	@echo "  merged missing keys into backend/.env + frontend/.env (existing values preserved)"
+	@echo "\n\033[33mIf JWT_SECRET was added, fill GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in backend/.env\nand VITE_GOOGLE_CLIENT_ID in frontend/.env, then \`make dev\`.\033[0m"
 
 bootstrap: ## Fresh-clone bootstrap: node check -> install -> env -> DB -> migrate
 	@echo "\n\033[1m[1/6] Node version\033[0m"
