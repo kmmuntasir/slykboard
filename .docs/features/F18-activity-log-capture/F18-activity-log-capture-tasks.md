@@ -96,7 +96,7 @@
 > - **Checklist audit** → not in REQ-5.2's enumerated set; no enum value added.
 > - **Content diffing (title/description field-level diffs)** → REQ-5.3 explicitly does NOT require it; one generic `CONTENT_UPDATED` row suffices.
 
-> **Owner sign-off needed (see §9):** (a) refactor labelService fns to accept `tx` (true atomicity) vs keep label-replace post-txn + log the intended diff (lower risk, mirrors F15) — recommend refactor; (b) `old_value`/`new_value` as §8.5 Strings vs add a jsonb `metadata` column — recommend §8.5 Strings; (c) confirm checklist NOT audited; (d) confirm F18 = capture-only (no GET route; F19 adds feed); (e) value casing in old/new_value (raw UPPERCASE storage value; F19 formats) — recommend raw; (f) `CONTENT_UPDATED` granularity (one row per content edit) — recommend one row if title OR description changed.
+> **Owner sign-off CONFIRMED 2026-06-24 (see §9):** (a) refactor labelService fns to accept `tx`; (b) `old_value`/`new_value` as §8.5 Strings; (c) checklist NOT audited; (d) F18 = capture-only (F19 owns feed); (e) raw storage value casing; (f) one `CONTENT_UPDATED` row per content edit.
 
 ---
 
@@ -836,14 +836,14 @@ Steps:
 
 ---
 
-## 9. Cross-cutting decisions needing owner sign-off
+## 9. Cross-cutting decisions — CONFIRMED (owner-approved 2026-06-24)
 
-1. **Refactor `labelService` fns to accept `tx` (true atomicity) vs keep label-replace post-txn + log the intended diff (lower risk, mirrors F15).** **Recommendation: refactor.** `replaceTicketLabels` + `hydrateLabelsForTickets` accept an optional `tx` (default `db`) so `updateTicket`'s txn owns the label replace too. This closes GAP #2 and makes the snapshot→update→label-replace→log-write sequence truly atomic. The default `db` keeps F14 callers backward-compatible. The lower-risk alternative mirrors the F15 workaround but reintroduces the divergence risk D5 is meant to eliminate. **Deviate flag:** touches `labelService.ts` (F14-owned file).
-2. **`old_value`/`new_value` as §8.5 Strings vs add a jsonb `metadata` column.** **Recommendation: §8.5 Strings.** PRD §8.5 is authoritative. For labels, store a readable NAMES string in `new_value`, `old_value` null. **Deviate flag:** the tempting shortcut is jsonb; §8.5 overrides it.
-3. **Confirm checklist changes are NOT audited.** **Recommendation: do NOT audit.** PRD REQ-5.2 enumerates Status/Priority/Assignee/Label only. No `CHECKLIST_CHANGED` enum value; a checklist-only edit writes zero rows.
-4. **Confirm F18 = capture-only (no GET route; F19 adds the feed route + UI).** **Recommendation: capture-only.** REQ-5.1 (the feed) = F19. F18 adds NO HTTP surface and NO frontend files; verification is via psql until F19 ships the feed.
-5. **Value casing in `old_value`/`new_value` (raw UPPERCASE storage value vs display-formatted).** **Recommendation: raw storage value.** Store the raw enum (`HIGH`), raw `userId` (or `'unassigned'`), readable label NAMES. F19 formats for display. Keeps F18 a pure capture layer.
-6. **`CONTENT_UPDATED` granularity (one row per content edit vs one per field).** **Recommendation: one row if title OR description changed.** REQ-5.3 calls for a generic "updated" entry with no content diff. One row per edit avoids spam. `old_value`/`new_value` null.
+1. **Refactor `labelService` fns to accept `tx` (true atomicity).** **Confirmed: refactor.** `replaceTicketLabels` + `hydrateLabelsForTickets` accept an optional `tx` (default `db`) so `updateTicket`'s txn owns the label replace too. This closes GAP #2 and makes the snapshot→update→label-replace→log-write sequence truly atomic. The default `db` keeps F14 callers backward-compatible. The lower-risk alternative mirrors the F15 workaround but reintroduces the divergence risk D5 is meant to eliminate. **Deviate flag:** touches `labelService.ts` (F14-owned file).
+2. **`old_value`/`new_value` as §8.5 Strings.** **Confirmed: §8.5 Strings.** PRD §8.5 is authoritative. For labels, store a readable NAMES string in `new_value`, `old_value` null.
+3. **Checklist changes are NOT audited.** **Confirmed: do NOT audit.** PRD REQ-5.2 enumerates Status/Priority/Assignee/Label only. No `CHECKLIST_CHANGED` enum value; a checklist-only edit writes zero rows.
+4. **F18 = capture-only (no GET route; F19 adds the feed route + UI).** **Confirmed: capture-only.** REQ-5.1 (the feed) = F19. F18 adds NO HTTP surface and NO frontend files; verification is via psql until F19 ships the feed.
+5. **Value casing in `old_value`/`new_value` (raw UPPERCASE storage value).** **Confirmed: raw storage value.** Store the raw enum (`HIGH`), raw `userId` (or `'unassigned'`), readable label NAMES. F19 formats for display. Keeps F18 a pure capture layer.
+6. **`CONTENT_UPDATED` granularity (one row per content edit).** **Confirmed: one row if title OR description changed.** REQ-5.3 calls for a generic "updated" entry with no content diff. One row per edit avoids spam. `old_value`/`new_value` null.
 
 ---
 
