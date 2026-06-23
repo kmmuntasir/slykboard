@@ -20,6 +20,8 @@ const bag = vi.hoisted(() => ({
   ), // mocked sanitizeDescription
   // F14: replaceTicketLabels mock (from ./labelService)
   replaceTicketLabels: vi.fn(),
+  // F14: hydrateLabelsForTickets mock (from ./labelService) — getTicket hydration
+  hydrateLabelsForTickets: vi.fn(),
 }));
 
 vi.mock('../db/client', async () => {
@@ -106,6 +108,7 @@ vi.mock('../utils/sanitizeHtml', () => ({
 vi.mock('./labelService', () => ({
   replaceTicketLabels: (args: { ticketId: string; labelIds: string[] }) =>
     bag.replaceTicketLabels(args),
+  hydrateLabelsForTickets: (ids: string[]) => bag.hydrateLabelsForTickets(ids),
 }));
 
 import { AppError } from '../utils/appError';
@@ -140,6 +143,10 @@ function resetBag() {
     (input: string | null | undefined) => `<clean>${input ?? ''}</clean>`,
   );
   bag.replaceTicketLabels.mockReset();
+  bag.hydrateLabelsForTickets.mockReset();
+  // getTicket hydrates labels; default to an empty map (no labels) unless a test
+  // overrides it.
+  bag.hydrateLabelsForTickets.mockResolvedValue(new Map<string, unknown[]>());
 }
 
 const TICKET_ID = 't1';
@@ -493,6 +500,17 @@ describe('ticketService getTicket (F13 T6)', () => {
     const result = await getTicket('nope');
 
     expect(result).toBeNull();
+  });
+
+  it('F14: hydrates labels onto the returned ticket', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    const label = { id: 'lbl-1', name: 'Bug', color: '#EF4444' };
+    bag.hydrateLabelsForTickets.mockResolvedValue(new Map([[TICKET_ID, [label]]]));
+
+    const result = await getTicket(TICKET_ID);
+
+    expect(result?.labels).toEqual([label]);
+    expect(bag.hydrateLabelsForTickets).toHaveBeenCalledWith([TICKET_ID]);
   });
 });
 

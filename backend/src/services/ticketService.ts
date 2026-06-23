@@ -6,7 +6,8 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { getProjectBySlug } from './projectService';
 import { UNSORTED_BUCKET_ID } from './boardService';
-import { replaceTicketLabels } from './labelService';
+import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
+import type { HydratedLabel } from './labelService';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -212,10 +213,16 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
 
 // F13 T6: read a single ticket by id, including description. Returns null on miss
 // (route layer maps to 404). Used by the F13 detail/edit endpoint and the F16 modal.
-export async function getTicket(ticketId: string): Promise<TicketRow | null> {
+// F14: hydrate the ticket's labels ({id,name,color}[]) so the edit modal can
+// pre-select them — matches the board payload shape (boardService hydrates too).
+export async function getTicket(
+  ticketId: string,
+): Promise<(TicketRow & { labels: HydratedLabel[] }) | null> {
   const rows = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
   const row = rows[0];
-  return row ?? null;
+  if (!row) return null;
+  const labelMap = await hydrateLabelsForTickets([ticketId]);
+  return { ...row, labels: labelMap.get(ticketId) ?? [] };
 }
 
 // F13 T6: partial update of ticket attributes. Accepts any subset of
