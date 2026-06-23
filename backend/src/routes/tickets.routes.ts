@@ -67,6 +67,7 @@ ticketsRouter.patch(
                     ticketId,
                     statusColumn: body.statusColumn!,
                     position: body.position!,
+                    actingUserId: req.user!.id,
                 })
                 res.json(success(moved))
                 return
@@ -80,6 +81,7 @@ ticketsRouter.patch(
             ticketId,
             statusColumn: body.statusColumn!,
             position: body.position!,
+            actingUserId: req.user!.id,
         })
         res.json(success(moved))
     },

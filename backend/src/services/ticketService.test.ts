@@ -232,9 +232,12 @@ describe('ticketService moveTicket (F11)', () => {
   it('404 NOT_FOUND when ticket absent', async () => {
     bag.loadTicket.mockResolvedValue([]);
 
-    const error = await moveTicket({ ticketId: 'missing', statusColumn: 'c1', position: 1 }).catch(
-      (e) => e,
-    );
+    const error = await moveTicket({
+      ticketId: 'missing',
+      statusColumn: 'c1',
+      position: 1,
+      actingUserId: 'u1',
+    }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe(ErrorCode.NOT_FOUND);
@@ -246,9 +249,12 @@ describe('ticketService moveTicket (F11)', () => {
     bag.loadTicket.mockResolvedValue([makeTicket()]);
     bag.loadProject.mockResolvedValue([]);
 
-    const error = await moveTicket({ ticketId: TICKET_ID, statusColumn: 'c1', position: 1 }).catch(
-      (e) => e,
-    );
+    const error = await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c1',
+      position: 1,
+      actingUserId: 'u1',
+    }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe(ErrorCode.NOT_FOUND);
@@ -263,6 +269,7 @@ describe('ticketService moveTicket (F11)', () => {
       ticketId: TICKET_ID,
       statusColumn: 'ghost',
       position: 1,
+      actingUserId: 'u1',
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
@@ -281,6 +288,7 @@ describe('ticketService moveTicket (F11)', () => {
       ticketId: TICKET_ID,
       statusColumn: UNSORTED_BUCKET_ID,
       position: 1,
+      actingUserId: 'u1',
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
@@ -298,7 +306,12 @@ describe('ticketService moveTicket (F11)', () => {
     ]);
     bag.loadTicketFinal.mockResolvedValue([makeTicket({ statusColumn: 'c2', position: 50 })]);
 
-    const result = await moveTicket({ ticketId: TICKET_ID, statusColumn: 'c2', position: 50 });
+    const result = await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c2',
+      position: 50,
+      actingUserId: 'u1',
+    });
 
     expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
     expect(bag.updateSets.length).toBe(1);
@@ -320,7 +333,12 @@ describe('ticketService moveTicket (F11)', () => {
     ]);
     bag.loadTicketFinal.mockResolvedValue([makeTicket({ position: 0 })]);
 
-    await moveTicket({ ticketId: TICKET_ID, statusColumn: 'c1', position: 0 });
+    await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c1',
+      position: 0,
+      actingUserId: 'u1',
+    });
 
     expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
     expect(bag.updateSets.length).toBe(3); // 1 main + 2 rebalance
@@ -337,7 +355,12 @@ describe('ticketService moveTicket (F11)', () => {
     ]);
     bag.loadTicketFinal.mockResolvedValue([makeTicket({ statusColumn: 'c1', position: 5 })]);
 
-    await moveTicket({ ticketId: TICKET_ID, statusColumn: 'c1', position: 5 });
+    await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c1',
+      position: 5,
+      actingUserId: 'u1',
+    });
 
     expect(bag.updateSets.length).toBe(1);
   });
@@ -347,9 +370,12 @@ describe('ticketService moveTicket (F11)', () => {
     bag.loadProject.mockResolvedValue([{ columns: makeColumns() }]);
     bag.loadColumn.mockRejectedValue(new Error('boom'));
 
-    const error = await moveTicket({ ticketId: TICKET_ID, statusColumn: 'c1', position: 0 }).catch(
-      (e) => e,
-    );
+    const error = await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c1',
+      position: 0,
+      actingUserId: 'u1',
+    }).catch((e) => e);
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe('boom');

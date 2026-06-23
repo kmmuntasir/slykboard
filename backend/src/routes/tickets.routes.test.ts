@@ -97,6 +97,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
       ticketId: VALID_TICKET_ID,
       statusColumn: 'c2',
       position: 50,
+      actingUserId: 'u1',
     })
   })
 
@@ -118,6 +119,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
       ticketId: VALID_TICKET_ID,
       statusColumn: 'c1',
       position: 25,
+      actingUserId: 'u1',
     })
   })
 
@@ -139,6 +141,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
       ticketId: VALID_TICKET_ID,
       statusColumn: 'c1',
       position: 0,
+      actingUserId: 'u1',
     })
   })
 
@@ -462,6 +465,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
       ticketId: VALID_TICKET_ID,
       statusColumn: 'c2',
       position: 100,
+      actingUserId: 'u1',
     })
     expect(mockedUpdateTicket).not.toHaveBeenCalled()
   })
@@ -505,6 +509,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
       ticketId: VALID_TICKET_ID,
       statusColumn: 'c2',
       position: 50,
+      actingUserId: 'u1',
     })
   })
 })

@@ -56,6 +56,7 @@ export interface MoveTicketInput {
   ticketId: string;
   statusColumn: string;
   position: number;
+  actingUserId: string;
 }
 
 // True when any adjacent pair in an ASC-ordered position list is closer than EPSILON
@@ -75,6 +76,7 @@ export async function moveTicket({
   ticketId,
   statusColumn,
   position,
+  actingUserId,
 }: MoveTicketInput): Promise<TicketRow> {
   // 1. Load the ticket (404 if absent). Derive projectId from the row.
   const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
@@ -113,6 +115,20 @@ export async function moveTicket({
       .update(tickets)
       .set({ statusColumn, position, updatedAt: new Date() })
       .where(eq(tickets.id, ticketId));
+
+    // F18 T4: emit a STATUS_CHANGED row only when the status actually changed.
+    // `ticket.statusColumn` was loaded pre-txn (pre-write) — that IS the old status.
+    // Same-column reposition → oldStatus === statusColumn → guard skips → zero rows.
+    const oldStatus = ticket.statusColumn;
+    if (oldStatus !== statusColumn) {
+      await recordActivity(tx, {
+        ticketId,
+        actorId: actingUserId,
+        action: 'STATUS_CHANGED',
+        oldValue: oldStatus,
+        newValue: statusColumn,
+      });
+    }
 
     // 5. Re-read the destination column ASC by position; rebalance on tight gap.
     const columnRows = await tx
