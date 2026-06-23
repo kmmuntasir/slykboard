@@ -57,6 +57,13 @@
       "when": 1782248733161,
       "tag": "0007_burly_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782257519442,
+      "tag": "0008_familiar_proemial_gods",
+      "breakpoints": true
     }
   ]
 }
