@@ -9,6 +9,7 @@ import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
 import * as ticketService from '../services/ticketService';
 import { createProjectBodySchema, slugParamSchema, createTicketBody } from './projects.schema';
+import { projectLabelsRouter } from './labels.routes';
 
 export const projectsRouter = Router();
 
@@ -80,3 +81,6 @@ projectsRouter.post(
     res.status(201).json(success(project));
   },
 );
+
+// F14: project-scoped label routes (/:slug/labels) mounted on projectsRouter.
+projectsRouter.use(projectLabelsRouter);
