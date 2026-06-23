@@ -20,6 +20,7 @@ describe('TicketCard', () => {
         position: 0,
         priority: 'HIGH',
         labels: [frontendLabel],
+        checklist: [],
         assignee: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
         creatorId: 'c1',
         createdAt: '2026-06-01T00:00:00.000Z',

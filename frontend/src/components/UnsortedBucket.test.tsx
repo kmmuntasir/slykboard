@@ -15,6 +15,7 @@ describe('UnsortedBucket', () => {
             position: 0,
             priority: 'LOW',
             labels: [],
+            checklist: [],
             assignee: null,
             creatorId: 'c1',
             createdAt: '2026-06-01T00:00:00.000Z',

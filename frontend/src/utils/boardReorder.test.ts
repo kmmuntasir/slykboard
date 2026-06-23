@@ -39,6 +39,7 @@ function makeTicket(seat: Seat, statusColumn: string) {
     position: seat.position,
     priority: 'LOW' as Priority,
     labels: [],
+    checklist: [],
     assignee: null,
     creatorId: 'u1',
     createdAt: '2026-01-01T00:00:00.000Z',

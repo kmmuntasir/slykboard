@@ -33,6 +33,7 @@ const boardPayloadMock: BoardPayload = {
                             color: '#6B7280',
                         },
                     ],
+                    checklist: [],
                     assignee: {
                         id: 'u1',
                         fullName: 'Ada Lovelace',
@@ -249,6 +250,7 @@ describe('useBoard polling', () => {
             position: 0,
             priority: 'HIGH' as const,
             labels: [],
+            checklist: [],
             assignee: null,
             creatorId: 'u1',
             createdAt: '2026-01-01T00:00:00.000Z',

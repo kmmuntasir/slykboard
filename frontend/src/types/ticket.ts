@@ -18,6 +18,14 @@ export interface Assignee {
   avatarUrl: string | null;
 }
 
+// F15 D1: checklist sub-items on a ticket. id is client-generated (crypto.randomUUID);
+// backend validates uuid + text cap + max count. Whole array replaced on save (D4).
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 // F09 D-Assignee-Shape: assignee nullable (unassigned). creatorId returned but
 // not rendered on the card (F09 acceptance lists title/ID/assignee/priority/labels).
 export interface Ticket {
@@ -29,6 +37,7 @@ export interface Ticket {
   position: number;
   priority: Priority;
   labels: Label[]; // F14: hydrated { id, name, color }[] (was bare string[])
+  checklist: ChecklistItem[]; // F15: sub-items { id, text, done }[]
   assignee: Assignee | null;
   creatorId: string;
   createdAt: string; // ISO
@@ -41,4 +50,5 @@ export interface UpdateTicketDto {
   priority?: Priority;
   assigneeId?: string | null;
   labelIds?: string[]; // F14: replace a ticket's label set
+  checklist?: ChecklistItem[]; // F15: replace the checklist array (full-array replace)
 }
