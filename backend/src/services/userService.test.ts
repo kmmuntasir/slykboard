@@ -100,7 +100,7 @@ vi.mock('../db/client', () => {
   return { db };
 });
 
-import { findUserById, upsertByGoogleId } from './userService';
+import { findUserById, findUserByGoogleId, upsertByGoogleId } from './userService';
 
 function resetBag() {
   bag.txRowSelectLimit.mockReset();
@@ -238,5 +238,26 @@ describe('findUserById', () => {
     const result = await findUserById('nope');
 
     expect(result).toBeUndefined();
+  });
+});
+
+describe('findUserByGoogleId', () => {
+  beforeEach(resetBag);
+
+  it('returns the row when found', async () => {
+    const row = { ...MOCK_ADMIN_ROW };
+    bag.dbSelectLimit.mockResolvedValueOnce([row]);
+
+    const result = await findUserByGoogleId('g-admin');
+
+    expect(result).toEqual(row);
+  });
+
+  it('returns null when not found', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([]);
+
+    const result = await findUserByGoogleId('nope');
+
+    expect(result).toBeNull();
   });
 });

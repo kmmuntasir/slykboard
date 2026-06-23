@@ -111,3 +111,11 @@ export async function findUserById(id: string): Promise<UserRow | undefined> {
   const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return row;
 }
+
+// D1: read-only lookup by googleId. Used by the auth route to decide whether
+// the current request is the insert (signup) path or the conflict path, so the
+// domain gate can run only on insert. Returns null when not found.
+export async function findUserByGoogleId(googleId: string): Promise<UserRow | null> {
+  const [row] = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
+  return row ?? null;
+}

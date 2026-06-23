@@ -5,7 +5,7 @@ import { signJwt } from '../utils/jwt';
 import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
 import { exchangeCodeForUser } from '../services/googleOAuth';
-import { upsertByGoogleId, findUserById } from '../services/userService';
+import { upsertByGoogleId, findUserById, findUserByGoogleId } from '../services/userService';
 import { bumpTokenVersion } from '../services/tokenVersion';
 import { assertDomainAllowed } from '../services/accessControl';
 import { authCodeSchema } from './auth.schema';
@@ -19,10 +19,16 @@ authRouter.post(
   async (req, res): Promise<void> => {
     const { code } = req.body as { code: string };
     const info = await exchangeCodeForUser(code);
-    // D3 — workspace gate. Throws AppError(FORBIDDEN) on domain mismatch;
-    // no-ops when env.allowedDomain is unset. Runs AFTER Google verifies the
-    // email (D2) and BEFORE we persist it. errorHandler turns the throw into 403.
-    assertDomainAllowed(info.email);
+    // D3 + D1 — workspace gate. Runs ONLY on the insert (signup) path.
+    // Existing users matched by googleId are grandfathered in so tightening
+    // ALLOWED_DOMAIN never locks out current members. assertDomainAllowed
+    // no-ops when env.allowedDomain is unset (D13). Runs AFTER Google
+    // verifies the email (D2) and BEFORE we persist a new row. errorHandler
+    // turns the throw into 403.
+    const existing = await findUserByGoogleId(info.googleId);
+    if (!existing) {
+      assertDomainAllowed(info.email);
+    }
     const user = await upsertByGoogleId(info);
     const token = await signJwt({
       sub: user.id,

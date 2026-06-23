@@ -31,6 +31,7 @@ vi.mock('../services/googleOAuth', () => ({
 vi.mock('../services/userService', () => ({
   upsertByGoogleId: vi.fn(),
   findUserById: vi.fn(),
+  findUserByGoogleId: vi.fn(),
 }));
 vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('../utils/jwt', async (importOriginal) => {
 
 import { app } from '../index';
 import { exchangeCodeForUser } from '../services/googleOAuth';
-import { upsertByGoogleId, findUserById } from '../services/userService';
+import { upsertByGoogleId, findUserById, findUserByGoogleId } from '../services/userService';
 import { bumpTokenVersion, findUserTokenVersion } from '../services/tokenVersion';
 import { signJwt } from '../utils/jwt';
 import { AppError } from '../utils/appError';
@@ -53,6 +54,7 @@ import { ErrorCode } from '../utils/envelope';
 const mockedExchange = vi.mocked(exchangeCodeForUser);
 const mockedUpsert = vi.mocked(upsertByGoogleId);
 const mockedFindById = vi.mocked(findUserById);
+const mockedFindByGoogleId = vi.mocked(findUserByGoogleId);
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedBump = vi.mocked(bumpTokenVersion);
 const mockedSign = vi.mocked(signJwt);
@@ -170,6 +172,47 @@ describe('auth routes', () => {
     expect(res.body.error.code).toBe('FORBIDDEN');
     expect(res.body.error.message).toBe('Your Google account is not in the allowed workspace');
     expect(mockedUpsert).not.toHaveBeenCalled();
+  });
+
+  it('POST /google returns 200 for existing user with disallowed domain (D1 grandfathering)', async () => {
+    TEST_ENV.allowedDomain = 'newdomain.com';
+    mockedExchange.mockResolvedValue({
+      googleId: 'existing-google-id',
+      email: 'user@oldomain.com',
+      fullName: 'Existing User',
+      avatarUrl: null,
+    });
+    const seededRow = {
+      id: 'u-existing',
+      googleId: 'existing-google-id',
+      email: 'user@oldomain.com',
+      fullName: 'Existing User',
+      avatarUrl: null,
+      role: 'MEMBER',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    mockedFindByGoogleId.mockResolvedValue(
+      seededRow as unknown as Awaited<ReturnType<typeof findUserByGoogleId>>,
+    );
+    mockedUpsert.mockResolvedValue(
+      seededRow as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>,
+    );
+    mockedSign.mockResolvedValue('jwt-grandfathered');
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.token).toBe('jwt-grandfathered');
+    expect(res.body.data.user).toEqual({
+      id: 'u-existing',
+      email: 'user@oldomain.com',
+      fullName: 'Existing User',
+      avatarUrl: null,
+      role: 'MEMBER',
+    });
+    expect(mockedFindByGoogleId).toHaveBeenCalledWith('existing-google-id');
+    expect(mockedUpsert).toHaveBeenCalled();
   });
 
   it('POST /google returns 200 when env.allowedDomain unset (allow all)', async () => {
