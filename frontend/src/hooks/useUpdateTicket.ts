@@ -25,11 +25,14 @@ export function useUpdateTicket() {
       // carries IDs but Ticket.labels is the hydrated { id, name, color }[]
       // from the server join. We refetch on settle for correct colors, so skip
       // the optimistic board/detail writes when labelIds is the only change.
-      // Title/description/priority keep their F13 optimistic path below.
+      // F15: checklist IS applied optimistically — it is client-owned data
+      // (full-array replace, ids minted client-side), so no server-only join
+      // to reconcile. Title/description/priority/checklist keep the path below.
       const hasAttributeFields =
         vars.dto.title !== undefined ||
         vars.dto.description !== undefined ||
-        vars.dto.priority !== undefined;
+        vars.dto.priority !== undefined ||
+        vars.dto.checklist !== undefined;
       if (previousBoard && hasAttributeFields) {
         queryClient.setQueryData<BoardPayload>(boardKeys.detail(vars.slug), (curr) =>
           curr ? applyPatchToBoard(curr, vars.ticketId, vars.dto) : curr,
@@ -41,6 +44,7 @@ export function useUpdateTicket() {
           title: vars.dto.title ?? previousTicket.title,
           description: vars.dto.description ?? previousTicket.description,
           priority: vars.dto.priority ?? previousTicket.priority,
+          checklist: vars.dto.checklist ?? previousTicket.checklist,
         });
       }
       return { previousBoard, previousTicket, ticketId: vars.ticketId, slug: vars.slug };

@@ -4,7 +4,7 @@ import type { UpdateTicketDto } from '@/types/ticket';
 /**
  * Apply an attribute patch to a board's ticket row (immutable).
  *
- * Spreads title/description/priority from the patch. Skips assigneeId because
+ * Spreads title/description/priority/checklist from the patch. Skips assigneeId because
  * the board ticket stores the nested `assignee` object (not assigneeId) and
  * resolving it requires a user lookup. The server reconciles the assignee on
  * the next board refetch (onSettled invalidation).
@@ -25,6 +25,7 @@ export function applyPatchToBoard(
       if (patch.title !== undefined) next.title = patch.title;
       if (patch.description !== undefined) next.description = patch.description;
       if (patch.priority !== undefined) next.priority = patch.priority;
+      if (patch.checklist !== undefined) next.checklist = patch.checklist;
       return next;
     });
     return { ...column, tickets };
