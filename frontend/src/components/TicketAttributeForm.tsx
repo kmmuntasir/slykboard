@@ -129,14 +129,12 @@ export function TicketAttributeForm({
                 />
             </div>
 
-            {mode === 'edit' && (
-                <div>
-                    <ChecklistEditor
-                        value={watch('checklist')}
-                        onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
-                    />
-                </div>
-            )}
+            <div>
+                <ChecklistEditor
+                    value={watch('checklist')}
+                    onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
+                />
+            </div>
 
             <div className="flex gap-2">
                 <button

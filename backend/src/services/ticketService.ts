@@ -154,6 +154,7 @@ export interface CreateTicketInput {
   labelIds?: string[];
   assigneeId?: string;
   statusColumn?: string; // optional; defaults to project.columns[0].id
+  checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
 }
 
 // F12: create a ticket with a per-project sequential number, bottom of the
@@ -176,7 +177,7 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
     });
   }
 
-  return db.transaction(async (tx) => {
+  const insertedTicket = await db.transaction(async (tx) => {
     const ticketNumber = await allocateTicketNumber(tx, project.id);
 
     // F12 D3: bottom of the resolved column = (max(position) || 0) + POSITION_GAP.
@@ -198,20 +199,21 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         creatorId: input.creatorId,
         assigneeId: input.assigneeId,
         priority: input.priority,
+        checklist: input.checklist,
       })
       .returning();
-    const insertedTicket = inserted!;
-
-    // F14: link labels via the join table after the ticket row exists.
-    // replaceTicketLabels validates all labelIds belong to this project.
-    if (input.labelIds !== undefined) {
-      // tx is structurally compatible with db for replaceTicketLabels's queries;
-      // run outside the closure's tx scope to keep labelService self-contained.
-      // The outer db.transaction will rollback the ticket insert if this throws.
-      await replaceTicketLabels({ ticketId: insertedTicket.id, labelIds: input.labelIds });
-    }
-    return insertedTicket;
+    return inserted!;
   });
+
+  // F15 fix (pre-existing F14 bug): link labels AFTER the transaction commits.
+  // replaceTicketLabels queries via the shared `db` pool, which cannot see the
+  // uncommitted insert inside the txn — calling it inside threw a spurious
+  // "Ticket not found" 404 on every create (the form always sends labelIds: []).
+  // Skip the no-op when labelIds is empty (a new ticket has no labels to clear).
+  if (input.labelIds !== undefined && input.labelIds.length > 0) {
+    await replaceTicketLabels({ ticketId: insertedTicket.id, labelIds: input.labelIds });
+  }
+  return insertedTicket;
 }
 
 // F13 T6: read a single ticket by id, including description. Returns null on miss

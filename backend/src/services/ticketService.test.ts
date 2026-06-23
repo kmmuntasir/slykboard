@@ -772,6 +772,32 @@ describe('ticketService createTicket label linking (F14)', () => {
 
     expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
   });
+
+  it('F15: persists checklist in the insert when provided', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
+    const checklist = [
+      { id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false },
+    ];
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New', checklist });
+
+    expect(bag.lastInsert).not.toBeNull();
+    expect(bag.lastInsert!.checklist).toEqual(checklist);
+  });
+
+  it('F15 fix: empty labelIds [] does NOT call replaceTicketLabels (no-op)', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New', labelIds: [] });
+
+    expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
+  });
 });
 
 describe('ticketService updateTicket checklist patch (F15)', () => {

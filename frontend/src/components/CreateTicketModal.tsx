@@ -22,6 +22,7 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
             assigneeId: values.assigneeId ?? undefined,
             labelIds: values.labelIds,
             statusColumn: columnId,
+            checklist: values.checklist,
         });
         onClose();
     };

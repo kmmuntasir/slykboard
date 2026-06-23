@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { checklistItemSchema } from './tickets.schema';
 
 // F08 D-Slug-Format: validated server-side again (service also normalizes+checks).
 // Accepts the raw input here; service normalizes. Lenient on case so 'slyk' is accepted then normalized.
@@ -43,6 +44,9 @@ export const createTicketBody = z.object({
   labelIds: z.array(z.string().uuid()).optional(),
   assigneeId: z.uuid().optional(),
   statusColumn: z.string().min(1).optional(),
+  // F15: optional checklist at create time. Defaults to [] via the DB column
+  // when omitted; validated with the same sub-schema as the PATCH path.
+  checklist: z.array(checklistItemSchema).max(50).optional(),
 });
 
 export type CreateTicketBody = z.infer<typeof createTicketBody>;

@@ -19,7 +19,8 @@ const moveFields = {
 // F15: checklist sub-item shape. id is a client-generated UUID
 // (crypto.randomUUID); validated as uuid() here. Text capped 200 (title parity),
 // max 50 items. Whole array is replaced on every save (last-write-wins, D4).
-const checklistItemSchema = z.object({
+// Exported so the create-ticket body (projects.schema) reuses the same shape.
+export const checklistItemSchema = z.object({
     id: z.uuid(),
     text: z.string().min(1).max(200),
     done: z.boolean(),

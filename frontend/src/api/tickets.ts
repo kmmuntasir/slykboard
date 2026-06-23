@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { Ticket, UpdateTicketDto } from '../types/ticket';
+import type { ChecklistItem, Ticket, UpdateTicketDto } from '../types/ticket';
 
 export interface MoveTicketRequest {
   statusColumn: string;
@@ -22,6 +22,7 @@ export interface CreateTicketDto {
   labelIds?: string[];
   assigneeId?: string;
   statusColumn?: string;
+  checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
 }
 
 export function createTicket(slug: string, dto: CreateTicketDto): Promise<Ticket> {
