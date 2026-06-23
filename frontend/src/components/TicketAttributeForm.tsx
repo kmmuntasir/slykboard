@@ -2,21 +2,26 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
+import { LabelMultiSelect } from './LabelMultiSelect';
 import { RichTextEditor } from './RichTextEditor';
 import { PrioritySelect } from './PrioritySelect';
 import { UserSelect } from './UserSelect';
 import type { Priority, UpdateTicketDto } from '@/types/ticket';
 
+// F14 T8: labelIds added to the attribute form schema. Controlled via
+// watch/setValue bridging to <LabelMultiSelect> (matches F13 primitive pattern).
 const schema = z.object({
     title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 chars or fewer'),
     description: z.string().max(5000, 'Description must be 5000 chars or fewer'),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
     assigneeId: z.string().uuid().nullable(),
+    labelIds: z.array(z.string().uuid()).default([]),
 });
 type FormValues = z.infer<typeof schema>;
 
 interface TicketAttributeFormProps {
     mode: 'create' | 'edit';
+    projectSlug: string;
     defaultValues: FormValues;
     onSubmit: (values: UpdateTicketDto) => void | Promise<void>;
     onCancel: () => void;
@@ -24,6 +29,7 @@ interface TicketAttributeFormProps {
 
 export function TicketAttributeForm({
     mode,
+    projectSlug,
     defaultValues,
     onSubmit,
     onCancel,
@@ -100,6 +106,14 @@ export function TicketAttributeForm({
                         {errors.assigneeId.message}
                     </p>
                 )}
+            </div>
+
+            <div>
+                <LabelMultiSelect
+                    projectSlug={projectSlug}
+                    value={watch('labelIds')}
+                    onChange={(ids: string[]) => setValue('labelIds', ids)}
+                />
             </div>
 
             <div className="flex gap-2">

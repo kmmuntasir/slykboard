@@ -26,7 +26,13 @@ const boardPayloadMock: BoardPayload = {
                     statusColumn: 'c1',
                     position: 0,
                     priority: 'HIGH',
-                    labels: ['infra'],
+                    labels: [
+                        {
+                            id: '22222222-2222-2222-2222-222222222222',
+                            name: 'infra',
+                            color: '#6B7280',
+                        },
+                    ],
                     assignee: {
                         id: 'u1',
                         fullName: 'Ada Lovelace',

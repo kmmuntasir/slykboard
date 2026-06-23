@@ -39,15 +39,40 @@ vi.mock('./UserSelect', () => ({
         </select>
     ),
 }));
+vi.mock('./LabelMultiSelect', () => ({
+    LabelMultiSelect: ({
+        value,
+        onChange,
+    }: {
+        projectSlug: string;
+        value: string[];
+        onChange: (ids: string[]) => void;
+    }) => (
+        <div aria-label="Labels">
+            <span data-testid="label-value">{value.join(',')}</span>
+            <button
+                type="button"
+                onClick={() => onChange(['11111111-1111-1111-1111-111111111111'])}
+            >
+                Select bug
+            </button>
+            <button type="button" onClick={() => onChange([])}>
+                Clear
+            </button>
+        </div>
+    ),
+}));
 
 import { TicketAttributeForm } from './TicketAttributeForm';
 import type { UpdateTicketDto } from '@/types/ticket';
 
+const PROJECT_SLUG = 'SLYK';
 const baseDefaults = {
     title: '',
     description: '',
     priority: 'MEDIUM' as const,
     assigneeId: null,
+    labelIds: [] as string[],
 };
 
 describe('TicketAttributeForm', () => {
@@ -55,6 +80,7 @@ describe('TicketAttributeForm', () => {
         render(
             <TicketAttributeForm
                 mode="create"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={baseDefaults}
                 onSubmit={vi.fn()}
                 onCancel={vi.fn()}
@@ -64,6 +90,7 @@ describe('TicketAttributeForm', () => {
         expect(screen.getByLabelText('Description')).toBeInTheDocument();
         expect(screen.getByLabelText('Priority')).toBeInTheDocument();
         expect(screen.getByLabelText('Assignee')).toBeInTheDocument();
+        expect(screen.getByLabelText('Labels')).toBeInTheDocument();
         expect(
             screen.getByRole('button', { name: 'Create ticket' }),
         ).toBeInTheDocument();
@@ -75,10 +102,12 @@ describe('TicketAttributeForm', () => {
             description: '<p>prefilled</p>',
             priority: 'HIGH' as const,
             assigneeId: '11111111-1111-1111-1111-111111111111',
+            labelIds: ['22222222-2222-2222-2222-222222222222'],
         };
         render(
             <TicketAttributeForm
                 mode="edit"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={defaults}
                 onSubmit={vi.fn()}
                 onCancel={vi.fn()}
@@ -104,6 +133,7 @@ describe('TicketAttributeForm', () => {
         render(
             <TicketAttributeForm
                 mode="create"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={baseDefaults}
                 onSubmit={onSubmit}
                 onCancel={vi.fn()}
@@ -121,6 +151,7 @@ describe('TicketAttributeForm', () => {
         render(
             <TicketAttributeForm
                 mode="create"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={baseDefaults}
                 onSubmit={onSubmit}
                 onCancel={vi.fn()}
@@ -140,6 +171,7 @@ describe('TicketAttributeForm', () => {
         render(
             <TicketAttributeForm
                 mode="create"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={baseDefaults}
                 onSubmit={onSubmit}
                 onCancel={vi.fn()}
@@ -164,6 +196,7 @@ describe('TicketAttributeForm', () => {
         render(
             <TicketAttributeForm
                 mode="create"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={baseDefaults}
                 onSubmit={onSubmit}
                 onCancel={vi.fn()}
@@ -186,6 +219,57 @@ describe('TicketAttributeForm', () => {
             description: '<p>steps</p>',
             priority: 'HIGH',
             assigneeId: '11111111-1111-1111-1111-111111111111',
+            labelIds: [],
+        });
+    });
+
+    it('label select renders + selecting/deselecting updates the form value', () => {
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        // Initially no labels selected.
+        expect(screen.getByTestId('label-value').textContent).toBe('');
+
+        // Selecting a label via the mocked multi-select fires onChange.
+        fireEvent.click(screen.getByRole('button', { name: 'Select bug' }));
+        expect(screen.getByTestId('label-value').textContent).toBe(
+            '11111111-1111-1111-1111-111111111111',
+        );
+
+        // Deselecting clears the value.
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(screen.getByTestId('label-value').textContent).toBe('');
+    });
+
+    it('submit includes labelIds when labels are selected', async () => {
+        const onSubmit = vi.fn<(dto: UpdateTicketDto) => void>();
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={onSubmit}
+                onCancel={vi.fn()}
+            />,
+        );
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New bug' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Select bug' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
+        await waitFor(() => {
+            expect(onSubmit).toHaveBeenCalledTimes(1);
+        });
+        expect(onSubmit).toHaveBeenCalledWith({
+            title: 'New bug',
+            description: '',
+            priority: 'MEDIUM',
+            assigneeId: null,
+            labelIds: ['11111111-1111-1111-1111-111111111111'],
         });
     });
 
@@ -195,6 +279,7 @@ describe('TicketAttributeForm', () => {
         render(
             <TicketAttributeForm
                 mode="create"
+                projectSlug={PROJECT_SLUG}
                 defaultValues={baseDefaults}
                 onSubmit={onSubmit}
                 onCancel={onCancel}

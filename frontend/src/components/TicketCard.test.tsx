@@ -3,8 +3,14 @@ import { screen, fireEvent } from '@testing-library/react';
 import { TicketCard } from './TicketCard';
 import { renderInDnd } from '@/test/dndWrapper';
 import type { Ticket } from '@/types/ticket';
+import type { Label } from '@/types/label';
 
 describe('TicketCard', () => {
+    const frontendLabel: Label = {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'frontend',
+        color: '#3B82F6',
+    };
     const baseTicket: Ticket = {
         id: 't1',
         ticketNumber: 101,
@@ -13,7 +19,7 @@ describe('TicketCard', () => {
         statusColumn: 'TODO',
         position: 0,
         priority: 'HIGH',
-        labels: ['frontend'],
+        labels: [frontendLabel],
         assignee: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
         creatorId: 'c1',
         createdAt: '2026-06-01T00:00:00.000Z',
@@ -27,6 +33,19 @@ describe('TicketCard', () => {
         expect(screen.getByLabelText('Priority: High')).toBeInTheDocument();
         expect(screen.getByText('frontend')).toBeInTheDocument();
         expect(screen.getByRole('img', { name: 'Ada Lovelace' })).toBeInTheDocument();
+    });
+
+    it('renders labels as colored LabelChips with the label color as background', () => {
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
+        const chip = screen.getByText('frontend');
+        // LabelChip renders an inline-styled span wrapping the label name.
+        expect(chip.closest('span')?.style.backgroundColor).toBe('rgb(59, 130, 246)');
+    });
+
+    it('renders no label list when ticket has no labels', () => {
+        const noLabels = { ...baseTicket, labels: [] };
+        renderInDnd(<TicketCard ticket={noLabels} projectSlug="SLYK" index={0} />);
+        expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument();
     });
 
     it('renders Unassigned avatar when assignee is null', () => {

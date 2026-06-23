@@ -20,6 +20,7 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
             description: values.description ?? undefined,
             priority: values.priority,
             assigneeId: values.assigneeId ?? undefined,
+            labelIds: values.labelIds,
             statusColumn: columnId,
         });
         onClose();
@@ -36,11 +37,13 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
                 <h2 className="mb-4 text-lg font-semibold">Create ticket</h2>
                 <TicketAttributeForm
                     mode="create"
+                    projectSlug={slug}
                     defaultValues={{
                         title: '',
                         description: '',
                         priority: 'MEDIUM',
                         assigneeId: null,
+                        labelIds: [],
                     }}
                     onSubmit={handleSubmit}
                     onCancel={onClose}

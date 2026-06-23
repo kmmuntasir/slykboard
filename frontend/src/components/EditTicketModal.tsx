@@ -41,11 +41,13 @@ export function EditTicketModal({ open, onClose, ticketId, slug }: EditTicketMod
                 ) : (
                     <TicketAttributeForm
                         mode="edit"
+                        projectSlug={slug}
                         defaultValues={{
                             title: ticket.title,
                             description: ticket.description ?? '',
                             priority: ticket.priority,
                             assigneeId: ticket.assignee?.id ?? null,
+                            labelIds: ticket.labels.map((l) => l.id),
                         }}
                         onSubmit={handleSubmit}
                         onCancel={onClose}

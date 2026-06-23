@@ -246,4 +246,43 @@ describe('useUpdateTicket', () => {
     // Settle still invalidates the board (server reconcile happens on refetch).
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: boardKeys.all });
   });
+
+  it('labelIds patch skips optimistic writes + invalidates board on settle', async () => {
+    const board = seedBoard();
+    const serverUpdated = makeTicket('t1', {
+      labels: [{ id: 'l1', name: 'bug', color: '#FF0000' }],
+    });
+    vi.mocked(updateTicket).mockResolvedValue(serverUpdated);
+
+    const queryClient = newQueryClient();
+    queryClient.setQueryData(BOARD_KEY, board);
+
+    const setSpy = vi.spyOn(queryClient, 'setQueryData');
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useUpdateTicket(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const vars: UpdateTicketVariables = {
+      ticketId: 't1',
+      dto: { labelIds: ['l1'] },
+      slug: SLUG,
+    };
+    await act(async () => {
+      await result.current.mutateAsync(vars);
+    });
+
+    // No optimistic function-form board write for labelIds-only patches:
+    // the patch carries IDs, but Ticket.labels needs the hydrated join.
+    const optimisticBoardWrite = setSpy.mock.calls.find(
+      ([key, value]) =>
+        JSON.stringify(key) === JSON.stringify(BOARD_KEY) && typeof value === 'function',
+    );
+    expect(optimisticBoardWrite).toBeUndefined();
+
+    // Settle invalidates the board family so the refetch carries correct colors.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: boardKeys.all });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ticketKeys.detail('t1') });
+  });
 });

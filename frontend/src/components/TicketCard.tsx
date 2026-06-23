@@ -1,6 +1,7 @@
 import { Draggable } from '@hello-pangea/dnd';
 import type { Ticket } from '@/types/ticket';
 import { AssigneeAvatar } from './AssigneeAvatar';
+import { LabelChip } from './LabelChip';
 import { PriorityBadge } from './PriorityBadge';
 
 // F12 D2: display ticket IDs zero-padded to 3 digits (SLYK-001). Display-only;
@@ -39,11 +40,8 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                         {ticket.labels.length > 0 && (
                             <ul className="flex flex-wrap gap-1" aria-label="Labels">
                                 {ticket.labels.map((label) => (
-                                    <li
-                                        key={label}
-                                        className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground"
-                                    >
-                                        {label}
+                                    <li key={label.id}>
+                                        <LabelChip label={label} />
                                     </li>
                                 ))}
                             </ul>

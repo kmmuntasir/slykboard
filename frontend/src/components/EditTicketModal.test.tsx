@@ -41,6 +41,22 @@ vi.mock('./UserSelect', () => ({
         </select>
     ),
 }));
+vi.mock('./LabelMultiSelect', () => ({
+    LabelMultiSelect: ({
+        value,
+        onChange,
+    }: {
+        projectSlug: string;
+        value: string[];
+        onChange: (ids: string[]) => void;
+    }) => (
+        <div aria-label="Labels">
+            <button type="button" onClick={() => onChange(value)}>
+                labels
+            </button>
+        </div>
+    ),
+}));
 
 const fetchTicket = vi.fn();
 const updateMutateAsync = vi.fn();
