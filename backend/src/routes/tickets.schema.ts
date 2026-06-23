@@ -1,16 +1,48 @@
 import { z } from 'zod'
 
-// F11 D2: generic PATCH /api/tickets/:ticketId path param (uuid). F13 widens the body later.
 export const ticketIdParam = z.object({
     ticketId: z.uuid(),
 })
 
-// F11 D2: move = { statusColumn (Column.id text), position (finite double). }
-// Column-membership + UNSORTED_BUCKET_ID rejection enforced in ticketService (needs project context).
-export const moveTicketBody = z.object({
-    statusColumn: z.string().min(1),
-    position: z.number().finite(),
-})
+const priorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'])
+
+// F13: merged PATCH body — F11 move fields (preserved) + F13 attribute fields.
+// Any non-empty subset is accepted. superRefine enforces two invariants:
+//   1) body is non-empty (at least one field set)
+//   2) F11 invariant: statusColumn and position come as a pair — the move-only
+//      path in ticketService needs both. Attribute fields are independent.
+const moveFields = {
+    statusColumn: z.string().min(1).optional(),
+    position: z.number().finite().optional(),
+}
+
+const attributeFields = {
+    title: z.string().min(1).max(200).optional(),
+    description: z.string().max(5000).nullable().optional(),
+    priority: priorityEnum.optional(),
+    assigneeId: z.uuid().nullable().optional(),
+}
+
+export const updateTicketBody = z
+    .object({ ...moveFields, ...attributeFields })
+    .superRefine((body, ctx) => {
+        if (Object.keys(body).length === 0) {
+            ctx.addIssue({
+                code: 'custom',
+                message: 'Body must include at least one field',
+            })
+            return
+        }
+        const hasStatus = body.statusColumn !== undefined
+        const hasPos = body.position !== undefined
+        if (hasStatus !== hasPos) {
+            ctx.addIssue({
+                code: 'custom',
+                message: 'statusColumn and position must both be present when moving',
+                path: [hasStatus ? 'position' : 'statusColumn'],
+            })
+        }
+    })
 
 export type TicketIdParam = z.infer<typeof ticketIdParam>
-export type MoveTicketBody = z.infer<typeof moveTicketBody>
+export type UpdateTicketBody = z.infer<typeof updateTicketBody>
