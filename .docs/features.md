@@ -53,7 +53,7 @@
 **Phase 3 — Tickets**
 - [x] **F12** Ticket creation with sequential IDs — ✨ Feature · _deps: F09_ — DONE (T1-T9 ✅; typecheck/lint/test/build green; backend live smoke incl concurrency passed 2026-06-23; FE browser smoke passed 2026-06-23)
 - [x] **F13** Ticket attributes: title, description, assignee, priority — ✨ Feature · _deps: F12_ — DONE (T1-T15 ✅; typecheck/lint/test/build green; live browser smoke passed 2026-06-23)
-- [ ] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_
+- [x] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_ — DONE (T1-T10 ✅; typecheck/lint/format/test/build green; 0006 migration applied + backfill verified; live browser smoke passed 2026-06-24)
 - [ ] **F15** Checklist — ✨ Feature · _deps: F12_
 - [ ] **F16** Ticket detail modal (view & edit) — ✨ Feature · _deps: F13, F14, F15_
 - [ ] **F17** Ticket permissions (admin-only delete) — ✨ Feature · _deps: F16, F18_
