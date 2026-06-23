@@ -82,6 +82,7 @@ const TICKET: Ticket = {
     labels: [],
     checklist: [],
     assignee: { id: '11111111-1111-1111-1111-111111111111', fullName: 'Ada', avatarUrl: null },
+    creator: null,
     creatorId: 'c1',
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-01T00:00:00.000Z',

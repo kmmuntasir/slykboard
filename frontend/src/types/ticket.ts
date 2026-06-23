@@ -18,6 +18,14 @@ export interface Assignee {
   avatarUrl: string | null;
 }
 
+// F16: resolved ticket creator (left-joined in getTicket). Mirrors Assignee.
+// null when the creator's user row is missing/deleted (FK-dangle guard).
+export interface Creator {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+}
+
 // F15 D1: checklist sub-items on a ticket. id is client-generated (crypto.randomUUID);
 // backend validates uuid + text cap + max count. Whole array replaced on save (D4).
 export interface ChecklistItem {
@@ -39,6 +47,7 @@ export interface Ticket {
   labels: Label[]; // F14: hydrated { id, name, color }[] (was bare string[])
   checklist: ChecklistItem[]; // F15: sub-items { id, text, done }[]
   assignee: Assignee | null;
+  creator: Creator | null; // F16: resolved creator (null if user deleted)
   creatorId: string;
   createdAt: string; // ISO
   updatedAt: string;

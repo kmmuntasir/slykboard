@@ -22,6 +22,7 @@ describe('TicketCard', () => {
         labels: [frontendLabel],
         checklist: [],
         assignee: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
+        creator: null,
         creatorId: 'c1',
         createdAt: '2026-06-01T00:00:00.000Z',
         updatedAt: '2026-06-01T00:00:00.000Z',
