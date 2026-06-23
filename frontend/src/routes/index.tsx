@@ -4,6 +4,7 @@ import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
 import { RequireRole } from '@/components/RequireRole';
 import { BoardPage } from '@/pages/BoardPage';
+import { ProjectSettingsPage } from '@/pages/ProjectSettingsPage';
 import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -47,6 +48,10 @@ export const router = createBrowserRouter([
                             { path: '/', element: <IndexRedirect /> },
                             { path: '/projects', element: <ProjectsPage /> },
                             { path: '/projects/:slug', element: <BoardPage /> },
+                            {
+                                path: '/projects/:slug/settings',
+                                element: <ProjectSettingsPage />,
+                            },
                             { path: '/reports', element: <ReportsPage /> },
                             {
                                 path: '/settings',
