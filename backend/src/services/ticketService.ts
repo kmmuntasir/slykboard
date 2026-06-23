@@ -1,6 +1,7 @@
 import { and, asc, eq, max, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { projectSequences, projects, tickets } from '../db/schema';
+import { sanitizeDescription } from '../utils/sanitizeHtml';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { getProjectBySlug } from './projectService';
@@ -14,6 +15,20 @@ export const POSITION_GAP = 65536;
 export const POSITION_EPSILON = 1e-6;
 
 export type TicketRow = typeof tickets.$inferSelect;
+
+// F13: Priority union mirrored from schema priorityEnum. (Schema doesn't export
+// the inferred type yet; keep this local to avoid widening the T6 scope.)
+export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
+
+// F13 T6: partial patch for title/description/priority/assigneeId. `description`
+// and `assigneeId` are nullable — `null` is a real value (clear), distinct from
+// `undefined` (leave untouched). Route layer validates Priority; service trusts the type.
+export type TicketPatch = {
+  title?: string;
+  description?: string | null;
+  priority?: Priority;
+  assigneeId?: string | null;
+};
 
 export interface MoveTicketInput {
   ticketId: string;
@@ -181,4 +196,64 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
       .returning();
     return inserted!;
   });
+}
+
+// F13 T6: read a single ticket by id, including description. Returns null on miss
+// (route layer maps to 404). Used by the F13 detail/edit endpoint and the F16 modal.
+export async function getTicket(ticketId: string): Promise<TicketRow | null> {
+  const rows = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  const row = rows[0];
+  return row ?? null;
+}
+
+// F13 T6: partial update of ticket attributes. Accepts any subset of
+// {title, description, priority, assigneeId}; `undefined` means leave untouched,
+// `null` for description/assigneeId means clear. Description is sanitized on write
+// via the T2 util. Returns {old, new} so F18 can diff for ActivityLogs without
+// re-querying. `actingUserId` is accepted for a stable route contract but has no
+// behavior in F13 (F18 will stamp audit metadata).
+export async function updateTicket(args: {
+  ticketId: string;
+  patch: TicketPatch;
+  actingUserId: string;
+}): Promise<{ old: TicketRow; new: TicketRow }> {
+  const { ticketId, patch } = args;
+  const oldRows = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  const oldRow = oldRows[0];
+  if (!oldRow) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
+      details: { ticketId },
+    });
+  }
+
+  const updateSet: Partial<TicketRow> = { updatedAt: new Date() };
+  if (patch.title !== undefined) {
+    updateSet.title = patch.title;
+  }
+  if (patch.description !== undefined) {
+    updateSet.description = patch.description === null ? null : sanitizeDescription(patch.description);
+  }
+  if (patch.priority !== undefined) {
+    updateSet.priority = patch.priority;
+  }
+  if (patch.assigneeId !== undefined) {
+    updateSet.assigneeId = patch.assigneeId;
+  }
+
+  const updated = await db
+    .update(tickets)
+    .set(updateSet)
+    .where(eq(tickets.id, ticketId))
+    .returning();
+  const newRow = updated[0];
+  if (!newRow) {
+    throw new AppError(ErrorCode.INTERNAL_ERROR, `Update returned no row for ticket '${ticketId}'`, {
+      details: { ticketId },
+    });
+  }
+
+  // TODO(F18): diff {old, new} and write ActivityLogs here. REQ-5.2 covers
+  // priority/assignee old→new; REQ-5.3 covers description (CONTENT_UPDATED).
+  // F13 returns the diff shape; F18 hooks at this seam.
+  return { old: oldRow, new: newRow };
 }

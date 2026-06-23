@@ -13,6 +13,11 @@ const bag = vi.hoisted(() => ({
   insertReturn: [] as Array<Record<string, unknown>>, // tx.insert(tickets).values().returning()
   lastInsert: null as Record<string, unknown> | null, // captured .values() arg
   getProjectBySlug: vi.fn(), // mocked ./projectService
+  // F13 T6: updateTicket (bare db.update path, no txn)
+  updateReturn: [] as Array<Record<string, unknown>>, // db.update().returning() result
+  sanitizeMock: vi.fn(
+    (input: string | null | undefined): string => `<clean>${input ?? ''}</clean>`,
+  ), // mocked sanitizeDescription
 }));
 
 vi.mock('../db/client', async () => {
@@ -57,6 +62,14 @@ vi.mock('../db/client', async () => {
       };
       return chain;
     },
+    // F13 T6: bare db.update chain (no txn). Captures the set arg into updateSets
+    // (same slot as tx.update) and returns updateReturn from .returning().
+    update: () => ({
+      set: (setArg: Record<string, unknown>) => {
+        bag.updateSets.push(setArg);
+        return { where: () => ({ returning: () => Promise.resolve(bag.updateReturn) }) };
+      },
+    }),
     transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
       bag.txnInvoked();
       const tx = {
@@ -84,15 +97,22 @@ vi.mock('./projectService', () => ({
   getProjectBySlug: (slug: string) => bag.getProjectBySlug(slug),
 }));
 
+vi.mock('../utils/sanitizeHtml', () => ({
+  sanitizeDescription: (input: string | null | undefined) => bag.sanitizeMock(input),
+}));
+
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import {
   allocateTicketNumber,
   createTicket,
+  getTicket,
   POSITION_EPSILON,
   POSITION_GAP,
   moveTicket,
+  updateTicket,
 } from './ticketService';
+import type { TicketPatch } from './ticketService';
 import { UNSORTED_BUCKET_ID } from './boardService';
 
 function resetBag() {
@@ -107,6 +127,11 @@ function resetBag() {
   bag.insertReturn = [];
   bag.lastInsert = null;
   bag.getProjectBySlug.mockReset();
+  bag.updateReturn = [];
+  bag.sanitizeMock.mockReset();
+  bag.sanitizeMock.mockImplementation(
+    (input: string | null | undefined) => `<clean>${input ?? ''}</clean>`,
+  );
 }
 
 const TICKET_ID = 't1';
@@ -437,5 +462,174 @@ describe('ticketService createTicket (F12)', () => {
 
     expect(result.ticketNumber).toBe(7);
     expect(result.creatorId).toBe('u1');
+  });
+});
+
+describe('ticketService getTicket (F13 T6)', () => {
+  beforeEach(resetBag);
+
+  it('returns the full TicketRow including description for an existing id', async () => {
+    bag.loadTicket.mockResolvedValue([
+      makeTicket({ id: TICKET_ID, description: '<p>hi</p>' }),
+    ]);
+
+    const result = await getTicket(TICKET_ID);
+
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe(TICKET_ID);
+    expect(result!.description).toBe('<p>hi</p>');
+  });
+
+  it('returns null when no ticket matches', async () => {
+    bag.loadTicket.mockResolvedValue([]);
+
+    const result = await getTicket('nope');
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('ticketService updateTicket (F13 T6)', () => {
+  beforeEach(resetBag);
+
+  it('throws NOT_FOUND when the ticket is absent and does NOT call update', async () => {
+    bag.loadTicket.mockResolvedValue([]);
+
+    const error = await updateTicket({
+      ticketId: 'missing',
+      patch: { title: 'X' },
+      actingUserId: 'u1',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.NOT_FOUND);
+    expect(bag.updateSets.length).toBe(0);
+    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+  });
+
+  it('title-only patch sets only title + updatedAt and returns {old, new} snapshots', async () => {
+    const before = makeTicket({ id: TICKET_ID, title: 'Old' });
+    const after = makeTicket({ id: TICKET_ID, title: 'New' });
+    bag.loadTicket.mockResolvedValue([before]);
+    bag.updateReturn = [after];
+
+    const result = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'New' },
+      actingUserId: 'u1',
+    });
+
+    expect(result.old).toBe(before);
+    expect(result.new).toBe(after);
+    expect(bag.updateSets.length).toBe(1);
+    const setArg = bag.updateSets[0]!;
+    expect(setArg.title).toBe('New');
+    expect(setArg.updatedAt).toBeInstanceOf(Date);
+    // only title + updatedAt keys
+    expect(Object.keys(setArg).sort()).toEqual(['title', 'updatedAt']);
+    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+  });
+
+  it('description patch routes through sanitizeDescription exactly once with the input', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, description: '<clean>raw</clean>' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { description: 'raw' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.sanitizeMock).toHaveBeenCalledTimes(1);
+    expect(bag.sanitizeMock).toHaveBeenCalledWith('raw');
+    expect(bag.updateSets[0]!.description).toBe('<clean>raw</clean>');
+  });
+
+  it('description: null patch sets description to null and does NOT invoke sanitizer', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, description: '<p>x</p>' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, description: null })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { description: null },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+    expect(bag.updateSets[0]!.description).toBeNull();
+  });
+
+  it('priority patch writes the typed Priority value', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, priority: 'MEDIUM' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, priority: 'URGENT' })];
+
+    const patch: TicketPatch = { priority: 'URGENT' };
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch,
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.priority).toBe('URGENT');
+    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+  });
+
+  it('assigneeId: null patch unassigns (writes null)', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: 'u2' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, assigneeId: null })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { assigneeId: null },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.assigneeId).toBeNull();
+  });
+
+  it('assigneeId: uuid patch sets the assigneeId', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: null })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, assigneeId: 'u9' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { assigneeId: 'u9' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.assigneeId).toBe('u9');
+  });
+
+  it('throws INTERNAL_ERROR when the update returns no row (defensive)', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [];
+
+    const error = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'X' },
+      actingUserId: 'u1',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.INTERNAL_ERROR);
+  });
+
+  it('multi-field patch carries every provided key through one update call', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'T2', priority: 'HIGH' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'T2', priority: 'HIGH', assigneeId: 'u3' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets.length).toBe(1);
+    const setArg = bag.updateSets[0]!;
+    expect(setArg.title).toBe('T2');
+    expect(setArg.priority).toBe('HIGH');
+    expect(setArg.assigneeId).toBe('u3');
+    expect(setArg.updatedAt).toBeInstanceOf(Date);
   });
 });
