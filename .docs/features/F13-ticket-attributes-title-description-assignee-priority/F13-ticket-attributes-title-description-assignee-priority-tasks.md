@@ -125,12 +125,12 @@
 > - **Slug-rename / displayId immutability** → **F27** (inherited from F12). No change in F13.
 > - **Custom priority levels / custom ticket fields** → explicitly out per PRD §4.
 
-> **Owner sign-off needed (5 questions — surface in chat before Batch 1 merges):**
-> - **Q1 (edit endpoint shape):** single widened PATCH (recommended, merged move + attributes) vs split (`PATCH /:id/move` + `PATCH /:id`). Recommend merged — F11 already mounted; `tickets.schema.ts:3` comment says "F13 widens the body later".
-> - **Q2 (user-list endpoint):** `GET /api/users` workspace-wide (recommended) vs `GET /api/projects/:slug/users` (would imply per-project membership the data model lacks). Recommend workspace-wide.
-> - **Q3 (UI surface):** create modal (recommended) vs inline-expand; click-card behavior — open edit form directly (F13, recommended) vs open detail modal (F16). Recommend F13 ships modal + inline edit; F16 hosts unified detail later.
-> - **Q4 (ticket-detail endpoint):** ship `GET /api/tickets/:id` now (recommended) vs defer to F16. Recommend now — F13 edit form needs description.
-> - **Q5 (activity-log signal):** F13 `updateTicket` returns `{ old, new }` diff for F18 (recommended) vs F18 re-queries. Recommend service returns old + new.
+> **Owner sign-off RESOLVED (2026-06-23) — all 5 recommendations accepted:**
+> - **Q1 (edit endpoint shape):** ✅ **Merged** — single widened `PATCH /api/tickets/:ticketId` (move + attributes in one body). F11 already mounted; `tickets.schema.ts:3` comment "F13 widens the body later" honored.
+> - **Q2 (user-list endpoint):** ✅ **Workspace-wide** — `GET /api/users` behind `authenticate`, returns `{id, fullName, avatarUrl}[]` only (no email/role). Matches no-ProjectMembers data model.
+> - **Q3 (UI surface):** ✅ **Modal** — `CreateTicketModal` for create; inline edit form on card click. F16 hosts unified detail modal later.
+> - **Q4 (ticket-detail endpoint):** ✅ **Ship in F13** — `GET /api/tickets/:id` returns full row incl description.
+> - **Q5 (activity-log signal):** ✅ **Return `{old, new}`** — `ticketService.updateTicket` returns diff for F18 to observe. F13 does NOT write ActivityLogs.
 
 ---
 
