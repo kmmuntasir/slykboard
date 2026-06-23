@@ -3,6 +3,11 @@ import type { Ticket } from '@/types/ticket';
 import { AssigneeAvatar } from './AssigneeAvatar';
 import { PriorityBadge } from './PriorityBadge';
 
+// F12 D2: display ticket IDs zero-padded to 3 digits (SLYK-001). Display-only;
+// storage holds the raw int (Ticket.ticketNumber). padStart is a minimum width,
+// so SLYK-1000+ render unpadded beyond 3 digits.
+const TICKET_NUMBER_DISPLAY_WIDTH = 3;
+
 interface TicketCardProps {
     ticket: Ticket;
     projectSlug: string;
@@ -10,7 +15,7 @@ interface TicketCardProps {
 }
 
 export function TicketCard({ ticket, projectSlug, index }: TicketCardProps) {
-    const ticketId = `${projectSlug}-${ticket.ticketNumber}`; // REQ-3.1
+    const ticketId = `${projectSlug}-${String(ticket.ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`; // REQ-3.1, F12 D2
     return (
         <Draggable draggableId={ticket.id} index={index}>
             {(provided) => (

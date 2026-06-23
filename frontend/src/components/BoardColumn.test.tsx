@@ -31,7 +31,7 @@ describe('BoardColumn', () => {
         const ids = within(section)
             .getAllByRole('button', { name: /Ticket SLYK-\d+: Title \d+/ })
             .map((el) => el.getAttribute('aria-label'));
-        expect(ids).toEqual(['Ticket SLYK-20: Title 20', 'Ticket SLYK-10: Title 10']);
+        expect(ids).toEqual(['Ticket SLYK-020: Title 20', 'Ticket SLYK-010: Title 10']);
     });
 
     it('renders count of tickets', () => {

@@ -22,6 +22,6 @@ describe('UnsortedBucket', () => {
         renderInDnd(<UnsortedBucket tickets={[ticket]} projectSlug="SLYK" />);
         const column = screen.getByLabelText('Column Unsorted');
         expect(column).toHaveAttribute('data-column-id', '__unsorted__');
-        expect(screen.getByText('SLYK-7')).toBeInTheDocument();
+        expect(screen.getByText('SLYK-007')).toBeInTheDocument();
     });
 });
