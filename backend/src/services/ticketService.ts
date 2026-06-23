@@ -1,6 +1,7 @@
 import { and, asc, eq, max, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
-import { projectSequences, projects, tickets } from '../db/schema';
+import { projectSequences, projects, tickets, users } from '../db/schema';
 import { sanitizeDescription } from '../utils/sanitizeHtml';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
@@ -18,6 +19,19 @@ export const POSITION_GAP = 65536;
 export const POSITION_EPSILON = 1e-6;
 
 export type TicketRow = typeof tickets.$inferSelect;
+
+// F16: resolved creator/assignee actor shape (mirrors boardService BoardAssignee).
+// null when the FK user row is missing/deleted (FK-dangle guard).
+export interface TicketActor {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+}
+
+// F16: alias the users table twice so getTicket can left-join BOTH the creator
+// and the assignee in one query. Created once at module load (standard Drizzle).
+const creatorUser = alias(users, 'ticket_creator');
+const assigneeUser = alias(users, 'ticket_assignee');
 
 // F13: Priority union mirrored from schema priorityEnum. (Schema doesn't export
 // the inferred type yet; keep this local to avoid widening the T6 scope.)
@@ -220,14 +234,56 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
 // (route layer maps to 404). Used by the F13 detail/edit endpoint and the F16 modal.
 // F14: hydrate the ticket's labels ({id,name,color}[]) so the edit modal can
 // pre-select them — matches the board payload shape (boardService hydrates too).
+// F16: left-join users twice to resolve BOTH creator and assignee into
+// {id,fullName,avatarUrl} objects (mirrors boardService's FK-dangle guard at
+// boardService.ts:96-108). No migration — creator_id/assignee_id FKs already exist.
 export async function getTicket(
   ticketId: string,
-): Promise<(TicketRow & { labels: HydratedLabel[] }) | null> {
-  const rows = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+): Promise<
+  (TicketRow & {
+    labels: HydratedLabel[];
+    creator: TicketActor | null;
+    assignee: TicketActor | null;
+  }) | null
+> {
+  const rows = await db
+    .select({
+      ticket: tickets,
+      creatorId: creatorUser.id,
+      creatorFullName: creatorUser.fullName,
+      creatorAvatarUrl: creatorUser.avatarUrl,
+      assigneeId: assigneeUser.id,
+      assigneeFullName: assigneeUser.fullName,
+      assigneeAvatarUrl: assigneeUser.avatarUrl,
+    })
+    .from(tickets)
+    .leftJoin(creatorUser, eq(creatorUser.id, tickets.creatorId))
+    .leftJoin(assigneeUser, eq(assigneeUser.id, tickets.assigneeId))
+    .where(eq(tickets.id, ticketId))
+    .limit(1);
   const row = rows[0];
   if (!row) return null;
   const labelMap = await hydrateLabelsForTickets([ticketId]);
-  return { ...row, labels: labelMap.get(ticketId) ?? [] };
+  return {
+    ...row.ticket,
+    creator:
+      row.creatorId === null
+        ? null
+        : {
+            id: row.creatorId,
+            fullName: row.creatorFullName ?? 'Unknown user',
+            avatarUrl: row.creatorAvatarUrl,
+          },
+    assignee:
+      row.assigneeId === null
+        ? null
+        : {
+            id: row.assigneeId,
+            fullName: row.assigneeFullName ?? 'Unknown user',
+            avatarUrl: row.assigneeAvatarUrl,
+          },
+    labels: labelMap.get(ticketId) ?? [],
+  };
 }
 
 // F13 T6: partial update of ticket attributes. Accepts any subset of

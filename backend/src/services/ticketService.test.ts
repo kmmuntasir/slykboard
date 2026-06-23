@@ -57,7 +57,15 @@ vi.mock('../db/client', async () => {
     select: () => {
       const chain = {
         from: (table: unknown) => {
-          if (table === tickets) return { where: () => ({ limit: () => bag.loadTicket() }) };
+          if (table === tickets) {
+            // F16: getTicket left-joins users twice before where/limit; moveTicket
+            // calls where/limit directly. leftJoin is a no-op returning a fresh chain.
+            const makeTicketChain = () => ({
+              leftJoin: () => makeTicketChain(),
+              where: () => ({ limit: () => bag.loadTicket() }),
+            });
+            return makeTicketChain();
+          }
           if (table === projects) return { where: () => ({ limit: () => bag.loadProject() }) };
           return chain;
         },
@@ -188,6 +196,28 @@ function makeProject(over: Partial<Record<string, unknown>> = {}) {
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
+  };
+}
+
+// F16: getTicket now returns a joined row ({ticket, creatorId, creatorFullName,
+// creatorAvatarUrl, assigneeId, ...}). Mirror that shape for the getTicket tests.
+function makeJoinedTicket(over: {
+  ticket?: Partial<Record<string, unknown>>;
+  creatorId?: string | null;
+  creatorFullName?: string | null;
+  creatorAvatarUrl?: string | null;
+  assigneeId?: string | null;
+  assigneeFullName?: string | null;
+  assigneeAvatarUrl?: string | null;
+} = {}) {
+  return {
+    ticket: makeTicket(over.ticket ?? {}),
+    creatorId: over.creatorId ?? null,
+    creatorFullName: over.creatorFullName ?? null,
+    creatorAvatarUrl: over.creatorAvatarUrl ?? null,
+    assigneeId: over.assigneeId ?? null,
+    assigneeFullName: over.assigneeFullName ?? null,
+    assigneeAvatarUrl: over.assigneeAvatarUrl ?? null,
   };
 }
 
@@ -482,9 +512,17 @@ describe('ticketService createTicket (F12)', () => {
 describe('ticketService getTicket (F13 T6)', () => {
   beforeEach(resetBag);
 
-  it('returns the full TicketRow including description for an existing id', async () => {
+  it('returns the full TicketRow + resolved creator/assignee including description', async () => {
     bag.loadTicket.mockResolvedValue([
-      makeTicket({ id: TICKET_ID, description: '<p>hi</p>' }),
+      makeJoinedTicket({
+        ticket: { id: TICKET_ID, description: '<p>hi</p>' },
+        creatorId: 'u1',
+        creatorFullName: 'Muntasir',
+        creatorAvatarUrl: 'http://x/a.png',
+        assigneeId: 'u2',
+        assigneeFullName: 'Ada',
+        assigneeAvatarUrl: null,
+      }),
     ]);
 
     const result = await getTicket(TICKET_ID);
@@ -492,6 +530,8 @@ describe('ticketService getTicket (F13 T6)', () => {
     expect(result).not.toBeNull();
     expect(result!.id).toBe(TICKET_ID);
     expect(result!.description).toBe('<p>hi</p>');
+    expect(result!.creator).toEqual({ id: 'u1', fullName: 'Muntasir', avatarUrl: 'http://x/a.png' });
+    expect(result!.assignee).toEqual({ id: 'u2', fullName: 'Ada', avatarUrl: null });
   });
 
   it('returns null when no ticket matches', async () => {
@@ -503,7 +543,9 @@ describe('ticketService getTicket (F13 T6)', () => {
   });
 
   it('F14: hydrates labels onto the returned ticket', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicket.mockResolvedValue([
+      makeJoinedTicket({ ticket: { id: TICKET_ID }, creatorId: 'u1', creatorFullName: 'M' }),
+    ]);
     const label = { id: 'lbl-1', name: 'Bug', color: '#EF4444' };
     bag.hydrateLabelsForTickets.mockResolvedValue(new Map([[TICKET_ID, [label]]]));
 
@@ -511,6 +553,34 @@ describe('ticketService getTicket (F13 T6)', () => {
 
     expect(result?.labels).toEqual([label]);
     expect(bag.hydrateLabelsForTickets).toHaveBeenCalledWith([TICKET_ID]);
+  });
+
+  it('F16: FK-dangle — missing creator/assignee user row → null actor (no crash)', async () => {
+    bag.loadTicket.mockResolvedValue([
+      makeJoinedTicket({ ticket: { id: TICKET_ID }, creatorId: null, assigneeId: null }),
+    ]);
+
+    const result = await getTicket(TICKET_ID);
+
+    expect(result?.creator).toBeNull();
+    expect(result?.assignee).toBeNull();
+  });
+
+  it('F16: null joined fullName → "Unknown user" fallback', async () => {
+    bag.loadTicket.mockResolvedValue([
+      makeJoinedTicket({
+        ticket: { id: TICKET_ID },
+        creatorId: 'u1',
+        creatorFullName: null,
+        assigneeId: 'u2',
+        assigneeFullName: null,
+      }),
+    ]);
+
+    const result = await getTicket(TICKET_ID);
+
+    expect(result?.creator?.fullName).toBe('Unknown user');
+    expect(result?.assignee?.fullName).toBe('Unknown user');
   });
 });
 
