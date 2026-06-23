@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 
 import { db } from '../db/client';
-import { projects, type Column } from '../db/schema';
+import { projectSequences, projects, START_TICKET_NUMBER, type Column } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { isReservedSlug, isValidSlug, normalizeSlug } from '../utils/slug';
@@ -56,16 +56,30 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectR
       ? input.columns.map((column) => ({ id: column.id ?? randomUUID(), name: column.name }))
       : withIds(DEFAULT_COLUMNS);
 
-  const [row] = await db
-    .insert(projects)
-    .values({
-      name: input.name,
-      slug,
-      columns,
-      creatorId: input.creatorId,
-    })
-    .returning();
-  return row!;
+  // F12 D1: insert the project AND seed its ticket_number counter in one
+  // transaction so allocateTicketNumber never observes a missing
+  // project_sequences row. A fresh project has no tickets, so the counter
+  // starts at START_TICKET_NUMBER (= 1, SLYK-001).
+  const row = await db.transaction(async (tx) => {
+    const [project] = await tx
+      .insert(projects)
+      .values({
+        name: input.name,
+        slug,
+        columns,
+        creatorId: input.creatorId,
+      })
+      .returning();
+
+    // F12: seed the per-project counter so allocateTicketNumber never sees a missing row.
+    await tx.insert(projectSequences).values({
+      projectId: project!.id,
+      nextNumber: START_TICKET_NUMBER,
+    });
+
+    return project!;
+  });
+  return row;
 }
 
 export async function listProjects(): Promise<ProjectRow[]> {
