@@ -58,6 +58,16 @@ export interface Column {
   name: string;
 }
 
+// F15 D1: checklist sub-items on a ticket. Stored as a JSONB array on Tickets
+// (not a join table — items are ticket-scoped, not shared entities like labels).
+// id = client-generated UUID (crypto.randomUUID); validated as uuid() at the edge.
+// Concurrent edits use last-write-wins full-array replace (D4).
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export const projects = pgTable('Projects', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
@@ -112,6 +122,10 @@ export const tickets = pgTable(
       .notNull()
       .references(() => users.id),
     priority: priorityEnum('priority').default('MEDIUM').notNull(),
+    // F15 D1: checklist JSONB array of {id, text, done}. Defaults to [] so a new
+    // ticket starts empty (createTicket needs no checklist arg). Copy the
+    // projects.columns jsonb $type idiom (schema.ts:66).
+    checklist: jsonb('checklist').$type<ChecklistItem[]>().notNull().default([]),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .defaultNow()
