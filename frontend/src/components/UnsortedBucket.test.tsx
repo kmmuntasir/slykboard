@@ -10,6 +10,7 @@ describe('UnsortedBucket', () => {
             id: 't1',
             ticketNumber: 7,
             title: 'Orphan',
+            description: null,
             statusColumn: '__unsorted__',
             position: 0,
             priority: 'LOW',

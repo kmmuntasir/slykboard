@@ -30,6 +30,7 @@ function makeTicket(seat: Seat): Ticket {
     id: seat.id,
     ticketNumber: Number(seat.id.replace(/\D/g, '') || '0'),
     title: seat.id,
+    description: null,
     statusColumn: seat.statusColumn,
     position: seat.position ?? 0,
     priority: 'LOW' as Priority,

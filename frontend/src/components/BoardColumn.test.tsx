@@ -9,6 +9,7 @@ function makeTicket(id: string, ticketNumber: number, position: number): Ticket 
         id,
         ticketNumber,
         title: `Title ${ticketNumber}`,
+        description: null,
         statusColumn: 'TODO',
         position,
         priority: 'LOW',

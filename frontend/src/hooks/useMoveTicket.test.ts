@@ -26,6 +26,7 @@ function makeTicket(
     id,
     ticketNumber: Number(id.replace(/\D/g, '') || '0'),
     title: id,
+    description: null,
     statusColumn,
     position,
     priority: 'LOW' as Priority,

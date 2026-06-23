@@ -9,6 +9,7 @@ describe('TicketCard', () => {
         id: 't1',
         ticketNumber: 101,
         title: 'Render board',
+        description: null,
         statusColumn: 'TODO',
         position: 0,
         priority: 'HIGH',

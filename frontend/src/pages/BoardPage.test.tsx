@@ -40,6 +40,7 @@ const ticket101: Ticket = {
     id: 't101',
     ticketNumber: 101,
     title: 'First ticket',
+    description: null,
     statusColumn: 'c1',
     position: 0,
     priority: 'LOW',

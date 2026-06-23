@@ -22,6 +22,7 @@ export interface Ticket {
   id: string;
   ticketNumber: number;
   title: string;
+  description: string | null;
   statusColumn: string;
   position: number;
   priority: Priority;
@@ -30,4 +31,11 @@ export interface Ticket {
   creatorId: string;
   createdAt: string; // ISO
   updatedAt: string;
+}
+
+export interface UpdateTicketDto {
+  title?: string;
+  description?: string | null;
+  priority?: Priority;
+  assigneeId?: string | null;
 }

@@ -23,6 +23,7 @@
     "express": "^5.0.0",
     "google-auth-library": "^10.7.0",
     "helmet": "^8.2.0",
+    "isomorphic-dompurify": "^2.0.0",
     "jose": "^6.2.3",
     "pg": "^8.22.0",
     "pino": "^10.3.1",

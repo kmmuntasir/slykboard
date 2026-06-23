@@ -8,3 +8,8 @@ export const boardKeys = {
   all: ['boards'] as const,
   detail: (slug: string) => [...boardKeys.all, 'detail', slug] as const,
 };
+
+export const ticketKeys = {
+  all: ['tickets'] as const,
+  detail: (id: string) => [...ticketKeys.all, 'detail', id] as const,
+};

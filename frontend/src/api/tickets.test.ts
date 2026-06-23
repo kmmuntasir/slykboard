@@ -12,6 +12,7 @@ describe('moveTicket', () => {
       id: 't1',
       ticketNumber: 1,
       title: 't1',
+      description: null,
       statusColumn: 'c2',
       position: 32768,
       priority: 'LOW',
