@@ -10,6 +10,8 @@ import {
   integer,
   jsonb,
   doublePrecision,
+  index,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 
 // F12 D2: ticket_number starts at 1 per project (Jira default). Zero-pad
@@ -110,8 +112,6 @@ export const tickets = pgTable(
       .notNull()
       .references(() => users.id),
     priority: priorityEnum('priority').default('MEDIUM').notNull(),
-    // F09: labels as jsonb string[] for forward-compat (richer label objects later).
-    labels: jsonb('labels').$type<string[]>().default([]).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
       .defaultNow()
@@ -126,5 +126,46 @@ export const tickets = pgTable(
       table.projectId,
       table.ticketNumber,
     ),
+  }),
+);
+
+// F14 D-Labels-Catalog: project-scoped label definitions. color normalized #RRGGBB uppercase.
+// Unique (project_id, name) enforced via labels_project_name_uniq.
+export const labels = pgTable(
+  'Labels',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    color: text('color').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    projectLabelNameUniq: uniqueIndex('labels_project_name_uniq').on(table.projectId, table.name),
+  }),
+);
+
+// F14 D-TicketLabels: many-to-many join. Composite PK prevents dupes.
+// Both FKs ON DELETE CASCADE — deleting a ticket or label cleans up automatically.
+export const ticketLabels = pgTable(
+  'TicketLabels',
+  {
+    ticketId: uuid('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    labelId: uuid('label_id')
+      .notNull()
+      .references(() => labels.id, { onDelete: 'cascade' }),
+    assignedAt: timestamp('assigned_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.ticketId, table.labelId] }),
+    labelIdx: index('ticket_labels_label_id_idx').on(table.labelId),
   }),
 );
