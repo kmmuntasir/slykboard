@@ -7,7 +7,7 @@ export function AppLayout() {
         <div className="flex min-h-screen flex-col bg-background text-foreground">
             <TopNav />
             <HealthBadge />
-            <main className="flex-1">
+            <main id="app-root" className="flex-1">
                 <Outlet />
             </main>
         </div>

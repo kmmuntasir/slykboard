@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/AppLayout';
 import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
 import { RequireRole } from '@/components/RequireRole';
-import { BoardPage } from '@/pages/BoardPage';
+import { BoardPage, TicketDetailRoute } from '@/pages/BoardPage';
 import { ProjectSettingsPage } from '@/pages/ProjectSettingsPage';
 import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -47,7 +47,14 @@ export const router = createBrowserRouter([
                         children: [
                             { path: '/', element: <IndexRedirect /> },
                             { path: '/projects', element: <ProjectsPage /> },
-                            { path: '/projects/:slug', element: <BoardPage /> },
+                            {
+                                path: '/projects/:slug',
+                                element: <BoardPage />,
+                                children: [
+                                    // F16: deep-link modal overlay over the mounted board.
+                                    { path: 'tickets/:ticketId', element: <TicketDetailRoute /> },
+                                ],
+                            },
                             {
                                 path: '/projects/:slug/settings',
                                 element: <ProjectSettingsPage />,

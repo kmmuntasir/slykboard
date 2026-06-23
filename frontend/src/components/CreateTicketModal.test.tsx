@@ -74,7 +74,8 @@ describe('CreateTicketModal', () => {
 
     it('renders form with Create ticket button when open=true', () => {
         render(<CreateTicketModal open={true} onClose={vi.fn()} slug="SLYK" />);
-        expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Create ticket');
+        // F16: Modal uses aria-labelledby (→ the visible <h2>) instead of aria-label.
+        expect(screen.getByRole('dialog', { name: 'Create ticket' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Create ticket' })).toBeInTheDocument();
     });
 

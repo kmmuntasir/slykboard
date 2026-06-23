@@ -1,4 +1,5 @@
 import { TicketAttributeForm } from './TicketAttributeForm';
+import { Modal } from './Modal';
 import { useCreateTicket } from '@/hooks/useCreateTicket';
 import type { UpdateTicketDto } from '@/types/ticket';
 
@@ -11,8 +12,6 @@ interface CreateTicketModalProps {
 
 export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicketModalProps) {
     const createTicket = useCreateTicket(slug);
-
-    if (!open) return null;
 
     const handleSubmit = async (values: UpdateTicketDto) => {
         await createTicket.mutateAsync({
@@ -27,32 +26,24 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
         onClose();
     };
 
+    // F16: ported onto the shared <Modal> primitive (Esc, focus trap, scroll lock).
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Create ticket"
-        >
-            <div className="w-full max-w-lg rounded bg-white p-6">
-                <h2 className="mb-4 text-lg font-semibold">Create ticket</h2>
-                <TicketAttributeForm
-                    mode="create"
-                    projectSlug={slug}
-                    defaultValues={{
-                        title: '',
-                        description: '',
-                        priority: 'MEDIUM',
-                        assigneeId: null,
-                        labelIds: [],
-                        // F15: checklist is edit-only (create ignores it; CreateTicketInput
-                        // has no checklist field). Present so the shared schema type is satisfied.
-                        checklist: [],
-                    }}
-                    onSubmit={handleSubmit}
-                    onCancel={onClose}
-                />
-            </div>
-        </div>
+        <Modal isOpen={open} onClose={onClose} titleId="create-ticket-title" title="Create ticket">
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={slug}
+                defaultValues={{
+                    title: '',
+                    description: '',
+                    priority: 'MEDIUM',
+                    assigneeId: null,
+                    labelIds: [],
+                    // F15: checklist is edit-only at runtime; present for the shared schema.
+                    checklist: [],
+                }}
+                onSubmit={handleSubmit}
+                onCancel={onClose}
+            />
+        </Modal>
     );
 }

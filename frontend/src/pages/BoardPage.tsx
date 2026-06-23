@@ -1,23 +1,23 @@
-import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useNavigate, useParams, Outlet } from 'react-router';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useBoard } from '@/hooks/useBoard';
 import { useMoveTicket } from '@/hooks/useMoveTicket';
+import { useUpdateTicket } from '@/hooks/useUpdateTicket';
 import { computeDestinationPosition, type MoveDescriptor } from '@/utils/boardReorder';
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import { BoardColumn } from '@/components/BoardColumn';
 import { UnsortedBucket } from '@/components/UnsortedBucket';
 import { NewTicketButton } from '@/components/NewTicketButton';
-import { EditTicketModal } from '@/components/EditTicketModal';
+import { TicketDetailModal } from '@/components/TicketDetailModal';
 import { ApiClientError } from '@/api/client';
+import type { UpdateTicketDto } from '@/types/ticket';
 
 export function BoardPage() {
     const { slug } = useParams<{ slug: string }>();
+    const navigate = useNavigate();
     const { data: board, isLoading, error } = useBoard(slug);
     const { mutate } = useMoveTicket(slug);
     const setDragInProgress = useBoardUiStore((s) => s.setDragInProgress);
-    const [editOpen, setEditOpen] = useState(false);
-    const [editTicketId, setEditTicketId] = useState<string | null>(null);
 
     if (!slug) {
         return <div className="p-4">No project selected.</div>;
@@ -35,9 +35,10 @@ export function BoardPage() {
         return null;
     }
 
+    // F16: card click deep-links to the ticket modal via the nested route
+    // /projects/:slug/tickets/:id — BoardPage stays mounted under the modal.
     const handleEdit = (ticketId: string) => {
-        setEditTicketId(ticketId);
-        setEditOpen(true);
+        navigate(`tickets/${ticketId}`);
     };
 
     const handleDragStart = () => setDragInProgress(true);
@@ -112,12 +113,27 @@ export function BoardPage() {
                     </div>
                 </DragDropContext>
             )}
-            <EditTicketModal
-                open={editOpen}
-                onClose={() => setEditOpen(false)}
-                ticketId={editTicketId}
-                slug={slug}
-            />
+            {/* F16: nested route renders TicketDetailRoute → TicketDetailModal here. */}
+            <Outlet />
         </div>
+    );
+}
+
+// F16: child route element for /projects/:slug/tickets/:ticketId. Renders the
+// TicketDetailModal over the mounted board (BoardPage stays mounted via <Outlet/>).
+export function TicketDetailRoute() {
+    const { slug, ticketId } = useParams<{ slug: string; ticketId: string }>();
+    const navigate = useNavigate();
+    const updateTicket = useUpdateTicket();
+    if (!slug || !ticketId) return null;
+    return (
+        <TicketDetailModal
+            slug={slug}
+            ticketId={ticketId}
+            onClose={() => navigate(`/projects/${slug}`)}
+            onSubmit={async (dto: UpdateTicketDto) => {
+                await updateTicket.mutateAsync({ ticketId, dto, slug });
+            }}
+        />
     );
 }
