@@ -7,6 +7,7 @@ import { logger } from '../config/logger';
 import { getProjectBySlug } from './projectService';
 import { hydrateLabelsForTickets } from './labelService';
 import type { HydratedLabel } from './labelService';
+import type { ChecklistItem } from '../db/schema';
 
 // F09 D-Unsorted-Bucket: stable id for the orphan pseudo-column.
 export const UNSORTED_BUCKET_ID = '__unsorted__';
@@ -29,6 +30,7 @@ export interface BoardTicket {
   position: number;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
   labels: HydratedLabel[];
+  checklist: ChecklistItem[];
   assignee: BoardAssignee | null;
   creatorId: string;
   createdAt: Date;
@@ -64,6 +66,7 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
       statusColumn: tickets.statusColumn,
       position: tickets.position,
       priority: tickets.priority,
+      checklist: tickets.checklist,
       assigneeId: tickets.assigneeId,
       creatorId: tickets.creatorId,
       createdAt: tickets.createdAt,
@@ -88,6 +91,7 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
     statusColumn: r.statusColumn,
     position: r.position,
     priority: r.priority,
+    checklist: r.checklist ?? [],
     labels: labelMap.get(r.id) ?? [],
     assignee:
       r.assigneeId === null
