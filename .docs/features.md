@@ -55,7 +55,7 @@
 - [x] **F13** Ticket attributes: title, description, assignee, priority — ✨ Feature · _deps: F12_ — DONE (T1-T15 ✅; typecheck/lint/test/build green; live browser smoke passed 2026-06-23)
 - [x] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_ — DONE (T1-T10 ✅; typecheck/lint/format/test/build green; 0006 migration applied + backfill verified; live browser smoke passed 2026-06-24)
 - [x] **F15** Checklist — ✨ Feature · _deps: F12_ — DONE (T1-T9 ✅ + 2 bugfixes: create-404 label-tx visibility, TicketCard labels/checklist guard; 0007 migration applied; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
-- [ ] **F16** Ticket detail modal (view & edit) — ✨ Feature · _deps: F13, F14, F15_
+- [x] **F16** Ticket detail modal (view & edit) — ✨ Feature · _deps: F13, F14, F15_ — DONE (T1-T8 ✅; getTicket creator/assignee join, Modal a11y primitive, TicketDetailModal, deep-link nested route, unsaved guard; no migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 - [ ] **F17** Ticket permissions (admin-only delete) — ✨ Feature · _deps: F16, F18_
 
 **Phase 4 — Audit Trail**
@@ -77,6 +77,7 @@
 - [ ] **F27** Project settings (rename, columns) — ✨ Feature · _deps: F08_
 - [ ] **F28** UX polish: empty / loading / error / 404 / 403 — ⬆ Enhancement · _deps: F07_
 - [ ] **F29** Deployment & self-host packaging — 🚀 Deployment · _deps: all above_
+- [ ] **F30** Human-readable ticket URLs (SLYK-NNN) — ⬆ Enhancement · _deps: F16_
 
 ---
 
@@ -563,6 +564,21 @@
 - CORS + OAuth callback URL must match the deployed origin.
 - Health check endpoint for Render/container orchestration.
 - DB migration strategy on version upgrades (forward-only, documented rollback).
+
+### F30 — Human-readable ticket URLs (SLYK-NNN)
+**Goal:** The ticket detail deep-link uses the human-readable ID `SLYK-NNN` instead of the raw UUID.
+**Ships:** URL is `/projects/:slug/tickets/SLYK-4` (readable, shareable); the backend resolves the project + ticket number to the ticket.
+**Depends on:** F16
+**PRD:** REQ-3.1 (ID format `[SLUG]-[NNN]`)
+**Acceptance:**
+- Ticket detail route param is the display ID (`SLYK-4`), not the UUID.
+- Backend resolves a ticket by (project slug, ticket_number) — new lookup/route.
+- Existing flows (card click, deep-link, browser back) keep working with the new URL shape.
+**Edge cases:**
+- Parse `SLUG-NNN` from the route param; validate format; reject malformed → 404.
+- Slug in the ticket param vs the path `:slug` — decide: derive the number only, or validate the prefix matches the path slug.
+- Slug rename (F27): historical `SLYK-4` URLs — ticket_number is stable; the URL slug may diverge from the current project slug. Decide redirect vs resolve-by-number.
+- Backwards-compat: old `/tickets/<uuid>` deep-links — redirect to the new format or 404.
 
 ---
 
