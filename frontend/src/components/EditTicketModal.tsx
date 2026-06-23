@@ -48,6 +48,7 @@ export function EditTicketModal({ open, onClose, ticketId, slug }: EditTicketMod
                             priority: ticket.priority,
                             assigneeId: ticket.assignee?.id ?? null,
                             labelIds: (ticket.labels ?? []).map((l) => l.id),
+                            checklist: ticket.checklist ?? [],
                         }}
                         onSubmit={handleSubmit}
                         onCancel={onClose}

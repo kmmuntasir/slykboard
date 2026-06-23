@@ -73,6 +73,7 @@ const baseDefaults = {
     priority: 'MEDIUM' as const,
     assigneeId: null,
     labelIds: [] as string[],
+    checklist: [],
 };
 
 describe('TicketAttributeForm', () => {
@@ -103,6 +104,7 @@ describe('TicketAttributeForm', () => {
             priority: 'HIGH' as const,
             assigneeId: '11111111-1111-1111-1111-111111111111',
             labelIds: ['22222222-2222-2222-2222-222222222222'],
+            checklist: [],
         };
         render(
             <TicketAttributeForm
@@ -220,6 +222,7 @@ describe('TicketAttributeForm', () => {
             priority: 'HIGH',
             assigneeId: '11111111-1111-1111-1111-111111111111',
             labelIds: [],
+            checklist: [],
         });
     });
 
@@ -270,6 +273,7 @@ describe('TicketAttributeForm', () => {
             priority: 'MEDIUM',
             assigneeId: null,
             labelIds: ['11111111-1111-1111-1111-111111111111'],
+            checklist: [],
         });
     });
 

@@ -2,20 +2,33 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
+import { ChecklistEditor } from './ChecklistEditor';
 import { LabelMultiSelect } from './LabelMultiSelect';
 import { RichTextEditor } from './RichTextEditor';
 import { PrioritySelect } from './PrioritySelect';
 import { UserSelect } from './UserSelect';
-import type { Priority, UpdateTicketDto } from '@/types/ticket';
+import type { ChecklistItem, Priority, UpdateTicketDto } from '@/types/ticket';
 
 // F14 T8: labelIds added to the attribute form schema. Controlled via
 // watch/setValue bridging to <LabelMultiSelect> (matches F13 primitive pattern).
+// F15: checklist added — { id, text, done }[], max 50, text ≤ 200. Bridged to
+// <ChecklistEditor> the same way. Defaults to [] (new ticket starts empty).
 const schema = z.object({
     title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 chars or fewer'),
     description: z.string().max(5000, 'Description must be 5000 chars or fewer'),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
     assigneeId: z.string().uuid().nullable(),
     labelIds: z.array(z.string().uuid()).default([]),
+    checklist: z
+        .array(
+            z.object({
+                id: z.string().uuid(),
+                text: z.string().min(1).max(200),
+                done: z.boolean(),
+            }),
+        )
+        .max(50)
+        .default([]),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -115,6 +128,15 @@ export function TicketAttributeForm({
                     onChange={(ids: string[]) => setValue('labelIds', ids)}
                 />
             </div>
+
+            {mode === 'edit' && (
+                <div>
+                    <ChecklistEditor
+                        value={watch('checklist')}
+                        onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
+                    />
+                </div>
+            )}
 
             <div className="flex gap-2">
                 <button

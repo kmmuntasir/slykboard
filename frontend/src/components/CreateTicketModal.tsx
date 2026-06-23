@@ -44,6 +44,9 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
                         priority: 'MEDIUM',
                         assigneeId: null,
                         labelIds: [],
+                        // F15: checklist is edit-only (create ignores it; CreateTicketInput
+                        // has no checklist field). Present so the shared schema type is satisfied.
+                        checklist: [],
                     }}
                     onSubmit={handleSubmit}
                     onCancel={onClose}
