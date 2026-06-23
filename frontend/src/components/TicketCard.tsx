@@ -18,6 +18,9 @@ interface TicketCardProps {
 
 export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardProps) {
     const ticketId = `${projectSlug}-${String(ticket.ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`; // REQ-3.1, F12 D2
+    // F15: defend against a stale board cache (tickets fetched before the
+    // checklist field shipped) — never crash the whole column on a missing field.
+    const checklist = ticket.checklist ?? [];
     return (
         <Draggable draggableId={ticket.id} index={index}>
             {(provided) => (
@@ -38,14 +41,14 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                     <footer className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                             <AssigneeAvatar assignee={ticket.assignee} />
-                            {ticket.checklist.length > 0 && (
+                            {checklist.length > 0 && (
                                 <span
                                     className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                    aria-label={`Checklist progress ${ticket.checklist.filter((i) => i.done).length} of ${ticket.checklist.length} done`}
+                                    aria-label={`Checklist progress ${checklist.filter((i) => i.done).length} of ${checklist.length} done`}
                                 >
                                     <span aria-hidden="true">✓</span>
-                                    {ticket.checklist.filter((i) => i.done).length}/
-                                    {ticket.checklist.length}
+                                    {checklist.filter((i) => i.done).length}/
+                                    {checklist.length}
                                 </span>
                             )}
                         </div>

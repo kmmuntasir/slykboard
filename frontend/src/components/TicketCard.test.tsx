@@ -81,4 +81,12 @@ describe('TicketCard', () => {
         renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
         expect(screen.queryByLabelText(/^Checklist progress/)).not.toBeInTheDocument();
     });
+
+    it('does not crash when checklist is missing (stale-cache defense)', () => {
+        // A board cached before the checklist field shipped has ticket.checklist = undefined.
+        const stale = { ...baseTicket, checklist: undefined } as unknown as Ticket;
+        renderInDnd(<TicketCard ticket={stale} projectSlug="SLYK" index={0} />);
+        expect(screen.getByText('SLYK-101')).toBeInTheDocument();
+        expect(screen.queryByLabelText(/^Checklist progress/)).not.toBeInTheDocument();
+    });
 });
