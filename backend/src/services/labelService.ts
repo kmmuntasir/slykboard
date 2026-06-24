@@ -1,8 +1,19 @@
 import { and, eq, inArray } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { db } from '../db/client';
 import { labels, projects, ticketLabels, tickets } from '../db/schema';
+import type * as schema from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
+
+// D7: the common base type that BOTH the shared `db` pool
+// (NodePgDatabase<schema> & { $client: Pool }) and a db.transaction callback
+// param (PgTransaction, which extends NodePgDatabase) satisfy. The narrow alias
+// `Parameters<typeof db.transaction>[0]>[0]` resolves to PgTransaction, which
+// `db` is NOT assignable to — so it cannot type a param defaulting to `db`.
+// NodePgDatabase exposes every query method (select/insert/update/delete) these
+// functions use; the transaction-only members (rollback/savepoint) are unused.
+type Tx = NodePgDatabase<typeof schema>;
 
 export type LabelRow = typeof labels.$inferSelect;
 export type HydratedLabel = { id: string; name: string; color: string };
@@ -84,10 +95,11 @@ export async function deleteLabel(labelId: string): Promise<{ id: string }> {
 
 export async function hydrateLabelsForTickets(
   ticketIds: string[],
+  tx: Tx = db,
 ): Promise<Map<string, HydratedLabel[]>> {
   const map = new Map<string, HydratedLabel[]>();
   if (ticketIds.length === 0) return map;
-  const rows = await db
+  const rows = await tx
     .select({
       ticketId: ticketLabels.ticketId,
       labelId: labels.id,
@@ -108,12 +120,12 @@ export async function hydrateLabelsForTickets(
 export async function replaceTicketLabels(args: {
   ticketId: string;
   labelIds: string[];
-}): Promise<void> {
-  const ticket = await db.select().from(tickets).where(eq(tickets.id, args.ticketId)).limit(1);
+}, tx: Tx = db): Promise<void> {
+  const ticket = await tx.select().from(tickets).where(eq(tickets.id, args.ticketId)).limit(1);
   if (!ticket[0]) throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
 
   if (args.labelIds.length > 0) {
-    const found = await db
+    const found = await tx
       .select({ id: labels.id })
       .from(labels)
       .where(and(eq(labels.projectId, ticket[0].projectId), inArray(labels.id, args.labelIds)));
@@ -125,9 +137,9 @@ export async function replaceTicketLabels(args: {
     }
   }
 
-  await db.delete(ticketLabels).where(eq(ticketLabels.ticketId, args.ticketId));
+  await tx.delete(ticketLabels).where(eq(ticketLabels.ticketId, args.ticketId));
   if (args.labelIds.length > 0) {
-    await db.insert(ticketLabels).values(
+    await tx.insert(ticketLabels).values(
       args.labelIds.map((labelId) => ({ ticketId: args.ticketId, labelId })),
     );
   }

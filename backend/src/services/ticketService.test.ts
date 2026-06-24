@@ -11,6 +11,10 @@ const bag = vi.hoisted(() => ({
   seqRow: [] as Array<Record<string, unknown>>, // tx.select().from(projectSequences).for('update')
   maxRow: [] as Array<Record<string, unknown>>, // tx.select({maxPos}).from(tickets) bare aggregate
   insertReturn: [] as Array<Record<string, unknown>>, // tx.insert(tickets).values().returning()
+  // F18 T5: tx.select({name}).from(labels).where(inArray(...)) — new-label-name
+  // rows for updateTicket's activity label diff. Default [] (activity rows are
+  // asserted in a later task; existing behavior tests only need this not to crash).
+  labelNameRows: [] as Array<Record<string, unknown>>,
   lastInsert: null as Record<string, unknown> | null, // captured .values() arg
   getProjectBySlug: vi.fn(), // mocked ./projectService
   // F13 T6: updateTicket (bare db.update path, no txn)
@@ -25,11 +29,13 @@ const bag = vi.hoisted(() => ({
 }));
 
 vi.mock('../db/client', async () => {
-  const { tickets, projects, projectSequences } = await import('../db/schema');
+  const { labels, tickets, projects, projectSequences } = await import('../db/schema');
   // buildTxSelectChain branches on (table, projection):
   //  - projectSequences -> { where: () => ({ for: () => bag.seqRow }) }
   //  - tickets + maxPos projection -> terminal { where: () => bag.maxRow } (createTicket aggregate)
   //  - tickets otherwise -> moveTicket chain (orderBy -> loadColumn, limit -> loadTicketFinal)
+  //  - labels (F18 T5) -> terminal { where: () => bag.labelNameRows } so updateTicket's
+  //    new-label-name diff select resolves to an array (default [] -> no-op diff).
   const buildTxSelectChain = (projection?: Record<string, unknown>) => {
     const isMaxSelect = !!projection && 'maxPos' in projection;
     const chain = {
@@ -44,6 +50,12 @@ vi.mock('../db/client', async () => {
           return {
             where: () => ({ orderBy: () => bag.loadColumn(), limit: () => bag.loadTicketFinal() }),
           };
+        }
+        // F18 T5: tx.select({name}).from(labels).where(inArray(...)) — new-label
+        // name resolution for the activity label diff. Default [] keeps the diff
+        // a no-op for existing behavior tests (activity rows are asserted in T6).
+        if (table === labels) {
+          return { where: () => Promise.resolve(bag.labelNameRows) };
         }
         return chain;
       },
@@ -89,14 +101,20 @@ vi.mock('../db/client', async () => {
         update: () => ({
           set: (setArg: Record<string, unknown>) => {
             bag.updateSets.push(setArg);
-            return { where: () => undefined };
+            // F18 T5: updateTicket now calls .returning() inside the txn. Mirror
+            // the bare db.update mock so the INTERNAL_ERROR "no row" guard works
+            // and the {old,new} test snapshots resolve from updateReturn.
+            return {
+              where: () => ({ returning: () => Promise.resolve(bag.updateReturn) }),
+            };
           },
         }),
         insert: (table: unknown) => ({
           values: (vals: Record<string, unknown>) => {
-            // F18 T3: recordActivity now inserts activityLogs after the tickets
-            // row inside the same txn. Capture ONLY the tickets insert so the
-            // spy still reflects the ticket row, not the clobbering log insert.
+            // F18 T3/T5: recordActivity now inserts activityLogs inside the txn.
+            // Capture ONLY the tickets insert so the spy still reflects the
+            // ticket row, not the clobbering activity-log insert. Activity inserts
+            // resolve harmlessly (updateTicket never awaits .returning on them).
             if (table === tickets) {
               bag.lastInsert = vals;
             }
@@ -119,6 +137,9 @@ vi.mock('../utils/sanitizeHtml', () => ({
 }));
 
 vi.mock('./labelService', () => ({
+  // F18 T5: both fns now take an optional tx (default db). Forward only the
+  // leading arg(s) the spy asserts on so existing toHaveBeenCalledWith({ticketId,
+  // labelIds}) / toHaveBeenCalledWith([ticketId]) assertions stay valid.
   replaceTicketLabels: (args: { ticketId: string; labelIds: string[] }) =>
     bag.replaceTicketLabels(args),
   hydrateLabelsForTickets: (ids: string[]) => bag.hydrateLabelsForTickets(ids),
@@ -148,6 +169,7 @@ function resetBag() {
   bag.seqRow = [];
   bag.maxRow = [];
   bag.insertReturn = [];
+  bag.labelNameRows = [];
   bag.lastInsert = null;
   bag.getProjectBySlug.mockReset();
   bag.updateReturn = [];
@@ -619,7 +641,9 @@ describe('ticketService updateTicket (F13 T6)', () => {
   beforeEach(resetBag);
 
   it('throws NOT_FOUND when the ticket is absent and does NOT call update', async () => {
-    bag.loadTicket.mockResolvedValue([]);
+    // F18 T5: updateTicket now reads the OLD row inside the txn via
+    // tx.select().from(tickets).where().limit() -> loadTicketFinal.
+    bag.loadTicketFinal.mockResolvedValue([]);
 
     const error = await updateTicket({
       ticketId: 'missing',
@@ -636,7 +660,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   it('title-only patch sets only title + updatedAt and returns {old, new} snapshots', async () => {
     const before = makeTicket({ id: TICKET_ID, title: 'Old' });
     const after = makeTicket({ id: TICKET_ID, title: 'New' });
-    bag.loadTicket.mockResolvedValue([before]);
+    bag.loadTicketFinal.mockResolvedValue([before]);
     bag.updateReturn = [after];
 
     const result = await updateTicket({
@@ -657,7 +681,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('description patch routes through sanitizeDescription exactly once with the input', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, description: '<clean>raw</clean>' })];
 
     await updateTicket({
@@ -672,7 +696,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('description: null patch sets description to null and does NOT invoke sanitizer', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, description: '<p>x</p>' })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, description: '<p>x</p>' })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, description: null })];
 
     await updateTicket({
@@ -686,7 +710,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('priority patch writes the typed Priority value', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, priority: 'MEDIUM' })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, priority: 'MEDIUM' })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, priority: 'URGENT' })];
 
     const patch: TicketPatch = { priority: 'URGENT' };
@@ -702,7 +726,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('assigneeId: null patch unassigns (writes null)', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: 'u2' })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: 'u2' })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, assigneeId: null })];
 
     await updateTicket({
@@ -715,7 +739,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('assigneeId: uuid patch sets the assigneeId', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: null })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: null })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, assigneeId: 'u9' })];
 
     await updateTicket({
@@ -728,7 +752,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('throws INTERNAL_ERROR when the update returns no row (defensive)', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [];
 
     const error = await updateTicket({
@@ -742,7 +766,7 @@ describe('ticketService updateTicket (F13 T6)', () => {
   });
 
   it('multi-field patch carries every provided key through one update call', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'T2', priority: 'HIGH' })];
 
     await updateTicket({
@@ -766,7 +790,7 @@ describe('ticketService updateTicket label patch (F14)', () => {
   it('calls replaceTicketLabels with the new labelIds and returns {old, new}', async () => {
     const before = makeTicket({ id: TICKET_ID, title: 'T1' });
     const after = makeTicket({ id: TICKET_ID, title: 'T1' });
-    bag.loadTicket.mockResolvedValue([before]);
+    bag.loadTicketFinal.mockResolvedValue([before]);
     bag.updateReturn = [after];
     bag.replaceTicketLabels.mockResolvedValue(undefined);
 
@@ -786,7 +810,7 @@ describe('ticketService updateTicket label patch (F14)', () => {
   });
 
   it('foreign-project label surfaces VALIDATION_FAILED from replaceTicketLabels', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID })];
     bag.replaceTicketLabels.mockRejectedValue(
       new AppError(ErrorCode.VALIDATION_FAILED, 'One or more labels do not belong to this project'),
@@ -807,7 +831,7 @@ describe('ticketService updateTicket label patch (F14)', () => {
   });
 
   it('empty labelIds array clears the set (calls replaceTicketLabels with [])', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID })];
     bag.replaceTicketLabels.mockResolvedValue(undefined);
 
@@ -824,7 +848,7 @@ describe('ticketService updateTicket label patch (F14)', () => {
   });
 
   it('does NOT call replaceTicketLabels when labelIds is absent from patch', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'X' })];
 
     await updateTicket({
@@ -905,7 +929,7 @@ describe('ticketService updateTicket checklist patch (F15)', () => {
   beforeEach(resetBag);
 
   it('writes checklist into updateSet when patch.checklist is provided (full-array replace)', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID })];
     const checklist = [
       { id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false },
@@ -925,7 +949,7 @@ describe('ticketService updateTicket checklist patch (F15)', () => {
   });
 
   it('does NOT set checklist when patch omits it', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'X' })];
 
     await updateTicket({
@@ -938,7 +962,7 @@ describe('ticketService updateTicket checklist patch (F15)', () => {
   });
 
   it('replaces the checklist with [] when an empty array is provided', async () => {
-    bag.loadTicket.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID })];
 
     await updateTicket({
