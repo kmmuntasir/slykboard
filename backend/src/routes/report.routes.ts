@@ -13,3 +13,12 @@ reportRouter.get('/time', authenticate, async (req, res) => {
   const report = await reportService.getTimeReport({ period, offset });
   res.json(success(report));
 });
+
+// F24 — per-user ticket summary (resolved tickets by priority) over a weekly/monthly window.
+reportRouter.get('/tickets', authenticate, async (req, res) => {
+  const period = (req.query.period === 'monthly' ? 'monthly' : 'weekly') as 'weekly' | 'monthly';
+  const offsetRaw = parseInt(req.query.offset as string, 10);
+  const offset = Number.isFinite(offsetRaw) ? offsetRaw : 0;
+  const report = await reportService.getTicketSummary({ period, offset });
+  res.json(success(report));
+});
