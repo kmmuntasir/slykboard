@@ -5,6 +5,7 @@ import { validateRequest } from '../middleware/validateRequest'
 import { success, ErrorCode } from '../utils/envelope'
 import { AppError } from '../utils/appError'
 import * as ticketService from '../services/ticketService'
+import * as activityService from '../services/activityService'
 import { ticketIdParam, updateTicketBody, type TicketIdParam, type UpdateTicketBody } from './tickets.schema'
 
 export const ticketsRouter = Router()
@@ -23,6 +24,18 @@ ticketsRouter.get(
             throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`)
         }
         res.json(success(ticket))
+    },
+)
+
+// F19 — activity feed: returns enriched reverse-chrono activity log entries.
+ticketsRouter.get(
+    '/:ticketId/activity',
+    authenticate,
+    validateRequest({ params: ticketIdParam }),
+    async (req, res) => {
+        const { ticketId } = req.params as TicketIdParam
+        const entries = await activityService.getTicketActivity(ticketId)
+        res.json(success({ entries }))
     },
 )
 

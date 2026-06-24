@@ -33,6 +33,7 @@ vi.mock('../services/ticketService', () => ({
   updateTicket: vi.fn(),
   deleteTicket: vi.fn(),
 }))
+vi.mock('../services/activityService', () => ({ getTicketActivity: vi.fn() }))
 
 import { app } from '../index'
 import { signJwt } from '../utils/jwt'
@@ -40,6 +41,7 @@ import { AppError } from '../utils/appError'
 import { ErrorCode } from '../utils/envelope'
 import { findUserTokenVersion } from '../services/tokenVersion'
 import * as ticketService from '../services/ticketService'
+import * as activityService from '../services/activityService'
 import { UNSORTED_BUCKET_ID } from '../services/boardService'
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion)
@@ -47,6 +49,7 @@ const mockedMoveTicket = vi.mocked(ticketService.moveTicket)
 const mockedGetTicket = vi.mocked(ticketService.getTicket)
 const mockedUpdateTicket = vi.mocked(ticketService.updateTicket)
 const mockedDeleteTicket = vi.mocked(ticketService.deleteTicket)
+const mockedGetTicketActivity = vi.mocked(activityService.getTicketActivity)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -778,5 +781,62 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
     expect(res.status).toBe(400)
     expect(res.body.error.code).toBe('VALIDATION_FAILED')
     expect(mockedDeleteTicket).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/tickets/:ticketId/activity (F19)', () => {
+  const entry = {
+    id: '55555555-5555-4555-8555-555555555555',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    actionType: 'CREATED' as const,
+    actor: null,
+    from: null,
+    to: null,
+    message: null,
+  }
+
+  it('401 without token', async () => {
+    const res = await request(app).get(`/api/tickets/${VALID_TICKET_ID}/activity`)
+
+    expect(res.status).toBe(401)
+    expect(res.body.error.code).toBe('UNAUTHENTICATED')
+    expect(mockedGetTicketActivity).not.toHaveBeenCalled()
+  })
+
+  it('200 returns success({ entries })', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedGetTicketActivity.mockResolvedValue([entry])
+
+    const res = await request(app)
+      .get(`/api/tickets/${VALID_TICKET_ID}/activity`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.entries).toEqual([entry])
+    expect(mockedGetTicketActivity).toHaveBeenCalledWith(VALID_TICKET_ID)
+  })
+
+  it('404 NOT_FOUND when service throws', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedGetTicketActivity.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'Ticket not found'))
+
+    const res = await request(app)
+      .get(`/api/tickets/${VALID_TICKET_ID}/activity`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+
+    expect(res.status).toBe(404)
+    expect(res.body.error.code).toBe('NOT_FOUND')
+  })
+
+  it('400 VALIDATION_FAILED for non-uuid param', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .get('/api/tickets/not-a-uuid/activity')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedGetTicketActivity).not.toHaveBeenCalled()
   })
 })
