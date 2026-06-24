@@ -39,28 +39,42 @@ export function TimeLog({ ticketId }: TimeLogProps) {
                 <ul className="divide-y divide-gray-100">
                     {entries.map((entry) => (
                         <li key={entry.id} className="py-2">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="flex flex-col gap-0.5 text-sm">
-                                    <span className="text-gray-700">
-                                        <span className="text-gray-400">Start: </span>
-                                        {formatDate(entry.startTime)}
-                                        {entry.type === 'manual' && (
-                                            <span className="ml-1 inline-flex items-center rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
-                                                Manual
-                                            </span>
-                                        )}
-                                    </span>
-                                    <span className="text-gray-700">
-                                        <span className="text-gray-400">End: </span>
-                                        {entry.endTime ? formatDate(entry.endTime) : 'Running'}
+                            {entry.type === 'manual' ? (
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span className="inline-flex items-center rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                                            Manual
+                                        </span>
+                                        <span className="text-gray-700">
+                                            <span className="text-gray-400">Logged: </span>
+                                            {formatDate(entry.startTime)}
+                                        </span>
+                                    </div>
+                                    <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        {formatDuration(entry.durationMs ?? 0)}
                                     </span>
                                 </div>
-                                <span className="font-mono tabular-nums text-sm text-gray-700">
-                                    {entry.durationMs !== null
-                                        ? formatDuration(entry.durationMs)
-                                        : 'Running'}
-                                </span>
-                            </div>
+                            ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex flex-col gap-0.5 text-sm">
+                                        <span className="text-gray-700">
+                                            <span className="text-gray-400">Start: </span>
+                                            {formatDate(entry.startTime)}
+                                        </span>
+                                        <span className="text-gray-700">
+                                            <span className="text-gray-400">End: </span>
+                                            {entry.endTime
+                                                ? formatDate(entry.endTime)
+                                                : 'Running'}
+                                        </span>
+                                    </div>
+                                    <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        {entry.durationMs !== null
+                                            ? formatDuration(entry.durationMs)
+                                            : 'Running'}
+                                    </span>
+                                </div>
+                            )}
                             {entry.description && (
                                 <div className="mt-1 text-sm text-gray-600">
                                     {entry.description}
