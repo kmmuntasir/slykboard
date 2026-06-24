@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -219,5 +219,32 @@ export const activityLogs = pgTable(
   (table) => ({
     // F19 feed query: WHERE ticket_id = $1 ORDER BY created_at.
     ticketIdx: index('activity_logs_ticket_id_idx').on(table.ticketId),
+  }),
+);
+
+// F20 §8.4: TimeEntries table. Single-active enforcement via partial unique index.
+// user_id ON DELETE SET NULL (nullable) preserves timer history when a user is
+// deleted — matches the activityLogs idiom (D1, line 211).
+export const timeEntries = pgTable(
+  'TimeEntries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ticketId: uuid('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    startTime: timestamp('start_time', { withTimezone: true, mode: 'date' }).notNull(),
+    endTime: timestamp('end_time', { withTimezone: true, mode: 'date' }),
+    manualEntryMinutes: integer('manual_entry_minutes'), // F21-ready, nullable
+    description: text('description'), // nullable
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // F20: single-active timer per user. MUST use raw sql template (NOT eq()) —
+    // drizzle open bug #4790 emits $1 for eq() in partial indexes; IS NULL is safe
+    // (no value to parameterize). (memory drizzle-partial-index-enum-dollar1)
+    oneActiveTimerPerUser: uniqueIndex('time_entries_one_active')
+      .on(table.userId)
+      .where(sql`${table.endTime} IS NULL`),
   }),
 );
