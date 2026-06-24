@@ -9,6 +9,7 @@ import { getProjectBySlug } from './projectService';
 import { UNSORTED_BUCKET_ID } from './boardService';
 import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
 import { diffTicketChanges, recordActivity } from './activityLogService';
+import { stopTimerForTicket } from './timerService';
 import type { HydratedLabel } from './labelService';
 import type { LabelDiff } from './activityLogService';
 import type { ChecklistItem } from '../db/schema';
@@ -420,12 +421,18 @@ export async function updateTicket(args: {
 }
 
 export async function deleteTicket(ticketId: string): Promise<void> {
-  const softDeleted = await db
-    .update(tickets)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
-    .returning({ id: tickets.id });
-  if (!softDeleted[0]) {
+  const softDeleted = await db.transaction(async (tx) => {
+    // F20 §9.3: close any running timer on this ticket before soft-delete,
+    // so a deleted ticket cannot leave an orphaned open timer.
+    await stopTimerForTicket(tx, ticketId);
+    const [row] = await tx
+      .update(tickets)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+      .returning({ id: tickets.id });
+    return row;
+  });
+  if (!softDeleted) {
     throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
       details: { ticketId },
     });

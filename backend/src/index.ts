@@ -13,6 +13,8 @@ import { pingRouter } from './middleware/pingRoute';
 import { authRouter } from './routes/auth.routes';
 import { projectsRouter } from './routes/projects.routes';
 import { ticketsRouter } from './routes/tickets.routes';
+import { timerRouter } from './routes/timer.routes';
+import { timeRouter } from './routes/time.routes';
 import { usersRouter } from './routes/users.routes';
 import { labelsRouter } from './routes/labels.routes';
 
@@ -52,6 +54,8 @@ app.use('/api', pingRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/tickets', ticketsRouter);
+app.use('/api/timer', timerRouter);
+app.use('/api/time', timeRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/labels', labelsRouter);
 
