@@ -30,6 +30,12 @@ authRouter.post(
       assertDomainAllowed(info.email);
     }
     const user = await upsertByGoogleId(info);
+    // F25 D6: deactivation gate. Blocked users must not obtain a fresh JWT.
+    // Already-issued tokens are invalidated by setUserBlocked -> bumpTokenVersion
+    // (authenticate 401s on ver mismatch); this gate stops new logins.
+    if (user.blocked === true) {
+      throw new AppError(ErrorCode.FORBIDDEN, 'Account deactivated');
+    }
     const token = await signJwt({
       sub: user.id,
       email: user.email,

@@ -1,0 +1,1 @@
+ALTER TABLE "Users" ADD COLUMN "blocked" boolean DEFAULT false NOT NULL;
