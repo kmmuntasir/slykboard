@@ -12,6 +12,7 @@ const baseUser: AuthUser = {
     name: 'Demo User',
     role: 'ADMIN',
     avatarUrl: null,
+    blocked: false,
 };
 
 function setUserWithRole(role: AuthUser['role']) {

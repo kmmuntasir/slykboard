@@ -71,6 +71,7 @@ describe('App shell', () => {
             name: 'Test',
             role: 'MEMBER',
             avatarUrl: null,
+            blocked: false,
         });
         vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
             const url = typeof input === 'string' ? input : input.toString();

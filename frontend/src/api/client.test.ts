@@ -10,6 +10,7 @@ const MOCK_USER_STALE: AuthUser = {
   name: 'n',
   role: 'MEMBER',
   avatarUrl: null,
+  blocked: false,
 };
 
 describe('apiFetch', () => {
@@ -58,6 +59,7 @@ describe('apiFetch', () => {
       name: 'n',
       role: 'MEMBER',
       avatarUrl: null,
+      blocked: false,
     });
     const spy = vi
       .spyOn(globalThis, 'fetch')

@@ -19,6 +19,7 @@ const testUser: AuthUser = {
     name: 'N',
     role: 'ADMIN',
     avatarUrl: null,
+    blocked: false,
 };
 
 // In-memory BroadcastChannel stub. jsdom v25 lacks BroadcastChannel.

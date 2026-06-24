@@ -20,6 +20,7 @@ const baseUser: AuthUser = {
     name: 'Demo User',
     role: 'ADMIN',
     avatarUrl: null,
+    blocked: false,
 };
 
 describe('useRequireRole', () => {

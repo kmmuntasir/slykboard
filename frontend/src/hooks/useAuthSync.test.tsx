@@ -96,6 +96,7 @@ const fullUser: AuthUser = {
     name: 'Orig',
     role: 'MEMBER',
     avatarUrl: null,
+    blocked: false,
 };
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -146,6 +147,7 @@ describe('useAuthSync', () => {
             name: 'New Name',
             role: 'MEMBER',
             avatarUrl: null,
+            blocked: false,
         });
     });
 
@@ -198,6 +200,7 @@ describe('useAuthSync', () => {
             name: 'New Name',
             role: 'MEMBER',
             avatarUrl: null,
+            blocked: false,
         });
 
         // (b) refresh failure → false.
