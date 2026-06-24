@@ -12,6 +12,8 @@ export const boardKeys = {
 export const ticketKeys = {
   all: ['tickets'] as const,
   detail: (id: string) => [...ticketKeys.all, 'detail', id] as const,
+  // F19: per-ticket activity feed cache key.
+  activity: (id: string) => [...ticketKeys.all, 'activity', id] as const,
 };
 
 // F14 T5: label catalog query keys (project-scoped list + label detail).

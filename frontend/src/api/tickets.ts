@@ -1,5 +1,6 @@
 import { apiFetch } from './client';
 import type { ChecklistItem, Ticket, UpdateTicketDto } from '../types/ticket';
+import type { ActivityResponse } from '../types/activity';
 
 export interface MoveTicketRequest {
   statusColumn: string;
@@ -52,4 +53,9 @@ export async function updateTicket(
 // an empty body; apiFetch's 204 guard resolves to null. Promise<void> at call site.
 export async function deleteTicket(ticketId: string): Promise<void> {
   await apiFetch<void>(`/tickets/${ticketId}`, { method: 'DELETE' });
+}
+
+// F19 T3: GET /tickets/:id/activity — render-ready enriched activity rows.
+export async function fetchTicketActivity(ticketId: string): Promise<ActivityResponse> {
+  return apiFetch<ActivityResponse>(`/tickets/${ticketId}/activity`);
 }
