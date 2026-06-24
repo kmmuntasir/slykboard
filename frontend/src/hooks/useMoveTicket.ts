@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { moveTicket } from '@/api/tickets';
-import { boardKeys } from '@/api/queryKeys';
+import { boardKeys, ticketKeys } from '@/api/queryKeys';
 import { applyMoveToBoard, type MoveDescriptor } from '@/utils/boardReorder';
 import type { BoardPayload } from '@/types/board';
 
@@ -35,8 +35,9 @@ export function useMoveTicket(slug: string | undefined) {
         queryClient.setQueryData(boardKeys.detail(slug), ctx.previousBoard);
       }
     },
-    onSettled: () => {
+    onSettled: (_data, _err, vars) => {
       queryClient.invalidateQueries({ queryKey: boardKeys.all });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.activity(vars.ticketId) });
     },
   });
 }
