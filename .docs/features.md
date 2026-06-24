@@ -72,7 +72,7 @@
 - [x] **F24** Ticket summary report (resolved by priority) — ✨ Feature · _deps: F12_ — DONE (T1-T3 ✅; getTicketSummary per-user priority counts (resolved = last column), GET /api/reports/tickets, ReportsPage ticket-summary table; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
 
 **Phase 7 — Admin & Polish**
-- [ ] **F25** User & role management (admin) — ✨ Feature · _deps: F06_
+- [x] **F25** User & role management (admin) — ✨ Feature · _deps: F06_ — DONE (T1-T3 ✅; role promote/demote + last-admin guard + bumpTokenVersion, user deactivation (blocked flag + migration 0011), SSO login rejects blocked, dropped users_one_admin index (migration 0012 multi-admin), SettingsPage user table + confirmation modals for all actions, promote/demote disabled for deactivated users; whitelist deferred; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
 - [ ] **F26** Board search & filter — ⬆ Enhancement · _deps: F13, F14_
 - [ ] **F27** Project settings (rename, columns) — ✨ Feature · _deps: F08_
 - [ ] **F28** UX polish: empty / loading / error / 404 / 403 — ⬆ Enhancement · _deps: F07_
