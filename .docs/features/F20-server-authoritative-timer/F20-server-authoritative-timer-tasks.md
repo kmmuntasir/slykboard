@@ -1114,14 +1114,14 @@ Steps:
 
 ---
 
-## 9. Cross-cutting decisions — owner sign-off needed (recommendations pending approval)
+## 9. Cross-cutting decisions — CONFIRMED (owner-approved 2026-06-24)
 
-1. **Auto-stop vs reject on new start when a timer is open.** **Recommendation: AUTO-STOP.** Industry standard (Toggl, Clockify, Harvest all auto-stop the previous timer on a new start). Auto-stop is user-friendly and matches the "one active timer" mental model; reject forces navigation to the old ticket first. Implemented as `UPDATE … SET end_time = NOW() WHERE user_id = $1 AND end_time IS NULL` then `INSERT`, inside one `db.transaction`. **Awaiting confirmation.**
-2. **Abandoned-timer MVP policy.** **Recommendation: login prompt (`ActiveTimerPrompt` — Resume / Stop / Discard) + 24h client-side display cap; defer the cron reconciliation job (Render Cron / node-cron) to post-MVP.** The single-active index otherwise locks a forgetful user out of new starts forever; the prompt is the escape hatch. MVP folds "Discard" into "Stop" (both close the row). **Awaiting confirmation.**
-3. **Deleting a ticket with a running timer.** **Recommendation: AUTO-STOP** inside `deleteTicket`'s transaction (`stopTimerForTicket(tx, ticketId)`) before the soft-delete. An orphaned open timer would hold the single-active lock forever. Tie-in to F17. **Awaiting confirmation.**
-4. **Server-time endpoint.** **Recommendation: dedicated `GET /api/time` → `{ now: ISO }`.** Client clock skew is otherwise uncorrectable; the endpoint is trivial and leak-free. The client computes `offset = serverNow - clientNow` and refreshes every 5 min. **Awaiting confirmation.**
-5. **Frontend elapsed tick.** **Confirm: 1s `setInterval` (live readout) + server-time offset (correctness).** `useElapsed(startTime, offset)` recomputes `(Date.now() + offset) - startTime` each tick; `useServerTime` refreshes the offset every 5 min. **Awaiting confirmation.**
-6. **`manual_entry_minutes` + `description` columns — include now (F21-ready) or defer.** **Recommendation: include now, nullable.** PRD §8.4 specifies them; adding them now avoids a second migration when F21 ships. **Awaiting confirmation.**
+1. **Auto-stop vs reject on new start when a timer is open.** **Recommendation: AUTO-STOP.** Industry standard (Toggl, Clockify, Harvest all auto-stop the previous timer on a new start). Auto-stop is user-friendly and matches the "one active timer" mental model; reject forces navigation to the old ticket first. Implemented as `UPDATE … SET end_time = NOW() WHERE user_id = $1 AND end_time IS NULL` then `INSERT`, inside one `db.transaction`. **CONFIRMED.**
+2. **Abandoned-timer policy.** **CONFIRMED: NO abandoned-timer feature.** A timer runs indefinitely if not stopped — no login prompt, no 24h display cap, no cron reconciliation job. An admin can stop ANY ticket's timer at any time (the stop route allows admin to stop a timer regardless of owner; regular users can only stop their own).
+3. **Deleting a ticket with a running timer.** **Recommendation: AUTO-STOP** inside `deleteTicket`'s transaction (`stopTimerForTicket(tx, ticketId)`) before the soft-delete. An orphaned open timer would hold the single-active lock forever. Tie-in to F17. **CONFIRMED.**
+4. **Server-time endpoint.** **Recommendation: dedicated `GET /api/time` → `{ now: ISO }`.** Client clock skew is otherwise uncorrectable; the endpoint is trivial and leak-free. The client computes `offset = serverNow - clientNow` and refreshes every 5 min. **CONFIRMED.**
+5. **Frontend elapsed tick.** **Confirm: 1s `setInterval` (live readout) + server-time offset (correctness).** `useElapsed(startTime, offset)` recomputes `(Date.now() + offset) - startTime` each tick; `useServerTime` refreshes the offset every 5 min. **CONFIRMED.**
+6. **`manual_entry_minutes` + `description` columns — include now (F21-ready) or defer.** **Recommendation: include now, nullable.** PRD §8.4 specifies them; adding them now avoids a second migration when F21 ships. **CONFIRMED.**
 
 ---
 
