@@ -33,6 +33,7 @@ export interface TimeEntryWithDuration {
     startTime: string; // ISO
     endTime: string | null; // null = still running
     durationMs: number | null; // null if running; else end - start
+    type: 'manual' | 'timer'; // F21: manual entry vs. live-timer run
     description: string | null;
 }
 

@@ -7,7 +7,14 @@ import { AppError } from '../utils/appError'
 import * as ticketService from '../services/ticketService'
 import * as activityService from '../services/activityService'
 import * as timerService from '../services/timerService'
-import { ticketIdParam, updateTicketBody, type TicketIdParam, type UpdateTicketBody } from './tickets.schema'
+import {
+    ticketIdParam,
+    updateTicketBody,
+    manualEntryBody,
+    type TicketIdParam,
+    type UpdateTicketBody,
+    type ManualEntryBody,
+} from './tickets.schema'
 
 export const ticketsRouter = Router()
 
@@ -155,5 +162,24 @@ ticketsRouter.get(
         const { ticketId } = req.params as TicketIdParam
         const result = await timerService.getTimeEntries(ticketId)
         res.json(success(result))
+    },
+)
+
+// F21 §9.5: manual time entry. Creates a TimeEntries row with
+// manualEntryMinutes set (no running timer). Validates minutes 1-1440 (24h cap).
+ticketsRouter.post(
+    '/:ticketId/timer/manual',
+    authenticate,
+    validateRequest({ params: ticketIdParam, body: manualEntryBody }),
+    async (req, res) => {
+        const { ticketId } = req.params as TicketIdParam
+        const body = req.body as ManualEntryBody
+        const entry = await timerService.addManualEntry({
+            ticketId,
+            userId: req.user!.id,
+            minutes: body.minutes,
+            description: body.description,
+        })
+        res.status(201).json(success(entry))
     },
 )

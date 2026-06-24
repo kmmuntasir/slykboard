@@ -58,3 +58,12 @@ export const updateTicketBody = z
 
 export type TicketIdParam = z.infer<typeof ticketIdParam>
 export type UpdateTicketBody = z.infer<typeof updateTicketBody>
+
+// F21 §9.5: manual time entry body. minutes capped at 1440 (24h) — a single
+// entry longer than a day is almost always a data-entry mistake.
+export const manualEntryBody = z.object({
+    minutes: z.number().int().min(1).max(1440),
+    description: z.string().max(500).optional(),
+})
+
+export type ManualEntryBody = z.infer<typeof manualEntryBody>
