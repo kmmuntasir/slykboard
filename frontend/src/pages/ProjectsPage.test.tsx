@@ -72,6 +72,7 @@ describe('ProjectsPage', () => {
             name: 'Test',
             role: 'ADMIN',
             avatarUrl: null,
+            blocked: false,
         });
     });
 
@@ -106,6 +107,7 @@ describe('ProjectsPage', () => {
             name: 'Test',
             role: 'MEMBER',
             avatarUrl: null,
+            blocked: false,
         });
         renderPage();
 

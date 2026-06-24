@@ -49,6 +49,7 @@ const fullUser: AuthUser = {
     name: 'A',
     role: 'MEMBER',
     avatarUrl: null,
+    blocked: false,
 };
 
 const freshResponse: AuthResponse = {

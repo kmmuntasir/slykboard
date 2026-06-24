@@ -26,6 +26,7 @@ export function LoginPage() {
                     name: user.fullName,
                     role: user.role,
                     avatarUrl: user.avatarUrl,
+                    blocked: false,
                 });
                 navigate(from, { replace: true });
             } catch (err) {

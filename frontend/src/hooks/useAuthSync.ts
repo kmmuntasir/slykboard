@@ -21,6 +21,9 @@ function toAuthUser(fresh: AuthResponse): AuthUser {
     name: fresh.user.fullName,
     role: fresh.user.role,
     avatarUrl: fresh.user.avatarUrl,
+    // /auth/me omits blocked; a logged-in user is by definition active (blocked
+    // users are rejected at the auth gate), so default to false.
+    blocked: false,
   };
 }
 

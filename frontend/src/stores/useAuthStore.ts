@@ -10,6 +10,7 @@ export interface AuthUser {
   name: string; // maps from backend fullName
   role: 'ADMIN' | 'MEMBER';
   avatarUrl: string | null;
+  blocked: boolean;
 }
 
 interface AuthState {

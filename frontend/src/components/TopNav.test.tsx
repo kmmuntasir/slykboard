@@ -29,6 +29,7 @@ const fullUser: AuthUser = {
     name: 'Demo User',
     role: 'ADMIN',
     avatarUrl: 'https://example.com/a.png',
+    blocked: false,
 };
 
 function renderTopNav() {

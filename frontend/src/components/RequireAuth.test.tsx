@@ -24,6 +24,7 @@ function setUserWithToken(token: string) {
         name: 'Test User',
         role: 'MEMBER',
         avatarUrl: null,
+        blocked: false,
     });
 }
 
