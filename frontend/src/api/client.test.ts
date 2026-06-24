@@ -76,6 +76,24 @@ describe('apiFetch', () => {
     });
   });
 
+  // F17 D10: DELETE returns 204 No Content with an EMPTY body. apiFetch MUST
+  // short-circuit before response.json() (which throws SyntaxError on the empty
+  // body). Verify both: the resolved value is null AND .json() is never called.
+  it('returns null on 204 No Content without calling response.json() (DELETE path)', async () => {
+    const jsonSpy = vi.fn(() => Promise.resolve({}));
+    const response = {
+      ok: true,
+      status: 204,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: jsonSpy,
+    } as unknown as Response;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    const result = await apiFetch('/tickets/t1', { method: 'DELETE' });
+    expect(result).toBeNull();
+    expect(jsonSpy).not.toHaveBeenCalled();
+  });
+
   it('throws ApiClientError instances (not generic Error)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'x' } }), { status: 404 }),

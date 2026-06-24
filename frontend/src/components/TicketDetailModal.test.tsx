@@ -58,7 +58,26 @@ vi.mock('./LabelMultiSelect', () => ({
 
 vi.mock('@/api/tickets');
 
+// --- F17 role-gate + delete mutation mocks ---------------------------------
+// useRequireRole('ADMIN') controls the delete-button render; useDeleteTicket is
+// the delete mutation. Both are module-level vi.fn returns so individual tests
+// can flip admin/member and the delete path.
+vi.mock('@/hooks/useRequireRole', () => ({
+    useRequireRole: vi.fn(() => false),
+}));
+vi.mock('@/hooks/useDeleteTicket', () => ({
+    useDeleteTicket: vi.fn(() => ({
+        mutate: vi.fn(),
+        mutateAsync: vi.fn().mockResolvedValue(undefined),
+        isPending: false,
+        isError: false,
+        error: null,
+    })),
+}));
+
 import { TicketDetailModal } from './TicketDetailModal';
+import { useRequireRole } from '@/hooks/useRequireRole';
+import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
 import type { Ticket } from '@/types/ticket';
@@ -285,6 +304,36 @@ describe('TicketDetailModal', () => {
         expect(screen.getByRole('dialog', { name: 'SLYK-101' })).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
     });
+
+    // --- F17: admin-only delete button gate ---------------------------------
+
+    it('F17 ADMIN: renders the "Delete ticket" button', async () => {
+        // beforeEach's clearAllMocks reset the mock fn; re-stub admin = true.
+        vi.mocked(useRequireRole).mockReturnValue(true);
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
+    });
+
+    it('F17 ADMIN: clicking "Delete ticket" opens the DeleteTicketConfirm dialog', async () => {
+        vi.mocked(useRequireRole).mockReturnValue(true);
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete ticket' }));
+        expect(await screen.findByRole('dialog', { name: 'Delete ticket?' })).toBeInTheDocument();
+    });
+
+    it('F17 MEMBER: does NOT render the "Delete ticket" button', async () => {
+        vi.mocked(useRequireRole).mockReturnValue(false);
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.queryByRole('button', { name: 'Delete ticket' })).not.toBeInTheDocument();
+    });
+
+    // Reference the mock so the import is used (satisfies the unused-import
+    // concern while keeping the hook module mocked for the gate tests).
+    void useDeleteTicket;
 
     it('drift: the detail query is configured with refetchInterval 30000', async () => {
         const client = newQueryClient();
