@@ -49,8 +49,9 @@ export const users = pgTable(
       .notNull(),
   },
   (table) => ({
-    // F06 D1: race-safe first-admin guard. At most one ADMIN row; DB is the hard guarantee.
-    usersOneAdminIdx: uniqueIndex('users_one_admin').on(table.role).where(eq(table.role, 'ADMIN')),
+    // F06 D1 originally had users_one_admin (at most one ADMIN row).
+    // F25 D2: DROPPED — multi-admin is F25's goal. The first-admin bootstrap race
+    // is guarded at the application level (F06 checks userCount === 0 before promoting).
   }),
 );
 
