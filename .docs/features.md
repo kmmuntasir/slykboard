@@ -56,7 +56,7 @@
 - [x] **F14** Labels catalog (project-scoped, color-coded) — ✨ Feature · _deps: F12_ — DONE (T1-T10 ✅; typecheck/lint/format/test/build green; 0006 migration applied + backfill verified; live browser smoke passed 2026-06-24)
 - [x] **F15** Checklist — ✨ Feature · _deps: F12_ — DONE (T1-T9 ✅ + 2 bugfixes: create-404 label-tx visibility, TicketCard labels/checklist guard; 0007 migration applied; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 - [x] **F16** Ticket detail modal (view & edit) — ✨ Feature · _deps: F13, F14, F15_ — DONE (T1-T8 ✅; getTicket creator/assignee join, Modal a11y primitive, TicketDetailModal, deep-link nested route, unsaved guard; no migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
-- [ ] **F17** Ticket permissions (admin-only delete) — ✨ Feature · _deps: F16, F18_
+- [x] **F17** Ticket permissions (admin-only delete) — ✨ Feature · _deps: F16, F18_ — DONE (T1-T6 ✅; soft delete (deletedAt + migration 0009), DELETE route requireRole(ADMIN)→204, board-only isNull filter, DeleteTicketConfirm, admin-only button gate, deleted-ticket read-only form + Deleted banner, apiFetch 204 guard, logs/labels retained (archived); typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 
 **Phase 4 — Audit Trail**
 - [x] **F18** Activity log capture — ✨ Feature · _deps: F12_ — DONE (T1-T7 ✅; ActivityLogs table + 6-value enum incl. LABELS_CHANGED (migration 0008), recordActivity + diffTicketChanges, CREATED/STATUS_CHANGED/PRIORITY_CHANGED/ASSIGNEE_CHANGED/LABELS_CHANGED/CONTENT_UPDATED captured in-txn, label readable-name diff, no-op skip, capture-only; 399 BE tests; typecheck/lint/format/build green; live psql smoke passed 2026-06-24)
@@ -595,6 +595,7 @@ The PRD §8 schema is a draft. These additions are required for the features abo
 | `ActivityLogs.action_type` add `LABELS_CHANGED` | Label edits are an audited attribute change. | F18 |
 | Column identity (`columns` JSONB as `{id, name}`) | Renaming a column must not orphan tickets. | F08 |
 | `users_one_admin` partial unique index on `role` WHERE `role='ADMIN'` | Race-safe first-admin guarantee — at most one ADMIN row (DB-enforced). | F06 |
+| `tickets.deletedAt` (soft-delete tombstone) | Admin-only delete is soft: NULL = live; set on delete; board filters `isNull(deletedAt)`. Deleted ticket retained + accessible via direct URL (read-only form). | F17 |
 
 ---
 
