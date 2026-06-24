@@ -25,6 +25,10 @@ const bag = vi.hoisted(() => ({
   dbSelectOrderBy: vi.fn(),
   dbInsertReturning: vi.fn(),
   dbInsertValuesArg: {} as InsertValues,
+  dbSelectCount: vi.fn(),
+  // F27 updateProject: set(...) arg captured; returning() resolves to dbUpdateReturning
+  dbUpdateReturning: vi.fn(),
+  dbUpdateSetArg: {} as InsertValues,
   // F12: all in-tx inserts, captured in call order. Each entry is the values
   // object handed to tx.insert(...).values(...). The PROJECTS insert is also
   // mirrored into dbInsertValuesArg so existing assertions stay green.
@@ -58,7 +62,16 @@ vi.mock('../db/client', () => {
     }),
   };
   const db = {
-    select: vi.fn(() => {
+    // F27: select() with a shape arg (count(*) query) routes to dbSelectCount;
+    // select() with no arg (slug lookup / list) keeps the existing limit/orderBy chain.
+    select: vi.fn((selectArg?: unknown) => {
+      if (selectArg !== undefined) {
+        const countChain = {
+          from: () => countChain,
+          where: () => bag.dbSelectCount(),
+        };
+        return countChain;
+      }
       const chain = {
         from: () => chain,
         where: () => chain,
@@ -73,6 +86,13 @@ vi.mock('../db/client', () => {
         return { returning: () => bag.dbInsertReturning() };
       },
     })),
+    // F27: drives updateProject's db.update(p).set(v).where(...).returning()
+    update: vi.fn(() => ({
+      set: (v: InsertValues) => {
+        bag.dbUpdateSetArg = v;
+        return { where: () => ({ returning: () => bag.dbUpdateReturning() }) };
+      },
+    })),
     // F12: drives the service's db.transaction(cb); resets the per-tx insert
     // counter so each test's "first insert = projects" assumption holds.
     transaction: vi.fn(async (cb: (txClient: TxClient) => Promise<unknown>) => {
@@ -85,13 +105,16 @@ vi.mock('../db/client', () => {
 
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
-import { createProject, getProjectBySlug, listProjects } from './projectService';
+import { createProject, getProjectBySlug, listProjects, updateProject } from './projectService';
 
 function resetBag() {
   bag.dbSelectLimit.mockReset();
   bag.dbSelectOrderBy.mockReset();
   bag.dbInsertReturning.mockReset();
   bag.dbInsertValuesArg = {};
+  bag.dbSelectCount.mockReset();
+  bag.dbUpdateReturning.mockReset();
+  bag.dbUpdateSetArg = {};
   bag.txInserts = [];
 }
 
@@ -270,5 +293,120 @@ describe('getProjectBySlug', () => {
     const result = await getProjectBySlug('missing');
 
     expect(result).toBeNull();
+  });
+});
+
+describe('updateProject', () => {
+  beforeEach(resetBag);
+
+  const existingColumns = [
+    { id: 'a', name: 'To Do' },
+    { id: 'b', name: 'Done' },
+  ];
+  const projectRow = {
+    id: 'p1',
+    name: 'Slyk',
+    slug: 'SLYK',
+    columns: existingColumns,
+    creatorId: 'u1',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it('throws NOT_FOUND when the slug does not exist', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([]); // slug not found
+
+    const error = await updateProject({ slug: 'ghost', name: 'X' }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.NOT_FOUND);
+    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+  });
+
+  it('throws CONFLICT when a removed column still holds live (non-soft-deleted) tickets', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+    bag.dbSelectCount.mockResolvedValueOnce([{ count: '2' }]); // column 'b' still in use
+
+    const error = await updateProject({
+      slug: 'SLYK',
+      columns: [{ id: 'a', name: 'To Do' }],
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.CONFLICT);
+    expect(error.message.toLowerCase()).toContain('cannot delete column');
+    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+  });
+
+  it('updates when a removed column only held soft-deleted tickets (count 0)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+    bag.dbSelectCount.mockResolvedValueOnce([{ count: '0' }]); // no live tickets in 'b'
+    const updatedRow = { ...projectRow, columns: [{ id: 'a', name: 'To Do' }] };
+    bag.dbUpdateReturning.mockResolvedValueOnce([updatedRow]);
+
+    const result = await updateProject({
+      slug: 'SLYK',
+      columns: [{ id: 'a', name: 'To Do' }],
+    });
+
+    expect(result).toEqual(updatedRow);
+    expect(bag.dbUpdateReturning).toHaveBeenCalled();
+    expect((bag.dbUpdateSetArg.columns as unknown[]).length).toBe(1);
+  });
+
+  // NOTE: committed impl throws CONFLICT (not VALIDATION_FAILED) for an empty
+  // columns array — tests follow the committed behaviour; flagged in task notes.
+  it('rejects an empty columns array (a project needs >= 1 column)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+
+    const error = await updateProject({ slug: 'SLYK', columns: [] }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.CONFLICT);
+    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+  });
+
+  it('persists name and leaves columns untouched when only name is provided', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+    const updatedRow = { ...projectRow, name: 'Renamed' };
+    bag.dbUpdateReturning.mockResolvedValueOnce([updatedRow]);
+
+    const result = await updateProject({ slug: 'SLYK', name: 'Renamed' });
+
+    expect(result.name).toBe('Renamed');
+    expect(bag.dbUpdateSetArg.name).toBe('Renamed');
+    expect(bag.dbUpdateSetArg.columns).toBeUndefined();
+    expect(bag.dbSelectCount).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { desc: 'falsy id', columns: [{ id: '', name: 'To Do' }] },
+    { desc: 'empty name', columns: [{ id: 'a', name: '' }] },
+    { desc: 'whitespace-only name', columns: [{ id: 'a', name: '   ' }] },
+  ])('rejects a column with invalid shape ($desc) as VALIDATION_FAILED', async ({ columns }) => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+
+    const error = await updateProject({ slug: 'SLYK', columns }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate column ids as VALIDATION_FAILED', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+
+    const error = await updateProject({
+      slug: 'SLYK',
+      columns: [
+        { id: 'a', name: 'To Do' },
+        { id: 'a', name: 'Also To Do' },
+      ],
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    expect(error.message.toLowerCase()).toContain('unique');
+    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
   });
 });
