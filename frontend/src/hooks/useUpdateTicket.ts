@@ -61,6 +61,7 @@ export function useUpdateTicket() {
     onSettled: (_data, _err, vars) => {
       queryClient.invalidateQueries({ queryKey: boardKeys.all });
       queryClient.invalidateQueries({ queryKey: ticketKeys.detail(vars.ticketId) });
+      queryClient.invalidateQueries({ queryKey: ticketKeys.activity(vars.ticketId) });
       // F14 T8: labelIds patches require a board refetch — the hydrated label
       // colors/names come from the server join, not the ID-only patch. The
       // boardKeys.all invalidation above already covers this; the explicit

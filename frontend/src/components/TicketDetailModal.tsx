@@ -12,6 +12,7 @@ import type { UpdateTicketDto } from '@/types/ticket';
 import { Modal } from './Modal';
 import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
 import { DeleteTicketConfirm } from './DeleteTicketConfirm';
+import { ActivityFeed } from './ActivityFeed';
 import { TicketAttributeForm } from './TicketAttributeForm';
 
 // F16: the unified ticket detail modal. Read-only header (display ID, creator,
@@ -157,7 +158,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                         </button>
                     </div>
                 )}
-                {/* F19 will render the activity feed here. */}
+                {/* F19 T5: reverse-chronological activity feed (REQ-5.1, REQ-5.2). */}
+                <ActivityFeed ticketId={ticketId} />
             </Modal>
 
             <ConfirmDiscardDialog
