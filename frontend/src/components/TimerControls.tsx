@@ -9,8 +9,8 @@ import { formatDuration } from '@/utils/formatDuration';
 
 // F20: per-ticket timer controls. Renders Start when no timer is running on
 // this ticket, or Stop + a live elapsed readout when this ticket's timer is the
-// active one. Elapsed tracks server-authoritative startTime via the server-time
-// offset (useServerTime) and ticks every second.
+// active one. After stopping, shows the last-tracked duration. Elapsed tracks
+// server-authoritative startTime via the server-time offset (useServerTime).
 interface TimerControlsProps {
     ticketId: string;
 }
@@ -30,6 +30,8 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
     // its callback (NOT synchronously in the effect body — avoids set-state-in-effect).
     // Date.now() lives in the lazy initializer + the interval callback, never in render.
     const [now, setNow] = useState(() => Date.now());
+    // F20: capture the just-stopped entry's duration for display after stop.
+    const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
 
     useEffect(() => {
         if (!isRunning) return;
@@ -42,6 +44,15 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
             ? now + offset - Date.parse(activeTimer.startTime)
             : 0;
 
+    const handleStop = async () => {
+        const { entry } = await stop();
+        if (entry.endTime) {
+            setLastDurationMs(
+                Date.parse(entry.endTime) - Date.parse(entry.startTime),
+            );
+        }
+    };
+
     return (
         <div className="mb-4 flex items-center gap-3">
             {isRunning ? (
@@ -49,7 +60,7 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
                     <button
                         type="button"
                         onClick={() => {
-                            void stop();
+                            void handleStop();
                         }}
                         disabled={isStopping}
                         className="rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
@@ -61,16 +72,23 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
                     </span>
                 </>
             ) : (
-                <button
-                    type="button"
-                    onClick={() => {
-                        void start();
-                    }}
-                    disabled={isStarting}
-                    className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                    Start
-                </button>
+                <>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void start();
+                        }}
+                        disabled={isStarting}
+                        className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                        Start
+                    </button>
+                    {lastDurationMs !== null && (
+                        <span className="text-sm text-gray-500">
+                            Last tracked: {formatDuration(lastDurationMs)}
+                        </span>
+                    )}
+                </>
             )}
         </div>
     );
