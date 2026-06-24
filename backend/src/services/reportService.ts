@@ -1,6 +1,7 @@
-import { and, eq, gte, lt, isNotNull } from 'drizzle-orm';
+import { and, eq, gte, lt, isNull, isNotNull } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
-import { timeEntries, users } from '../db/schema';
+import { timeEntries, tickets, projects, users } from '../db/schema';
 
 export interface ReportUser {
   id: string;
@@ -10,6 +11,25 @@ export interface ReportUser {
 }
 export interface TimeReportResponse {
   users: ReportUser[];
+  window: { start: string; end: string; label: string };
+}
+
+export interface TicketCountByPriority {
+  LOW: number;
+  MEDIUM: number;
+  HIGH: number;
+  URGENT: number;
+  CRITICAL: number;
+  total: number;
+}
+export interface TicketSummaryUser {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  counts: TicketCountByPriority;
+}
+export interface TicketSummaryResponse {
+  users: TicketSummaryUser[];
   window: { start: string; end: string; label: string };
 }
 
@@ -99,6 +119,80 @@ export async function getTimeReport(args: {
   }
 
   const reportUsers = [...userMap.values()].sort((a, b) => b.totalMs - a.totalMs);
+  return {
+    users: reportUsers,
+    window: { start: start.toISOString(), end: end.toISOString(), label },
+  };
+}
+
+export async function getTicketSummary(args: {
+  period: 'weekly' | 'monthly';
+  offset: number;
+}): Promise<TicketSummaryResponse> {
+  const start = computeWindowStart(args.period, args.offset);
+  const end = computeWindowEnd(start, args.period);
+  const label = formatWindowLabel(start, args.period);
+
+  // 1. Load all projects' last column id — the "Done" column.
+  const projectRows = await db.select({ id: projects.id, columns: projects.columns }).from(projects);
+  const doneColumnIds = new Set<string>();
+  for (const p of projectRows) {
+    const cols = p.columns;
+    if (cols && cols.length > 0) {
+      doneColumnIds.add(cols[cols.length - 1]!.id);
+    }
+  }
+
+  // 2. Tickets updated in window, not soft-deleted, with an assignee. Join users for name/avatar.
+  const assigneeAlias = alias(users, 'assignee');
+  const ticketRows = await db
+    .select({
+      assigneeId: tickets.assigneeId,
+      assigneeFullName: assigneeAlias.fullName,
+      assigneeAvatarUrl: assigneeAlias.avatarUrl,
+      statusColumn: tickets.statusColumn,
+      priority: tickets.priority,
+    })
+    .from(tickets)
+    .leftJoin(assigneeAlias, eq(assigneeAlias.id, tickets.assigneeId))
+    .where(
+      and(
+        gte(tickets.updatedAt, start),
+        lt(tickets.updatedAt, end),
+        isNull(tickets.deletedAt),
+        isNotNull(tickets.assigneeId),
+      ),
+    );
+
+  // 3. Keep only resolved tickets (statusColumn is a Done column) and aggregate per user.
+  const userMap = new Map<string, TicketSummaryUser>();
+  for (const r of ticketRows) {
+    if (!r.assigneeId || !doneColumnIds.has(r.statusColumn)) continue;
+    const priority = r.priority as keyof TicketCountByPriority;
+    const existing = userMap.get(r.assigneeId);
+    if (existing) {
+      existing.counts[priority] = (existing.counts[priority] ?? 0) + 1;
+      existing.counts.total += 1;
+    } else {
+      const counts: TicketCountByPriority = {
+        LOW: 0,
+        MEDIUM: 0,
+        HIGH: 0,
+        URGENT: 0,
+        CRITICAL: 0,
+        total: 1,
+      };
+      counts[priority] = 1;
+      userMap.set(r.assigneeId, {
+        id: r.assigneeId,
+        fullName: r.assigneeFullName ?? 'Unknown user',
+        avatarUrl: r.assigneeAvatarUrl,
+        counts,
+      });
+    }
+  }
+
+  const reportUsers = [...userMap.values()].sort((a, b) => b.counts.total - a.counts.total);
   return {
     users: reportUsers,
     window: { start: start.toISOString(), end: end.toISOString(), label },

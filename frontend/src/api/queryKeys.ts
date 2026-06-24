@@ -36,4 +36,7 @@ export const reportKeys = {
   all: ['reports'] as const,
   time: (period: 'weekly' | 'monthly', offset: number) =>
     [...reportKeys.all, 'time', period, offset] as const,
+  // F24: per-user resolved-ticket summary cache keys (period + offset scoped).
+  tickets: (period: 'weekly' | 'monthly', offset: number) =>
+    [...reportKeys.all, 'tickets', period, offset] as const,
 };

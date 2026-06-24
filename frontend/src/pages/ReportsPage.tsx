@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { AssigneeAvatar } from '@/components/AssigneeAvatar';
-import { useReport } from '@/hooks/useReport';
+import { useReport, useTicketSummary } from '@/hooks/useReport';
 import { formatDuration } from '@/utils/formatDuration';
 
 type Period = 'weekly' | 'monthly';
@@ -15,6 +15,10 @@ export function ReportsPage() {
 
     const { data, isLoading, isError } = useReport(period, offset);
     const users = data?.users ?? [];
+
+    // F24: resolved-ticket summary reuses the SAME period + offset window.
+    const ticketSummary = useTicketSummary(period, offset);
+    const summaryUsers = ticketSummary.data?.users ?? [];
 
     const handlePeriodChange = (next: Period) => {
         if (next === period) return;
@@ -111,6 +115,113 @@ export function ReportsPage() {
                                     <td className="px-4 py-2.5 text-right">
                                         <span className="font-mono tabular-nums text-sm text-gray-700">
                                             {formatDuration(user.totalMs)}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* F24: Ticket Summary — resolved-ticket counts grouped by priority,
+                same shared period/offset window as the time report. */}
+            <h2 className="mt-8 text-2xl font-semibold">
+                Ticket Summary (Resolved by Priority)
+            </h2>
+
+            {ticketSummary.data?.window?.label && (
+                <p className="mt-4 text-lg font-medium text-gray-800">
+                    {ticketSummary.data.window.label}
+                </p>
+            )}
+
+            {ticketSummary.isLoading && (
+                <p className="mt-4 text-sm text-gray-500">Loading…</p>
+            )}
+            {ticketSummary.isError && (
+                <p className="mt-4 text-sm text-red-600">
+                    Failed to load report.
+                </p>
+            )}
+            {!ticketSummary.isLoading && !ticketSummary.isError && summaryUsers.length === 0 && (
+                <p className="mt-4 text-sm text-gray-500">
+                    No resolved tickets in this period.
+                </p>
+            )}
+            {!ticketSummary.isLoading && !ticketSummary.isError && summaryUsers.length > 0 && (
+                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            <tr>
+                                <th scope="col" className="px-4 py-2.5">
+                                    Assignee
+                                </th>
+                                <th scope="col" className="px-4 py-2.5 text-right">
+                                    Low
+                                </th>
+                                <th scope="col" className="px-4 py-2.5 text-right">
+                                    Medium
+                                </th>
+                                <th scope="col" className="px-4 py-2.5 text-right">
+                                    High
+                                </th>
+                                <th scope="col" className="px-4 py-2.5 text-right">
+                                    Urgent
+                                </th>
+                                <th scope="col" className="px-4 py-2.5 text-right">
+                                    Critical
+                                </th>
+                                <th scope="col" className="px-4 py-2.5 text-right">
+                                    Total
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {summaryUsers.map((user) => (
+                                <tr key={user.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-2.5">
+                                        <div className="flex items-center gap-2">
+                                            <AssigneeAvatar
+                                                assignee={{
+                                                    id: user.id,
+                                                    fullName: user.fullName,
+                                                    avatarUrl: user.avatarUrl,
+                                                }}
+                                            />
+                                            <span className="text-gray-800">
+                                                {user.fullName}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                            {user.counts.LOW}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                            {user.counts.MEDIUM}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                            {user.counts.HIGH}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                            {user.counts.URGENT}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                            {user.counts.CRITICAL}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                            {user.counts.total}
                                         </span>
                                     </td>
                                 </tr>
