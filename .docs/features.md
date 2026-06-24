@@ -68,7 +68,7 @@
 - [x] **F22** Time log list per ticket — ✨ Feature · _deps: F20_ — DONE (T1-T3 ✅; user resolution via leftJoin users in getTimeEntries, TimeLog shows who tracked each entry + avatar, "Unknown user" for deleted; ~90% shipped via F20+F21; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
 
 **Phase 6 — Reporting**
-- [ ] **F23** Time log report (per-user, weekly/monthly) — ✨ Feature · _deps: F22_
+- [x] **F23** Time log report (per-user, weekly/monthly) — ✨ Feature · _deps: F22_ — DONE (T1-T3 ✅; reportService per-user aggregation (UTC weekly/monthly windows), GET /api/reports/time route, ReportsPage UI (toggle + nav + per-user table), open timer excluded, all authenticated users; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
 - [ ] **F24** Ticket summary report (resolved by priority) — ✨ Feature · _deps: F12_
 
 **Phase 7 — Admin & Polish**
