@@ -3,7 +3,7 @@
 // "Save Columns" persists the whole draft and delete persists immediately
 // (gated by a confirm modal per the destructive-action rule). Hosted on
 // ProjectSettingsPage.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
 import { ApiClientError } from '@/api/client';
 import { Modal } from './Modal';
@@ -25,13 +25,16 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
     const [lastSync, setLastSync] = useState<string>(JSON.stringify(columns));
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-    useEffect(() => {
-        const incoming = JSON.stringify(columns);
-        if (incoming !== lastSync) {
-            setDraft(columns);
-            setLastSync(incoming);
-        }
-    }, [columns, lastSync]);
+    // Adjusting state during render: when the server data changes (e.g. after our
+    // own mutation invalidates + refetches), reset the draft. The sync key guards
+    // against clobbering an in-progress user edit on a background refetch that
+    // didn't actually change the columns. React will re-render before committing.
+    // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+    const incoming = JSON.stringify(columns);
+    if (incoming !== lastSync) {
+        setDraft(columns);
+        setLastSync(incoming);
+    }
 
     const updateName = (id: string, name: string) => {
         setDraft((curr) => curr.map((c) => (c.id === id ? { ...c, name } : c)));
