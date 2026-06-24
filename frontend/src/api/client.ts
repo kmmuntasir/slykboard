@@ -118,6 +118,11 @@ export async function apiFetch<T>(path: string, init?: FetchInit): Promise<T> {
     );
   }
 
+  // F17 D10: 204 No Content has an empty body — do NOT JSON-parse.
+  if (response.status === 204) {
+    return null as T;
+  }
+
   const body = (await response.json()) as Envelope<T> | ApiErrorBody;
   if ('error' in body) {
     throw new ApiClientError(

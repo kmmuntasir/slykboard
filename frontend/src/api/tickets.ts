@@ -47,3 +47,9 @@ export async function updateTicket(
     body: JSON.stringify(dto),
   });
 }
+
+// F17 T3: DELETE /tickets/:id — admin-only soft-delete. Server returns 204 with
+// an empty body; apiFetch's 204 guard resolves to null. Promise<void> at call site.
+export async function deleteTicket(ticketId: string): Promise<void> {
+  await apiFetch<void>(`/tickets/${ticketId}`, { method: 'DELETE' });
+}
