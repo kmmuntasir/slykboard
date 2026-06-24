@@ -131,6 +131,9 @@ export const tickets = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    // F17 D1: soft-delete tombstone. NULL = live; set to now() by deleteTicket.
+    // Nullable, no default (null = live). UTC timestamptz per project rule.
+    deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
   },
   (table) => ({
     // F12 D1: invariant backstop — two concurrent creates can never share a number.
