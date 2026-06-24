@@ -125,6 +125,10 @@ export async function updateProject(args: {
         );
       }
     }
+    const columnIds = args.columns.map((c) => c.id);
+    if (new Set(columnIds).size !== columnIds.length) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, 'Column ids must be unique');
+    }
     // F27: block deleting a column that still has live (non-deleted) tickets.
     const oldIds = new Set(project.columns.map((c) => c.id));
     const newIds = new Set(args.columns.map((c) => c.id));
