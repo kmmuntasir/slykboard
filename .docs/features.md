@@ -60,7 +60,7 @@
 
 **Phase 4 — Audit Trail**
 - [x] **F18** Activity log capture — ✨ Feature · _deps: F12_ — DONE (T1-T7 ✅; ActivityLogs table + 6-value enum incl. LABELS_CHANGED (migration 0008), recordActivity + diffTicketChanges, CREATED/STATUS_CHANGED/PRIORITY_CHANGED/ASSIGNEE_CHANGED/LABELS_CHANGED/CONTENT_UPDATED captured in-txn, label readable-name diff, no-op skip, capture-only; 399 BE tests; typecheck/lint/format/build green; live psql smoke passed 2026-06-24)
-- [ ] **F19** Activity feed UI — ✨ Feature · _deps: F18_
+- [x] **F19** Activity feed UI — ✨ Feature · _deps: F18_ — DONE (T1-T6 ✅; backend-enriched GET activity route (actor/column/assignee resolved), ActivityFeed+ActivityItem components (show-more, relative+absolute time), describeActivity sentence-switch (REQ-5.2 grammar), CONTENT_UPDATED distinguishes title/description; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 
 **Phase 5 — Time Tracking**
 - [ ] **F20** Server-authoritative timer (start/stop, browser-independent) — ✨ Feature · _deps: F16_
