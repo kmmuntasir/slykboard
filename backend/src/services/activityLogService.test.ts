@@ -28,13 +28,13 @@ describe('diffTicketChanges', () => {
       name: 'title change -> one CONTENT_UPDATED',
       next: { ...base, title: 't2' },
       labelDiff: null,
-      expected: [{ action: 'CONTENT_UPDATED', oldValue: null, newValue: null }],
+      expected: [{ action: 'CONTENT_UPDATED', oldValue: null, newValue: 'title' }],
     },
     {
       name: 'description change -> one CONTENT_UPDATED',
       next: { ...base, description: 'd2' },
       labelDiff: null,
-      expected: [{ action: 'CONTENT_UPDATED', oldValue: null, newValue: null }],
+      expected: [{ action: 'CONTENT_UPDATED', oldValue: null, newValue: 'description' }],
     },
     {
       name: 'labels added',
@@ -67,7 +67,7 @@ describe('diffTicketChanges', () => {
       expected: [
         { action: 'PRIORITY_CHANGED', oldValue: 'HIGH', newValue: 'LOW' },
         { action: 'ASSIGNEE_CHANGED', oldValue: 'u1', newValue: 'u2' },
-        { action: 'CONTENT_UPDATED', oldValue: null, newValue: null },
+        { action: 'CONTENT_UPDATED', oldValue: null, newValue: 'title and description' },
         { action: 'LABELS_CHANGED', oldValue: null, newValue: 'added: Bug' },
       ],
     },

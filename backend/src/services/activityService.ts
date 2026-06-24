@@ -118,8 +118,9 @@ export function enrichActivityRows(
         return { ...base, from: row.oldValue, to: row.newValue };
       case 'LABELS_CHANGED':
         return { ...base, message: row.newValue };
-      case 'CREATED':
       case 'CONTENT_UPDATED':
+        return { ...base, message: row.newValue };
+      case 'CREATED':
       default:
         return base;
     }
