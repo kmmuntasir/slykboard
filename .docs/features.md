@@ -73,7 +73,7 @@
 
 **Phase 7 — Admin & Polish**
 - [x] **F25** User & role management (admin) — ✨ Feature · _deps: F06_ — DONE (T1-T3 ✅; role promote/demote + last-admin guard + bumpTokenVersion, user deactivation (blocked flag + migration 0011), SSO login rejects blocked, dropped users_one_admin index (migration 0012 multi-admin), SettingsPage user table + confirmation modals for all actions, promote/demote disabled for deactivated users; whitelist deferred; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
-- [ ] **F26** Board search & filter — ⬆ Enhancement · _deps: F13, F14_
+- [x] **F26** Board search & filter — ⬆ Enhancement · _deps: F13, F14_ — DONE (T1-T2 ✅; server-side board filtering (search ILIKE title + ticket_number, assignee/priority/label WHERE), BoardFilters component (debounced search + 3 dropdowns + Clear), useBoardUiStore filter state, 30s poll preserves filters; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
 - [ ] **F27** Project settings (rename, columns) — ✨ Feature · _deps: F08_
 - [ ] **F28** UX polish: empty / loading / error / 404 / 403 — ⬆ Enhancement · _deps: F07_
 - [ ] **F29** Deployment & self-host packaging — 🚀 Deployment · _deps: all above_
