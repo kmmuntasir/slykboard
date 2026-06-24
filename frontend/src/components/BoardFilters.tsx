@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { listLabels } from '@/api/labels';
@@ -9,7 +10,12 @@ import type { Label } from '@/types/label';
 // F26: board filter bar. Reads/writes filter state in useBoardUiStore; the
 // useBoard hook reacts to those values and refires the board query with a
 // server-side query string (search/assignee/priority/label).
+//
+// The search input uses LOCAL state + a 300ms debounce before pushing to the
+// Zustand store. This prevents the store update → board refetch → re-render cycle
+// from defocusing the input on every keystroke.
 
+const SEARCH_DEBOUNCE_MS = 300;
 const PRIORITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'] as const;
 
 interface BoardFiltersProps {
@@ -29,6 +35,25 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
         clearFilters,
     } = useBoardUiStore();
 
+    // Local state for the search input — prevents re-render/defocus on each keystroke.
+    const [localSearch, setLocalSearch] = useState(searchQuery);
+
+    // Debounce-push to the store so useBoard refetches only after typing pauses.
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (localSearch !== searchQuery) {
+                setSearchQuery(localSearch);
+            }
+        }, SEARCH_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [localSearch, searchQuery, setSearchQuery]);
+
+    // Sync local state when the store is cleared externally (Clear button).
+    const handleClear = () => {
+        setLocalSearch('');
+        clearFilters();
+    };
+
     const { data: users = [] } = useUsers();
     const { data: labels = [] } = useQuery<Label[]>({
         queryKey: labelKeys.forProject(slug),
@@ -39,8 +64,8 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
         <div className="flex flex-wrap items-center gap-3">
             <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
                 placeholder="Search tickets…"
                 aria-label="Search tickets"
                 className="min-w-[14rem] flex-1 rounded border border-gray-300 p-2 text-sm"
@@ -90,7 +115,7 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
 
             <button
                 type="button"
-                onClick={clearFilters}
+                onClick={handleClear}
                 className="rounded border bg-background px-4 py-2 text-sm hover:bg-secondary"
             >
                 Clear
