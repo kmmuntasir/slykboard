@@ -80,7 +80,7 @@ export async function moveTicket({
   actingUserId,
 }: MoveTicketInput): Promise<TicketRow> {
   // 1. Load the ticket (404 if absent). Derive projectId from the row.
-  const [ticket] = await db.select().from(tickets).where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt))).limit(1);
+  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
   if (!ticket) {
     throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
       details: { ticketId },
@@ -135,7 +135,7 @@ export async function moveTicket({
     const columnRows = await tx
       .select({ id: tickets.id, position: tickets.position })
       .from(tickets)
-      .where(and(eq(tickets.projectId, ticket.projectId), eq(tickets.statusColumn, statusColumn), isNull(tickets.deletedAt)))
+      .where(and(eq(tickets.projectId, ticket.projectId), eq(tickets.statusColumn, statusColumn)))
       .orderBy(asc(tickets.position));
 
     if (columnNeedsRebalance(columnRows.map((row) => row.position))) {
@@ -280,7 +280,7 @@ export async function getTicket(
     .from(tickets)
     .leftJoin(creatorUser, eq(creatorUser.id, tickets.creatorId))
     .leftJoin(assigneeUser, eq(assigneeUser.id, tickets.assigneeId))
-    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+    .where(eq(tickets.id, ticketId))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
@@ -324,7 +324,7 @@ export async function updateTicket(args: {
   // logging in one db.transaction so a rollback discards everything atomically.
   return db.transaction(async (tx) => {
     // Load the OLD row INSIDE the txn so the read and the write are atomic.
-    const oldRows = await tx.select().from(tickets).where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt))).limit(1);
+    const oldRows = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
     const oldRow = oldRows[0];
     if (!oldRow) {
       throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
