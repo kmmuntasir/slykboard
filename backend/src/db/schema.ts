@@ -12,6 +12,7 @@ import {
   doublePrecision,
   index,
   primaryKey,
+  boolean,
 } from 'drizzle-orm/pg-core';
 
 // F12 D2: ticket_number starts at 1 per project (Jira default). Zero-pad
@@ -36,6 +37,9 @@ export const users = pgTable(
     // the JWT `ver` claim to this column; bumpTokenVersion increments it.
     // Default 0 so existing rows need no data migration.
     tokenVersion: integer('token_version').default(0).notNull(),
+    // F25 D6: admin deactivation toggle. blocked=true → SSO login rejected.
+    // bumpTokenVersion kills the user's existing sessions on deactivation.
+    blocked: boolean('blocked').default(false).notNull(),
     // Convention: every table carries UTC timestamptz (F18 audit + F20+ baseline).
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     // Drizzle has no SQL-layer @updatedAt; bump on every update via this hook.

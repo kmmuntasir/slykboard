@@ -12,7 +12,7 @@ const { TEST_ENV } = vi.hoisted(() => ({
     databaseUrl: 'postgresql://test:test@localhost:5432/test',
     jwtSecret: 'test-jwt-secret-test-jwt-secret-0000',
     jwtTtl: '8h',
-    googleClientId: 'test-client-id.apps.googleusercontent.com',
+    googleClientId: 'test-client-id.apps.usercontent.google',
     googleClientSecret: 'test-client-secret',
     googleCallbackUrl: 'http://localhost:3000/api/auth/google/callback',
     allowedDomain: undefined as string | undefined,
@@ -28,15 +28,22 @@ vi.mock('../services/tokenVersion', () => ({
 }));
 vi.mock('../services/userService', () => ({
   listUsers: vi.fn(),
+  updateUserRole: vi.fn(),
+  setUserBlocked: vi.fn(),
 }));
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
 import { findUserTokenVersion } from '../services/tokenVersion';
-import { listUsers } from '../services/userService';
+import { listUsers, updateUserRole, setUserBlocked } from '../services/userService';
+import type { UserOption } from '../services/userService';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedListUsers = vi.mocked(listUsers);
+const mockedUpdateRole = vi.mocked(updateUserRole);
+const mockedSetBlocked = vi.mocked(setUserBlocked);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -62,7 +69,14 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
   it('returns 200 + array of users with valid Bearer', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedListUsers.mockResolvedValue([
-      { id: 'u-a', fullName: 'Alice', avatarUrl: 'http://a' },
+      {
+        id: 'u-a',
+        email: 'a@x.com',
+        fullName: 'Alice',
+        role: 'MEMBER',
+        avatarUrl: 'http://a',
+        blocked: false,
+      },
     ]);
 
     const res = await request(app)
@@ -75,11 +89,25 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
     expect(mockedListUsers).toHaveBeenCalledTimes(1);
   });
 
-  it('excludes email and role from every item (PII guard)', async () => {
+  it('exposes the full F25 shape {id, email, fullName, role, avatarUrl, blocked}', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedListUsers.mockResolvedValue([
-      { id: 'u-a', fullName: 'Alice', avatarUrl: null },
-      { id: 'u-b', fullName: 'Bob', avatarUrl: 'http://b' },
+      {
+        id: 'u-a',
+        email: 'a@x.com',
+        fullName: 'Alice',
+        role: 'ADMIN',
+        avatarUrl: null,
+        blocked: false,
+      },
+      {
+        id: 'u-b',
+        email: 'b@x.com',
+        fullName: 'Bob',
+        role: 'MEMBER',
+        avatarUrl: 'http://b',
+        blocked: true,
+      },
     ]);
 
     const res = await request(app)
@@ -89,10 +117,11 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
     expect(res.status).toBe(200);
     for (const item of res.body.data) {
       expect(item).toHaveProperty('id');
+      expect(item).toHaveProperty('email');
       expect(item).toHaveProperty('fullName');
+      expect(item).toHaveProperty('role');
       expect(item).toHaveProperty('avatarUrl');
-      expect(item).not.toHaveProperty('email');
-      expect(item).not.toHaveProperty('role');
+      expect(item).toHaveProperty('blocked');
     }
   });
 
@@ -110,10 +139,31 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
   it('preserves the order returned by the service (sorted by fullName asc)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    const sorted = [
-      { id: 'u-a', fullName: 'Alice', avatarUrl: null },
-      { id: 'u-b', fullName: 'Bob', avatarUrl: null },
-      { id: 'u-c', fullName: 'Carol', avatarUrl: null },
+    const sorted: UserOption[] = [
+      {
+        id: 'u-a',
+        email: 'a@x.com',
+        fullName: 'Alice',
+        role: 'MEMBER',
+        avatarUrl: null,
+        blocked: false,
+      },
+      {
+        id: 'u-b',
+        email: 'b@x.com',
+        fullName: 'Bob',
+        role: 'MEMBER',
+        avatarUrl: null,
+        blocked: false,
+      },
+      {
+        id: 'u-c',
+        email: 'c@x.com',
+        fullName: 'Carol',
+        role: 'MEMBER',
+        avatarUrl: null,
+        blocked: false,
+      },
     ];
     mockedListUsers.mockResolvedValue(sorted);
 
@@ -134,5 +184,242 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
       .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
 
     expect(res.status).toBe(200);
+  });
+});
+
+describe('usersRouter — PATCH /api/users/:userId/role (F25)', () => {
+  it('returns 200 + updated user for ADMIN', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateRole.mockResolvedValue({
+      id: 'u-target',
+      googleId: 'g1',
+      email: 't@x.com',
+      fullName: 'Target',
+      avatarUrl: null,
+      role: 'ADMIN',
+      tokenVersion: 1,
+      blocked: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof updateUserRole>>);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/role')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ role: 'ADMIN' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.role).toBe('ADMIN');
+    expect(mockedUpdateRole).toHaveBeenCalledWith({
+      targetUserId: 'u-target',
+      newRole: 'ADMIN',
+      actingUserId: 'u1',
+    });
+  });
+
+  it('returns 403 FORBIDDEN for MEMBER (role-gated)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/role')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ role: 'ADMIN' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedUpdateRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer', async () => {
+    const res = await request(app).patch('/api/users/u-target/role').send({ role: 'ADMIN' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedUpdateRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on invalid role value', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/role')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ role: 'SUPERUSER' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on missing role', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/role')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateRole).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on empty userId param', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users//role')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ role: 'ADMIN' });
+
+    // Empty path segment → Express 404 (route does not match), not 400.
+    expect(res.status).toBe(404);
+    expect(mockedUpdateRole).not.toHaveBeenCalled();
+  });
+
+  it('propagates CONFLICT (409) when demoting the last admin', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateRole.mockRejectedValue(
+      new AppError(ErrorCode.CONFLICT, 'Cannot demote the last admin'),
+    );
+
+    const res = await request(app)
+      .patch('/api/users/u-target/role')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ role: 'MEMBER' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+  });
+
+  it('propagates NOT_FOUND (404) when target user absent', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateRole.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'User not found'));
+
+    const res = await request(app)
+      .patch('/api/users/u-ghost/role')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ role: 'ADMIN' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
+  it('returns 200 + updated user for ADMIN (block=true)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetBlocked.mockResolvedValue({
+      id: 'u-target',
+      googleId: 'g1',
+      email: 't@x.com',
+      fullName: 'Target',
+      avatarUrl: null,
+      role: 'MEMBER',
+      tokenVersion: 1,
+      blocked: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof setUserBlocked>>);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/blocked')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ blocked: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.blocked).toBe(true);
+    expect(mockedSetBlocked).toHaveBeenCalledWith({
+      targetUserId: 'u-target',
+      blocked: true,
+    });
+  });
+
+  it('returns 200 for ADMIN (block=false reactivate)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetBlocked.mockResolvedValue({
+      id: 'u-target',
+      googleId: 'g1',
+      email: 't@x.com',
+      fullName: 'Target',
+      avatarUrl: null,
+      role: 'MEMBER',
+      tokenVersion: 2,
+      blocked: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof setUserBlocked>>);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/blocked')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ blocked: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.blocked).toBe(false);
+    expect(mockedSetBlocked).toHaveBeenCalledWith({
+      targetUserId: 'u-target',
+      blocked: false,
+    });
+  });
+
+  it('returns 403 FORBIDDEN for MEMBER (role-gated)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/blocked')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ blocked: true });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedSetBlocked).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer', async () => {
+    const res = await request(app).patch('/api/users/u-target/blocked').send({ blocked: true });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedSetBlocked).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on non-boolean blocked', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/blocked')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ blocked: 'yes' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedSetBlocked).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on missing blocked', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/blocked')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedSetBlocked).not.toHaveBeenCalled();
+  });
+
+  it('propagates NOT_FOUND (404) when target user absent', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetBlocked.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'User not found'));
+
+    const res = await request(app)
+      .patch('/api/users/u-ghost/blocked')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ blocked: true });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
   });
 });

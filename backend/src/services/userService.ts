@@ -1,6 +1,9 @@
 import { count, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { users } from '../db/schema';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
+import { bumpTokenVersion } from './tokenVersion';
 import type { GoogleUserInfo } from './googleOAuth';
 
 export type UpsertUserInput = GoogleUserInfo;
@@ -120,13 +123,94 @@ export async function findUserByGoogleId(googleId: string): Promise<UserRow | nu
   return row ?? null;
 }
 
-// F13 T5: minimal-PII user list for assignee picker. Excludes email/role.
-export type UserOption = { id: string; fullName: string; avatarUrl: string | null };
+// F25: user management list. Now exposes email/role/blocked so the admin
+// user-management UI can render the full roster + deactivation state.
+export type UserOption = {
+  id: string;
+  email: string;
+  fullName: string;
+  role: 'ADMIN' | 'MEMBER';
+  avatarUrl: string | null;
+  blocked: boolean;
+};
 
 export async function listUsers(): Promise<UserOption[]> {
   const rows = await db
-    .select({ id: users.id, fullName: users.fullName, avatarUrl: users.avatarUrl })
+    .select({
+      id: users.id,
+      email: users.email,
+      fullName: users.fullName,
+      role: users.role,
+      avatarUrl: users.avatarUrl,
+      blocked: users.blocked,
+    })
     .from(users)
     .orderBy(users.fullName);
-  return rows;
+  // roleEnum infers ('ADMIN' | 'MEMBER')[], so the row shape already matches;
+  // the assertion is a belt-and-braces guard against future schema widening.
+  return rows as UserOption[];
+}
+
+// F25 D6: change a user's role. Guards the last-admin demote (CONFLICT) and
+// bumps tokenVersion on any change so outstanding JWTs reflect the new role.
+// actingUserId is reserved by the spec contract (audit/permission checks);
+// it is intentionally read-only here — noUnusedParameters is not enabled, so
+// it stays in the public signature untouched.
+export async function updateUserRole({
+  targetUserId,
+  newRole,
+  actingUserId,
+}: {
+  targetUserId: string;
+  newRole: 'ADMIN' | 'MEMBER';
+  actingUserId: string;
+}): Promise<UserRow> {
+  void actingUserId;
+  const updated = await db.transaction(async (tx): Promise<UserRow> => {
+    const [target] = await tx.select().from(users).where(eq(users.id, targetUserId)).limit(1);
+    if (!target) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+    }
+    if (target.role !== newRole) {
+      const isDemote = target.role === ADMIN_ROLE && newRole === MEMBER_ROLE;
+      if (isDemote) {
+        const [agg] = await tx
+          .select({ value: count() })
+          .from(users)
+          .where(eq(users.role, ADMIN_ROLE));
+        if ((agg?.value ?? 0) <= 1) {
+          throw new AppError(ErrorCode.CONFLICT, 'Cannot demote the last admin');
+        }
+      }
+      await tx.update(users).set({ role: newRole }).where(eq(users.id, targetUserId));
+    }
+    const [row] = await tx.select().from(users).where(eq(users.id, targetUserId)).limit(1);
+    // row is guaranteed post-select on an existing PK; the NOT_FOUND branch above
+    // already covered the missing case.
+    return row!;
+  });
+  await bumpTokenVersion(targetUserId);
+  return updated;
+}
+
+// F25 D6: activate/deactivate a user. bumpTokenVersion hard-expires any
+// outstanding JWTs; the auth-route login gate (blocked === true -> 403) stops
+// new sessions from being issued.
+export async function setUserBlocked({
+  targetUserId,
+  blocked,
+}: {
+  targetUserId: string;
+  blocked: boolean;
+}): Promise<UserRow> {
+  const [updated] = await db
+    .update(users)
+    .set({ blocked })
+    .where(eq(users.id, targetUserId))
+    .returning();
+  if (!updated) {
+    throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+  }
+  await bumpTokenVersion(targetUserId);
+  return updated;
 }

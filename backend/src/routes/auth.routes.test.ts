@@ -241,6 +241,35 @@ describe('auth routes', () => {
     expect(mockedUpsert).toHaveBeenCalled();
   });
 
+  it('POST /google returns 403 FORBIDDEN when user is blocked (F25 deactivation gate)', async () => {
+    mockedExchange.mockResolvedValue({
+      googleId: 'g-blocked',
+      email: 'blocked@x.com',
+      fullName: 'Blocked User',
+      avatarUrl: null,
+    });
+    mockedUpsert.mockResolvedValue({
+      id: 'u-blocked',
+      googleId: 'g-blocked',
+      email: 'blocked@x.com',
+      fullName: 'Blocked User',
+      avatarUrl: null,
+      role: 'MEMBER',
+      blocked: true,
+      tokenVersion: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.message).toBe('Account deactivated');
+    // Gate sits AFTER upsert but BEFORE signJwt — no JWT issued for blocked users.
+    expect(mockedSign).not.toHaveBeenCalled();
+  });
+
   it('POST /google returns 400 VALIDATION_FAILED on missing code', async () => {
     const res = await request(app).post('/api/auth/google').send({});
 
