@@ -63,7 +63,7 @@
 - [x] **F19** Activity feed UI — ✨ Feature · _deps: F18_ — DONE (T1-T6 ✅; backend-enriched GET activity route (actor/column/assignee resolved), ActivityFeed+ActivityItem components (show-more, relative+absolute time), describeActivity sentence-switch (REQ-5.2 grammar), CONTENT_UPDATED distinguishes title/description; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 
 **Phase 5 — Time Tracking**
-- [ ] **F20** Server-authoritative timer (start/stop, browser-independent) — ✨ Feature · _deps: F16_
+- [x] **F20** Server-authoritative timer (start/stop, browser-independent) — ✨ Feature · _deps: F16_ — DONE (T1-T8 ✅; TimeEntries table + partial unique index (migration 0010), timerService (auto-stop-on-start, admin-stop-any, deleteTicket auto-stop), GET /api/time clock-skew, TimerControls (live elapsed from server offset), TimeLog (entries list + total), no abandoned-timer (runs indefinitely); typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 - [ ] **F21** Manual time entry — ✨ Feature · _deps: F20_
 - [ ] **F22** Time log list per ticket — ✨ Feature · _deps: F20_
 
