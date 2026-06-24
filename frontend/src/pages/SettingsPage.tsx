@@ -168,7 +168,7 @@ function UserRow({
 
     // Disable role-change button when it would demote the sole admin. Self-promote
     // of a MEMBER is always allowed; self-demote as the only admin is blocked.
-    const roleDisabled = rowBusy || (isSelf && isOnlyAdmin);
+    const roleDisabled = rowBusy || (isSelf && isOnlyAdmin) || isBlocked;
 
     return (
         <tr className="hover:bg-gray-50">
