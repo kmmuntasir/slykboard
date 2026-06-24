@@ -16,6 +16,10 @@ const bag = vi.hoisted(() => ({
   // asserted in a later task; existing behavior tests only need this not to crash).
   labelNameRows: [] as Array<Record<string, unknown>>,
   lastInsert: null as Record<string, unknown> | null, // captured .values() arg
+  // F18 T6: table-aware tx.insert(activityLogs) capture. Each recordActivity
+  // call pushes its {ticketId, userId, actionType, oldValue, newValue} values
+  // arg here so activity-capture tests assert exactly which rows were written.
+  activityInserts: [] as Array<Record<string, unknown>>,
   getProjectBySlug: vi.fn(), // mocked ./projectService
   // F13 T6: updateTicket (bare db.update path, no txn)
   updateReturn: [] as Array<Record<string, unknown>>, // db.update().returning() result
@@ -29,7 +33,9 @@ const bag = vi.hoisted(() => ({
 }));
 
 vi.mock('../db/client', async () => {
-  const { labels, tickets, projects, projectSequences } = await import('../db/schema');
+  const { labels, tickets, projects, projectSequences, activityLogs } = await import(
+    '../db/schema'
+  );
   // buildTxSelectChain branches on (table, projection):
   //  - projectSequences -> { where: () => ({ for: () => bag.seqRow }) }
   //  - tickets + maxPos projection -> terminal { where: () => bag.maxRow } (createTicket aggregate)
@@ -118,6 +124,11 @@ vi.mock('../db/client', async () => {
             if (table === tickets) {
               bag.lastInsert = vals;
             }
+            // F18 T6: capture activity-log inserts so activity-capture tests can
+            // assert which rows were written (and that they went through `tx`).
+            if (table === activityLogs) {
+              bag.activityInserts.push(vals);
+            }
             return { returning: () => bag.insertReturn };
           },
         }),
@@ -171,6 +182,7 @@ function resetBag() {
   bag.insertReturn = [];
   bag.labelNameRows = [];
   bag.lastInsert = null;
+  bag.activityInserts = [];
   bag.getProjectBySlug.mockReset();
   bag.updateReturn = [];
   bag.sanitizeMock.mockReset();
@@ -972,5 +984,316 @@ describe('ticketService updateTicket checklist patch (F15)', () => {
     });
 
     expect(bag.updateSets[0]!.checklist).toEqual([]);
+  });
+});
+
+// F18 T6: assert the activity-log rows written by recordActivity land on the
+// `tx` object inside db.transaction. bag.activityInserts is populated by the
+// table-aware tx.insert(activityLogs) handler in the harness above.
+describe('ticketService createTicket activity capture (F18)', () => {
+  beforeEach(resetBag);
+
+  it('writes exactly one CREATED row inside the txn (actor = creatorId, ticketId = new id)', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u-creator', title: 'New' });
+
+    // Same-txn: the activity insert was performed on the tx mock (txn ran once).
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(1);
+    const row = bag.activityInserts[0]!;
+    expect(row.actionType).toBe('CREATED');
+    expect(row.userId).toBe('u-creator');
+    expect(row.ticketId).toBe('t-new');
+    expect(row.oldValue).toBeNull();
+    expect(row.newValue).toBeNull();
+  });
+
+  it('rollback-skips: when the ticket insert returns no row, the txn throws and no activity row survives', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    // insert returning [] -> createTicket throws on `inserted!` before recordActivity.
+    bag.insertReturn = [];
+
+    await expect(createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'X' })).rejects.toThrow();
+
+    // The CREATED row was written on the tx but the txn rejected; in a real pg
+    // txn the rollback discards it. Here we assert the callback did not complete
+    // successfully (txnInvoked fired, but the create rejected) — the row that
+    // recordActivity would write never runs because the throw precedes it.
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(0);
+  });
+});
+
+describe('ticketService moveTicket activity capture (F18)', () => {
+  beforeEach(resetBag);
+
+  it('cross-column move writes one STATUS_CHANGED row (old/new column, actor = actingUserId)', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ statusColumn: 'c1' })]);
+    bag.loadProject.mockResolvedValue([{ columns: makeColumns() }]);
+    bag.loadColumn.mockResolvedValue([
+      { id: 't1', position: 0 },
+      { id: 't2', position: 65536 },
+    ]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ statusColumn: 'c2', position: 50 })]);
+
+    await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c2',
+      position: 50,
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(1);
+    const row = bag.activityInserts[0]!;
+    expect(row.actionType).toBe('STATUS_CHANGED');
+    expect(row.userId).toBe('u-actor');
+    expect(row.ticketId).toBe(TICKET_ID);
+    expect(row.oldValue).toBe('c1');
+    expect(row.newValue).toBe('c2');
+  });
+
+  it('same-column reposition writes ZERO activity rows', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ statusColumn: 'c1' })]);
+    bag.loadProject.mockResolvedValue([{ columns: makeColumns() }]);
+    bag.loadColumn.mockResolvedValue([
+      { id: 't1', position: 0 },
+      { id: 't2', position: 65536 },
+    ]);
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ statusColumn: 'c1', position: 5 })]);
+
+    await moveTicket({
+      ticketId: TICKET_ID,
+      statusColumn: 'c1', // unchanged column
+      position: 5,
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(0);
+  });
+
+  it('rollback-skips: mid-txn throw aborts the move (caller sees failure, txn rejects)', async () => {
+    bag.loadTicket.mockResolvedValue([makeTicket({ statusColumn: 'c1' })]);
+    bag.loadProject.mockResolvedValue([{ columns: makeColumns() }]);
+    // recordActivity runs BEFORE the column re-read; force the re-read to throw
+    // so the txn rejects. In a real pg transaction the rejection rolls back BOTH
+    // the ticket update and the activity insert written earlier in the callback.
+    bag.loadColumn.mockRejectedValue(new Error('boom'));
+
+    await expect(
+      moveTicket({
+        ticketId: TICKET_ID,
+        statusColumn: 'c2',
+        position: 50,
+        actingUserId: 'u-actor',
+      }),
+    ).rejects.toThrow('boom');
+
+    // The callback ran inside the txn and rejected -> no committed state. (The
+    // mock captures the attempted tx.insert, but the txn did not commit, so the
+    // row does not survive — same-txn atomicity is structural in pg.)
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ticketService updateTicket activity capture (F18)', () => {
+  beforeEach(resetBag);
+
+  it('priority-only patch writes one PRIORITY_CHANGED row with raw enum old/new', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, priority: 'MEDIUM' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, priority: 'URGENT' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { priority: 'URGENT' },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(1);
+    const row = bag.activityInserts[0]!;
+    expect(row.actionType).toBe('PRIORITY_CHANGED');
+    expect(row.userId).toBe('u-actor');
+    expect(row.ticketId).toBe(TICKET_ID);
+    expect(row.oldValue).toBe('MEDIUM');
+    expect(row.newValue).toBe('URGENT');
+  });
+
+  it('assignee-only patch writes one ASSIGNEE_CHANGED row', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, assigneeId: 'u2' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, assigneeId: 'u9' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { assigneeId: 'u9' },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.activityInserts).toHaveLength(1);
+    const row = bag.activityInserts[0]!;
+    expect(row.actionType).toBe('ASSIGNEE_CHANGED');
+    expect(row.oldValue).toBe('u2');
+    expect(row.newValue).toBe('u9');
+  });
+
+  it('title-only patch writes one CONTENT_UPDATED row with old/new null', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, title: 'Old' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'New' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'New' },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.activityInserts).toHaveLength(1);
+    const row = bag.activityInserts[0]!;
+    expect(row.actionType).toBe('CONTENT_UPDATED');
+    expect(row.oldValue).toBeNull();
+    expect(row.newValue).toBeNull();
+  });
+
+  it('title + priority patch writes two rows (PRIORITY_CHANGED + CONTENT_UPDATED)', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({ id: TICKET_ID, title: 'Old', priority: 'MEDIUM' }),
+    ]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'New', priority: 'HIGH' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'New', priority: 'HIGH' },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.activityInserts).toHaveLength(2);
+    const actions = bag.activityInserts.map((r) => r.actionType).sort();
+    expect(actions).toEqual(['CONTENT_UPDATED', 'PRIORITY_CHANGED']);
+  });
+
+  it('no-op patch (same values) writes ZERO activity rows', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({ id: TICKET_ID, title: 'Same', priority: 'MEDIUM', assigneeId: 'u2' }),
+    ]);
+    bag.updateReturn = [
+      makeTicket({ id: TICKET_ID, title: 'Same', priority: 'MEDIUM', assigneeId: 'u2' }),
+    ];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'Same', priority: 'MEDIUM', assigneeId: 'u2' },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(0);
+  });
+
+  it('checklist-only patch writes ZERO activity rows (D10: checklist not audited)', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: {
+        checklist: [
+          { id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false },
+        ],
+      },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.activityInserts).toHaveLength(0);
+  });
+
+  it('labelIds patch where the set differs writes one LABELS_CHANGED with a readable NAMES diff', async () => {
+    // OLD labels on the ticket (snapshot before replace): "API".
+    bag.hydrateLabelsForTickets.mockResolvedValue(
+      new Map([[TICKET_ID, [{ id: 'l-api', name: 'API', color: '#000' }]]]),
+    );
+    // NEW labels resolved from the project's label rows: "Bug".
+    bag.labelNameRows = [{ name: 'Bug' }];
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+    bag.replaceTicketLabels.mockResolvedValue(undefined);
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { labelIds: ['l-bug'] },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.activityInserts).toHaveLength(1);
+    const row = bag.activityInserts[0]!;
+    expect(row.actionType).toBe('LABELS_CHANGED');
+    expect(row.oldValue).toBeNull();
+    // Readable NAMES, not IDs.
+    expect(row.newValue).toBe('added: Bug; removed: API');
+  });
+
+  it('labelIds patch where the resolved set equals the old set writes ZERO LABELS_CHANGED rows', async () => {
+    // OLD and NEW both resolve to the single name "Bug" -> empty added/removed.
+    bag.hydrateLabelsForTickets.mockResolvedValue(
+      new Map([[TICKET_ID, [{ id: 'l-bug', name: 'Bug', color: '#000' }]]]),
+    );
+    bag.labelNameRows = [{ name: 'Bug' }];
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+    bag.replaceTicketLabels.mockResolvedValue(undefined);
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { labelIds: ['l-bug'] },
+      actingUserId: 'u-actor',
+    });
+
+    expect(bag.activityInserts).toHaveLength(0);
+  });
+
+  it('rollback-skips: when the update returns no row, the txn throws and no activity row survives', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, title: 'Old' })]);
+    // update returning [] -> INTERNAL_ERROR thrown before diffTicketChanges/recordActivity.
+    bag.updateReturn = [];
+
+    await expect(
+      updateTicket({
+        ticketId: TICKET_ID,
+        patch: { title: 'New' },
+        actingUserId: 'u-actor',
+      }),
+    ).rejects.toThrow();
+
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts).toHaveLength(0);
+  });
+});
+
+// F18 T6 (key correctness): the activity insert is performed on the `tx` object
+// (the db.transaction callback's argument), not on the bare `db`. The harness's
+// tx.insert is table-aware and populates bag.activityInserts only when called via
+// tx — so a non-empty array after a mutation proves same-txn participation.
+describe('ticketService activity capture same-txn participation (F18)', () => {
+  beforeEach(resetBag);
+
+  it('a mutating updateTicket populates bag.activityInserts via tx.insert(activityLogs)', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, priority: 'MEDIUM' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, priority: 'HIGH' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { priority: 'HIGH' },
+      actingUserId: 'u-actor',
+    });
+
+    // The insert ran on `tx` (table-aware capture), inside the one txn callback.
+    expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
+    expect(bag.activityInserts.length).toBeGreaterThan(0);
+    expect(bag.activityInserts[0]!.actionType).toBe('PRIORITY_CHANGED');
   });
 });
