@@ -342,4 +342,19 @@ describe('TicketAttributeForm', () => {
             }),
         );
     });
+
+    it('F17 readOnly: hides Save + shows Close (deleted ticket)', () => {
+        render(
+            <TicketAttributeForm
+                mode="edit"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                readOnly
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    });
 });
