@@ -27,4 +27,6 @@ export const labelKeys = {
 export const timerKeys = {
   all: ['timer'] as const,
   active: () => [...timerKeys.all, 'active'] as const,
+  // F20: per-ticket time-tracking log cache key.
+  entries: (id: string) => [...timerKeys.all, 'entries', id] as const,
 };

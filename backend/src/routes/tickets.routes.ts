@@ -144,3 +144,16 @@ ticketsRouter.post(
         res.json(success({ entry, serverNow: new Date().toISOString() }))
     },
 )
+
+// F20: time-tracking log — all TimeEntries for the ticket (reverse-chrono) with
+// computed durations + a total of closed durations (running entry excluded).
+ticketsRouter.get(
+    '/:ticketId/timer/entries',
+    authenticate,
+    validateRequest({ params: ticketIdParam }),
+    async (req, res) => {
+        const { ticketId } = req.params as TicketIdParam
+        const result = await timerService.getTimeEntries(ticketId)
+        res.json(success(result))
+    },
+)
