@@ -39,18 +39,22 @@ export function TimeLog({ ticketId }: TimeLogProps) {
                 <ul className="divide-y divide-gray-100">
                     {entries.map((entry) => (
                         <li key={entry.id} className="py-2">
-                            <div className="flex items-baseline justify-between gap-2">
-                                <span className="text-sm text-gray-700">
-                                    {formatDate(entry.startTime)}
-                                </span>
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex flex-col gap-0.5 text-sm">
+                                    <span className="text-gray-700">
+                                        <span className="text-gray-400">Start: </span>
+                                        {formatDate(entry.startTime)}
+                                    </span>
+                                    <span className="text-gray-700">
+                                        <span className="text-gray-400">End: </span>
+                                        {entry.endTime ? formatDate(entry.endTime) : 'Running'}
+                                    </span>
+                                </div>
                                 <span className="font-mono tabular-nums text-sm text-gray-700">
                                     {entry.durationMs !== null
                                         ? formatDuration(entry.durationMs)
                                         : 'Running'}
                                 </span>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                                {entry.endTime ? formatDate(entry.endTime) : 'Running'}
                             </div>
                             {entry.description && (
                                 <div className="mt-1 text-sm text-gray-600">
