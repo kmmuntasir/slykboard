@@ -6,9 +6,12 @@ import { fetchTicket } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
 import { formatTicketId } from '@/utils/formatTicketId';
 import { formatDate } from '@/utils/formatDate';
+import { useRequireRole } from '@/hooks/useRequireRole';
+import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import type { UpdateTicketDto } from '@/types/ticket';
 import { Modal } from './Modal';
 import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
+import { DeleteTicketConfirm } from './DeleteTicketConfirm';
 import { TicketAttributeForm } from './TicketAttributeForm';
 
 // F16: the unified ticket detail modal. Read-only header (display ID, creator,
@@ -28,6 +31,9 @@ interface TicketDetailModalProps {
 export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketDetailModalProps) {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const isAdmin = useRequireRole('ADMIN');
+    const deleteTicketMutation = useDeleteTicket();
 
     // F16 D7: reconcile board/modal drift — refetch the detail while the modal is
     // open (30s, matching the board). RHF defaultValues are seeded once (below),
@@ -63,6 +69,14 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     const handleCancelConfirm = () => {
         setConfirmOpen(false);
         if (blocker.state === 'blocked') blocker.reset();
+    };
+
+    // F17 T4: admin-only delete. Surfaces the destructive confirm; on confirm it
+    // soft-deletes via the mutation, closes the confirm, then closes the modal.
+    const handleConfirmDelete = async () => {
+        await deleteTicketMutation.mutateAsync({ ticketId, slug });
+        setDeleteConfirmOpen(false);
+        onClose();
     };
 
     if (!ticket) return null;
@@ -118,7 +132,18 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                     onCancel={requestClose}
                 />
 
-                {/* F17 will render the admin-only delete button here. */}
+                {/* F17 T4: admin-only delete entry point. Members (isAdmin=false) render nothing. */}
+                {isAdmin && (
+                    <div className="mt-4 border-t border-gray-200 pt-4">
+                        <button
+                            type="button"
+                            onClick={() => setDeleteConfirmOpen(true)}
+                            className="text-sm text-red-600 hover:underline"
+                        >
+                            Delete ticket
+                        </button>
+                    </div>
+                )}
                 {/* F19 will render the activity feed here. */}
             </Modal>
 
@@ -126,6 +151,12 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 isOpen={showConfirm}
                 onDiscard={handleDiscard}
                 onCancel={handleCancelConfirm}
+            />
+            <DeleteTicketConfirm
+                isOpen={deleteConfirmOpen}
+                isDeleting={deleteTicketMutation.isPending}
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setDeleteConfirmOpen(false)}
             />
         </>
     );
