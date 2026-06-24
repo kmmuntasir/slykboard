@@ -51,6 +51,7 @@ export interface Ticket {
   creatorId: string;
   createdAt: string; // ISO
   updatedAt: string;
+  deletedAt?: string | null; // F17: soft-delete tombstone (absent on board payload; set on detail for soft-deleted)
 }
 
 export interface UpdateTicketDto {

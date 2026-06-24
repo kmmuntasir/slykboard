@@ -331,6 +331,16 @@ describe('TicketDetailModal', () => {
         expect(screen.queryByRole('button', { name: 'Delete ticket' })).not.toBeInTheDocument();
     });
 
+    it('F17 ADMIN on a soft-deleted ticket: shows the Deleted badge + hides the Delete button', async () => {
+        vi.mocked(useRequireRole).mockReturnValue(true);
+        renderModal({ ticket: makeTicket({ deletedAt: '2026-06-24T00:00:00.000Z' }) });
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        // Deleted badge banner is present.
+        expect(screen.getByText('Deleted')).toBeInTheDocument();
+        // Delete button hidden (can't delete an already-deleted ticket).
+        expect(screen.queryByRole('button', { name: 'Delete ticket' })).not.toBeInTheDocument();
+    });
+
     // Reference the mock so the import is used (satisfies the unused-import
     // concern while keeping the hook module mocked for the gate tests).
     void useDeleteTicket;
