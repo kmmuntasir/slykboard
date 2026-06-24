@@ -1157,7 +1157,7 @@ describe('ticketService updateTicket activity capture (F18)', () => {
     const row = bag.activityInserts[0]!;
     expect(row.actionType).toBe('CONTENT_UPDATED');
     expect(row.oldValue).toBeNull();
-    expect(row.newValue).toBeNull();
+    expect(row.newValue).toBe('title');
   });
 
   it('title + priority patch writes two rows (PRIORITY_CHANGED + CONTENT_UPDATED)', async () => {

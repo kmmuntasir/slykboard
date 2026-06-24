@@ -76,7 +76,10 @@ export function diffTicketChanges(
   }
 
   if (old.title !== next.title || old.description !== next.description) {
-    entries.push({ action: 'CONTENT_UPDATED', oldValue: null, newValue: null });
+    const fields: string[] = [];
+    if (old.title !== next.title) fields.push('title');
+    if (old.description !== next.description) fields.push('description');
+    entries.push({ action: 'CONTENT_UPDATED', oldValue: null, newValue: fields.join(' and ') });
   }
 
   if (labelDiff !== null && (labelDiff.added.length > 0 || labelDiff.removed.length > 0)) {

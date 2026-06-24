@@ -40,8 +40,8 @@ function describeClause(entry: ActivityEntry): string {
             // Backend passthrough readable string ("added: Bug; removed: API").
             return entry.message ?? 'updated labels';
         case 'CONTENT_UPDATED':
-            // REQ-5.3: generic, no diff.
-            return 'updated the description';
+            // REQ-5.3: generic, no diff — message carries the field name(s).
+            return `updated the ${entry.message ?? 'description'}`;
         default:
             return 'updated the ticket';
     }
