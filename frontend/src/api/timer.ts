@@ -4,6 +4,7 @@ import type {
     StopTimerResponse,
     ActiveTimerResponse,
     TimeEntriesResponse,
+    TimeEntryWithDuration,
 } from '../types/timer';
 
 // F20 T4: server-authoritative timer HTTP client.
@@ -30,4 +31,15 @@ export async function fetchActiveTimer(): Promise<ActiveTimerResponse> {
 // F20: time-tracking log for a ticket (reverse-chrono entries + total).
 export async function fetchTimeEntries(ticketId: string): Promise<TimeEntriesResponse> {
   return apiFetch<TimeEntriesResponse>(`/tickets/${ticketId}/timer/entries`);
+}
+
+// F21: log time without running the timer (manual entry).
+export async function addManualEntry(
+  ticketId: string,
+  body: { minutes: number; description?: string },
+): Promise<TimeEntryWithDuration> {
+  return apiFetch<TimeEntryWithDuration>(`/tickets/${ticketId}/timer/manual`, {
+    method: 'POST',
+    body: JSON.stringify({ minutes: body.minutes, description: body.description }),
+  });
 }

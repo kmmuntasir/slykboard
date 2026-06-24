@@ -16,6 +16,7 @@ import { ActivityFeed } from './ActivityFeed';
 import { TicketAttributeForm } from './TicketAttributeForm';
 import { TimerControls } from './TimerControls';
 import { TimeLog } from './TimeLog';
+import { ManualEntryForm } from './ManualEntryForm';
 
 // F16: the unified ticket detail modal. Read-only header (display ID, creator,
 // timestamps) + the reused TicketAttributeForm edit body (F13/F14/F15). Wires the
@@ -131,6 +132,9 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
 
                 {/* F20: time-tracking log (reverse-chrono entries + total). Hidden for soft-deleted tickets. */}
                 {!ticket.deletedAt && <TimeLog ticketId={ticketId} />}
+
+                {/* F21: manual time-entry form. Hidden for soft-deleted tickets. */}
+                {!ticket.deletedAt && <ManualEntryForm ticketId={ticketId} />}
 
                 {/* EDIT BODY — reuse the F13/F14/F15 form (D2). */}
                 <TicketAttributeForm

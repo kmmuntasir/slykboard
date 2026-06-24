@@ -130,8 +130,9 @@ export interface TimeEntryWithDuration {
   id: string;
   startTime: string; // ISO
   endTime: string | null; // null = still running
-  durationMs: number | null; // null if running; else end - start
+  durationMs: number | null; // null if running; else end - start (or minutes*60000 for manual)
   description: string | null;
+  type: 'manual' | 'timer';
 }
 
 export interface TimeEntriesResponse {
@@ -145,23 +146,85 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
       id: timeEntries.id,
       startTime: timeEntries.startTime,
       endTime: timeEntries.endTime,
+      manualEntryMinutes: timeEntries.manualEntryMinutes,
       description: timeEntries.description,
     })
     .from(timeEntries)
     .where(eq(timeEntries.ticketId, ticketId))
     .orderBy(desc(timeEntries.startTime));
 
-  const entries: TimeEntryWithDuration[] = rows.map((r) => ({
-    id: r.id,
-    startTime: r.startTime.toISOString(),
-    endTime: r.endTime?.toISOString() ?? null,
-    durationMs: r.endTime ? r.endTime.getTime() - r.startTime.getTime() : null,
-    description: r.description,
-  }));
+  const entries: TimeEntryWithDuration[] = rows.map((r) => {
+    const isManual = r.manualEntryMinutes !== null;
+    const durationMs = isManual
+      ? (r.manualEntryMinutes ?? 0) * 60_000
+      : r.endTime
+        ? r.endTime.getTime() - r.startTime.getTime()
+        : null;
+    return {
+      id: r.id,
+      startTime: r.startTime.toISOString(),
+      endTime: r.endTime?.toISOString() ?? null,
+      durationMs,
+      description: r.description,
+      type: isManual ? 'manual' : 'timer',
+    };
+  });
 
   const totalMs = entries
     .filter((e) => e.durationMs !== null)
     .reduce((sum, e) => sum + (e.durationMs ?? 0), 0);
 
   return { entries, totalMs };
+}
+
+// F21 §9.1: log time without running the timer. Inserts a completed row with
+// manualEntryMinutes set and start/end stamped to the same instant (the schema's
+// startTime NOT NULL + the one-active-per-user partial index forbid null end;
+// the duration is carried solely by manualEntryMinutes, not the wall-clock span).
+export async function addManualEntry(args: {
+  ticketId: string;
+  userId: string;
+  minutes: number;
+  description?: string;
+}): Promise<TimeEntryWithDuration> {
+  const { ticketId, userId, minutes, description } = args;
+
+  const ticketRows = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(eq(tickets.id, ticketId))
+    .limit(1);
+  if (ticketRows.length === 0) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
+      details: { ticketId },
+    });
+  }
+
+  const now = new Date();
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      ticketId,
+      userId,
+      startTime: now,
+      endTime: now,
+      manualEntryMinutes: minutes,
+      description: description ?? null,
+    })
+    .returning({
+      id: timeEntries.id,
+      startTime: timeEntries.startTime,
+      endTime: timeEntries.endTime,
+      manualEntryMinutes: timeEntries.manualEntryMinutes,
+      description: timeEntries.description,
+    });
+
+  return {
+    id: row!.id,
+    startTime: row!.startTime.toISOString(),
+    endTime: row!.endTime?.toISOString() ?? null,
+    durationMs: (row!.manualEntryMinutes ?? 0) * 60_000,
+    description: row!.description,
+    type: 'manual',
+  };
 }

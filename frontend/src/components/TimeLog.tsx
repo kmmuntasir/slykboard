@@ -44,6 +44,11 @@ export function TimeLog({ ticketId }: TimeLogProps) {
                                     <span className="text-gray-700">
                                         <span className="text-gray-400">Start: </span>
                                         {formatDate(entry.startTime)}
+                                        {entry.type === 'manual' && (
+                                            <span className="ml-1 inline-flex items-center rounded-full bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                                                Manual
+                                            </span>
+                                        )}
                                     </span>
                                     <span className="text-gray-700">
                                         <span className="text-gray-400">End: </span>
