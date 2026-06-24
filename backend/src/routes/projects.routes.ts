@@ -8,7 +8,12 @@ import { requireRole } from '../middleware/requireRole';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
 import * as ticketService from '../services/ticketService';
-import { createProjectBodySchema, slugParamSchema, createTicketBody } from './projects.schema';
+import {
+  createProjectBodySchema,
+  slugParamSchema,
+  createTicketBody,
+  updateProjectBodySchema,
+} from './projects.schema';
 import { projectLabelsRouter } from './labels.routes';
 
 export const projectsRouter = Router();
@@ -85,6 +90,25 @@ projectsRouter.post(
       creatorId: req.user!.id,
     });
     res.status(201).json(success(project));
+  },
+);
+
+// F27 T1: rename project + manage columns (admin-only). Slug is NOT editable.
+// Service blocks removing a column that still holds live (non-deleted) tickets.
+projectsRouter.patch(
+  '/:slug',
+  authenticate,
+  requireRole('ADMIN'),
+  validateRequest({ params: slugParamSchema, body: updateProjectBodySchema }),
+  async (req, res) => {
+    const { slug } = req.params as z.infer<typeof slugParamSchema>;
+    const body = req.body as z.infer<typeof updateProjectBodySchema>;
+    const updated = await projectService.updateProject({
+      slug,
+      name: body.name,
+      columns: body.columns,
+    });
+    res.json(success(updated));
   },
 );
 

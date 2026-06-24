@@ -20,3 +20,10 @@ export interface CreateProjectDto {
   slug: string;
   columns?: Column[];
 }
+
+// F27: PATCH /api/projects/:slug. Admin-only. Server blocks deleting a column
+// that still has live tickets (CONFLICT) and enforces min-1 columns.
+export interface UpdateProjectDto {
+  name?: string;
+  columns?: Column[];
+}

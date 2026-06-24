@@ -31,6 +31,18 @@ export const slugParamSchema = z.object({
     .regex(/^[A-Z][A-Z0-9]{1,15}$/, 'Invalid slug'),
 });
 
+// F27 T2: PATCH /:slug body. name and/or columns; slug is NOT editable.
+// min(1) columns enforces "at least one column"; per-column ids must be stable uuids.
+export const updateProjectBodySchema = z.object({
+  name: z.string().min(1, 'Name must be ≥1 char').max(100, 'Name must be ≤100 chars').optional(),
+  columns: z
+    .array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(50) }))
+    .min(1, 'At least one column is required')
+    .optional(),
+});
+
+export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
+
 export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 
 // F12 D-Ticket-Create: body for POST /:slug/tickets. statusColumn is validated
