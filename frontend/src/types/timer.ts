@@ -26,3 +26,17 @@ export interface ActiveTimerResponse {
 export interface ServerTimeResponse {
     now: string;
 }
+
+// F20: time-tracking log — per-entry row with computed duration + total payload.
+export interface TimeEntryWithDuration {
+    id: string;
+    startTime: string; // ISO
+    endTime: string | null; // null = still running
+    durationMs: number | null; // null if running; else end - start
+    description: string | null;
+}
+
+export interface TimeEntriesResponse {
+    entries: TimeEntryWithDuration[];
+    totalMs: number; // sum of all closed durations (running entry excluded)
+}

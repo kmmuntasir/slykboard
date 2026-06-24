@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
 import { tickets, timeEntries } from '../db/schema';
 import { AppError } from '../utils/appError';
@@ -121,4 +121,47 @@ export async function stopTimerForTicket(tx: Tx, ticketId: string): Promise<void
     .update(timeEntries)
     .set({ endTime: new Date() })
     .where(and(eq(timeEntries.ticketId, ticketId), isNull(timeEntries.endTime)));
+}
+
+// F20: time-tracking log. All TimeEntries for a ticket, reverse-chrono, with
+// computed per-entry durations and a total of closed durations (the running
+// entry is excluded from the total — its elapsed time is still accruing).
+export interface TimeEntryWithDuration {
+  id: string;
+  startTime: string; // ISO
+  endTime: string | null; // null = still running
+  durationMs: number | null; // null if running; else end - start
+  description: string | null;
+}
+
+export interface TimeEntriesResponse {
+  entries: TimeEntryWithDuration[];
+  totalMs: number; // sum of all closed durations (running entry excluded)
+}
+
+export async function getTimeEntries(ticketId: string): Promise<TimeEntriesResponse> {
+  const rows = await db
+    .select({
+      id: timeEntries.id,
+      startTime: timeEntries.startTime,
+      endTime: timeEntries.endTime,
+      description: timeEntries.description,
+    })
+    .from(timeEntries)
+    .where(eq(timeEntries.ticketId, ticketId))
+    .orderBy(desc(timeEntries.startTime));
+
+  const entries: TimeEntryWithDuration[] = rows.map((r) => ({
+    id: r.id,
+    startTime: r.startTime.toISOString(),
+    endTime: r.endTime?.toISOString() ?? null,
+    durationMs: r.endTime ? r.endTime.getTime() - r.startTime.getTime() : null,
+    description: r.description,
+  }));
+
+  const totalMs = entries
+    .filter((e) => e.durationMs !== null)
+    .reduce((sum, e) => sum + (e.durationMs ?? 0), 0);
+
+  return { entries, totalMs };
 }
