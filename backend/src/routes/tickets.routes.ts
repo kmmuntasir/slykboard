@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware/auth'
+import { requireRole } from '../middleware/requireRole'
 import { validateRequest } from '../middleware/validateRequest'
 import { success, ErrorCode } from '../utils/envelope'
 import { AppError } from '../utils/appError'
@@ -8,8 +9,7 @@ import { ticketIdParam, updateTicketBody, type TicketIdParam, type UpdateTicketB
 
 export const ticketsRouter = Router()
 
-// TODO(F17): per-column / membership-based permissions + toast-on-deny.
-// F13 wires authenticate only — any authenticated user may read/update (D3).
+// F17 — admin-only soft delete. Returns 204 (no body).
 
 // F13 — ticket detail: returns description for edit form + F16 modal.
 ticketsRouter.get(
@@ -84,5 +84,18 @@ ticketsRouter.patch(
             actingUserId: req.user!.id,
         })
         res.json(success(moved))
+    },
+)
+
+// F17 — admin-only soft delete: sets deletedAt, hides ticket from reads.
+ticketsRouter.delete(
+    '/:ticketId',
+    authenticate,
+    requireRole('ADMIN'),
+    validateRequest({ params: ticketIdParam }),
+    async (req, res) => {
+        const { ticketId } = req.params as TicketIdParam
+        await ticketService.deleteTicket(ticketId)
+        res.status(204).end()
     },
 )

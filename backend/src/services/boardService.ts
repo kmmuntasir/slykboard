@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
 import { tickets, users } from '../db/schema';
 import { AppError } from '../utils/appError';
@@ -77,7 +77,7 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
     })
     .from(tickets)
     .leftJoin(users, eq(users.id, tickets.assigneeId))
-    .where(and(eq(tickets.projectId, project.id)))
+    .where(and(eq(tickets.projectId, project.id), isNull(tickets.deletedAt)))
     .orderBy(asc(tickets.position));
 
   // F14 D8: batch-hydrate labels for all board tickets in a single query (no N+1).

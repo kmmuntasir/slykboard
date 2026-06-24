@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, max, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
 import { labels, projectSequences, projects, tickets, users } from '../db/schema';
@@ -80,7 +80,7 @@ export async function moveTicket({
   actingUserId,
 }: MoveTicketInput): Promise<TicketRow> {
   // 1. Load the ticket (404 if absent). Derive projectId from the row.
-  const [ticket] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  const [ticket] = await db.select().from(tickets).where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt))).limit(1);
   if (!ticket) {
     throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
       details: { ticketId },
@@ -280,7 +280,7 @@ export async function getTicket(
     .from(tickets)
     .leftJoin(creatorUser, eq(creatorUser.id, tickets.creatorId))
     .leftJoin(assigneeUser, eq(assigneeUser.id, tickets.assigneeId))
-    .where(eq(tickets.id, ticketId))
+    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
@@ -324,7 +324,7 @@ export async function updateTicket(args: {
   // logging in one db.transaction so a rollback discards everything atomically.
   return db.transaction(async (tx) => {
     // Load the OLD row INSIDE the txn so the read and the write are atomic.
-    const oldRows = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+    const oldRows = await tx.select().from(tickets).where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt))).limit(1);
     const oldRow = oldRows[0];
     if (!oldRow) {
       throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
@@ -417,4 +417,17 @@ export async function updateTicket(args: {
 
     return { old: oldRow, new: newRow };
   });
+}
+
+export async function deleteTicket(ticketId: string): Promise<void> {
+  const softDeleted = await db
+    .update(tickets)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
+    .returning({ id: tickets.id });
+  if (!softDeleted[0]) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
+      details: { ticketId },
+    });
+  }
 }

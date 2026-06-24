@@ -31,6 +31,7 @@ vi.mock('../services/ticketService', () => ({
   moveTicket: vi.fn(),
   getTicket: vi.fn(),
   updateTicket: vi.fn(),
+  deleteTicket: vi.fn(),
 }))
 
 import { app } from '../index'
@@ -45,6 +46,7 @@ const mockedFindVersion = vi.mocked(findUserTokenVersion)
 const mockedMoveTicket = vi.mocked(ticketService.moveTicket)
 const mockedGetTicket = vi.mocked(ticketService.getTicket)
 const mockedUpdateTicket = vi.mocked(ticketService.updateTicket)
+const mockedDeleteTicket = vi.mocked(ticketService.deleteTicket)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -717,5 +719,64 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
     expect(mockedUpdateTicket).toHaveBeenCalledWith(
       expect.objectContaining({ patch: expect.objectContaining({ checklist: [] }) }),
     )
+  })
+})
+
+describe('DELETE /api/tickets/:ticketId (F17)', () => {
+  it('204 soft-deletes ticket when ADMIN', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedDeleteTicket.mockResolvedValue(undefined)
+
+    const res = await request(app)
+      .delete(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+
+    expect(res.status).toBe(204)
+    expect(res.body).toEqual({})
+    expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID)
+  })
+
+  it('401 without token', async () => {
+    const res = await request(app).delete(`/api/tickets/${VALID_TICKET_ID}`)
+
+    expect(res.status).toBe(401)
+    expect(res.body.error.code).toBe('UNAUTHENTICATED')
+    expect(mockedDeleteTicket).not.toHaveBeenCalled()
+  })
+
+  it('403 FORBIDDEN when MEMBER', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .delete(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('FORBIDDEN')
+    expect(mockedDeleteTicket).not.toHaveBeenCalled()
+  })
+
+  it('404 NOT_FOUND when service throws', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+    mockedDeleteTicket.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'Ticket not found'))
+
+    const res = await request(app)
+      .delete(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+
+    expect(res.status).toBe(404)
+    expect(res.body.error.code).toBe('NOT_FOUND')
+  })
+
+  it('400 VALIDATION_FAILED for non-uuid param', async () => {
+    mockedFindVersion.mockResolvedValue(0)
+
+    const res = await request(app)
+      .delete('/api/tickets/not-a-uuid')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_FAILED')
+    expect(mockedDeleteTicket).not.toHaveBeenCalled()
   })
 })
