@@ -126,6 +126,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 {/* EDIT BODY — reuse the F13/F14/F15 form (D2). */}
                 <TicketAttributeForm
                     mode="edit"
+                    readOnly={!!ticket.deletedAt}
                     projectSlug={slug}
                     defaultValues={{
                         title: ticket.title,

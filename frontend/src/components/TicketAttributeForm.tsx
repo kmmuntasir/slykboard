@@ -42,6 +42,9 @@ interface TicketAttributeFormProps {
     /** F16: notifies the host (e.g. TicketDetailModal) when dirty state changes,
      *  so it can drive an unsaved-changes guard. Optional — omitted by create/edit modals. */
     onDirtyChange?: (dirty: boolean) => void;
+    /** F17: read-only mode for soft-deleted tickets. Disables all fields
+     *  (via <fieldset disabled> + read-only description) + hides the Save button. */
+    readOnly?: boolean;
 }
 
 export function TicketAttributeForm({
@@ -51,6 +54,7 @@ export function TicketAttributeForm({
     onSubmit,
     onCancel,
     onDirtyChange,
+    readOnly,
 }: TicketAttributeFormProps) {
     const {
         register,
@@ -77,89 +81,101 @@ export function TicketAttributeForm({
             className="space-y-4"
             noValidate
         >
-            <div>
-                <label className="block">
-                    <span className="mb-1 block text-sm font-medium">Title</span>
-                    <input
-                        type="text"
-                        aria-label="Title"
-                        {...register('title')}
-                        className="w-full rounded border border-gray-300 p-2"
+            <fieldset disabled={readOnly} className="space-y-4 border-0 p-0 m-0">
+                <div>
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium">Title</span>
+                        <input
+                            type="text"
+                            aria-label="Title"
+                            {...register('title')}
+                            className="w-full rounded border border-gray-300 p-2"
+                        />
+                    </label>
+                    {errors.title?.message && (
+                        <p role="alert" className="mt-1 text-sm text-red-600">
+                            {errors.title.message}
+                        </p>
+                    )}
+                </div>
+
+                <div>
+                    <span className="mb-1 block text-sm font-medium">Description</span>
+                    {readOnly ? (
+                        // F17: read-only view of the archived (sanitized) description.
+                        <div
+                            className="max-w-none rounded border border-gray-200 bg-gray-50 p-2 text-sm"
+                            dangerouslySetInnerHTML={{ __html: watch('description') ?? '' }}
+                        />
+                    ) : (
+                        <RichTextEditor
+                            value={watch('description') ?? ''}
+                            onChange={(html) => setValue('description', html)}
+                        />
+                    )}
+                    {errors.description?.message && (
+                        <p role="alert" className="mt-1 text-sm text-red-600">
+                            {errors.description.message}
+                        </p>
+                    )}
+                </div>
+
+                <div>
+                    <PrioritySelect
+                        value={watch('priority')}
+                        onChange={(p: Priority) => setValue('priority', p)}
                     />
-                </label>
-                {errors.title?.message && (
-                    <p role="alert" className="mt-1 text-sm text-red-600">
-                        {errors.title.message}
-                    </p>
-                )}
-            </div>
+                    {errors.priority?.message && (
+                        <p role="alert" className="mt-1 text-sm text-red-600">
+                            {errors.priority.message}
+                        </p>
+                    )}
+                </div>
 
-            <div>
-                <span className="mb-1 block text-sm font-medium">Description</span>
-                <RichTextEditor
-                    value={watch('description') ?? ''}
-                    onChange={(html) => setValue('description', html)}
-                />
-                {errors.description?.message && (
-                    <p role="alert" className="mt-1 text-sm text-red-600">
-                        {errors.description.message}
-                    </p>
-                )}
-            </div>
+                <div>
+                    <UserSelect
+                        value={watch('assigneeId') ?? null}
+                        onChange={(id) => setValue('assigneeId', id)}
+                    />
+                    {errors.assigneeId?.message && (
+                        <p role="alert" className="mt-1 text-sm text-red-600">
+                            {errors.assigneeId.message}
+                        </p>
+                    )}
+                </div>
 
-            <div>
-                <PrioritySelect
-                    value={watch('priority')}
-                    onChange={(p: Priority) => setValue('priority', p)}
-                />
-                {errors.priority?.message && (
-                    <p role="alert" className="mt-1 text-sm text-red-600">
-                        {errors.priority.message}
-                    </p>
-                )}
-            </div>
+                <div>
+                    <LabelMultiSelect
+                        projectSlug={projectSlug}
+                        value={watch('labelIds')}
+                        onChange={(ids: string[]) => setValue('labelIds', ids)}
+                    />
+                </div>
 
-            <div>
-                <UserSelect
-                    value={watch('assigneeId') ?? null}
-                    onChange={(id) => setValue('assigneeId', id)}
-                />
-                {errors.assigneeId?.message && (
-                    <p role="alert" className="mt-1 text-sm text-red-600">
-                        {errors.assigneeId.message}
-                    </p>
-                )}
-            </div>
-
-            <div>
-                <LabelMultiSelect
-                    projectSlug={projectSlug}
-                    value={watch('labelIds')}
-                    onChange={(ids: string[]) => setValue('labelIds', ids)}
-                />
-            </div>
-
-            <div>
-                <ChecklistEditor
-                    value={watch('checklist')}
-                    onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
-                />
-            </div>
+                <div>
+                    <ChecklistEditor
+                        value={watch('checklist')}
+                        onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
+                    />
+                </div>
+            </fieldset>
 
             <div className="flex gap-2">
-                <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                    {submitLabel}
-                </button>
+                {!readOnly && (
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                        {submitLabel}
+                    </button>
+                )}
                 <button
                     type="button"
                     onClick={onCancel}
                     className="rounded border bg-background px-4 py-2 text-sm hover:bg-secondary"
                 >
-                    Cancel
+                    {readOnly ? 'Close' : 'Cancel'}
                 </button>
             </div>
         </form>
