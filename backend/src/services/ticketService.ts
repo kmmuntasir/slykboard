@@ -1,15 +1,16 @@
-import { and, asc, eq, max, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, max, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
-import { projectSequences, projects, tickets, users } from '../db/schema';
+import { labels, projectSequences, projects, tickets, users } from '../db/schema';
 import { sanitizeDescription } from '../utils/sanitizeHtml';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { getProjectBySlug } from './projectService';
 import { UNSORTED_BUCKET_ID } from './boardService';
 import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
-import { recordActivity } from './activityLogService';
+import { diffTicketChanges, recordActivity } from './activityLogService';
 import type { HydratedLabel } from './labelService';
+import type { LabelDiff } from './activityLogService';
 import type { ChecklistItem } from '../db/schema';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -307,64 +308,113 @@ export async function getTicket(
 }
 
 // F13 T6: partial update of ticket attributes. Accepts any subset of
-// {title, description, priority, assigneeId}; `undefined` means leave untouched,
-// `null` for description/assigneeId means clear. Description is sanitized on write
-// via the T2 util. Returns {old, new} so F18 can diff for ActivityLogs without
-// re-querying. `actingUserId` is accepted for a stable route contract but has no
-// behavior in F13 (F18 will stamp audit metadata).
+// {title, description, priority, assigneeId, checklist, labelIds}; `undefined`
+// means leave untouched, `null` for description/assigneeId means clear. Description
+// is sanitized on write. Returns {old, new} for the route layer.
+// F18 T5 (D5/D7/D8/D9): runs inside db.transaction; snapshots OLD label names
+// before replace, diffs old→new, and writes ActivityLogs rows via recordActivity.
 export async function updateTicket(args: {
   ticketId: string;
   patch: TicketPatch;
   actingUserId: string;
 }): Promise<{ old: TicketRow; new: TicketRow }> {
-  const { ticketId, patch } = args;
-  const oldRows = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
-  const oldRow = oldRows[0];
-  if (!oldRow) {
-    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
-      details: { ticketId },
-    });
-  }
+  const { ticketId, patch, actingUserId } = args;
 
-  const updateSet: Partial<TicketRow> = { updatedAt: new Date() };
-  if (patch.title !== undefined) {
-    updateSet.title = patch.title;
-  }
-  if (patch.description !== undefined) {
-    updateSet.description = patch.description === null ? null : sanitizeDescription(patch.description);
-  }
-  if (patch.priority !== undefined) {
-    updateSet.priority = patch.priority;
-  }
-  if (patch.assigneeId !== undefined) {
-    updateSet.assigneeId = patch.assigneeId;
-  }
-  if (patch.checklist !== undefined) {
-    updateSet.checklist = patch.checklist;
-  }
+  // F18 T5 (D5, GAP #1): wrap the read + update + label replace + activity
+  // logging in one db.transaction so a rollback discards everything atomically.
+  return db.transaction(async (tx) => {
+    // Load the OLD row INSIDE the txn so the read and the write are atomic.
+    const oldRows = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+    const oldRow = oldRows[0];
+    if (!oldRow) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
+        details: { ticketId },
+      });
+    }
 
-  const updated = await db
-    .update(tickets)
-    .set(updateSet)
-    .where(eq(tickets.id, ticketId))
-    .returning();
-  const newRow = updated[0];
-  if (!newRow) {
-    throw new AppError(ErrorCode.INTERNAL_ERROR, `Update returned no row for ticket '${ticketId}'`, {
-      details: { ticketId },
-    });
-  }
+    // F18 T5 (D9, GAP #2): when labels are in the patch, snapshot the OLD label
+    // names BEFORE replacing (replace deletes the link rows). Resolve NEW names
+    // from the project's label rows so the diff carries readable names, not ids.
+    let labelDiff: LabelDiff | null = null;
+    if (patch.labelIds !== undefined) {
+      const oldLabelMap = await hydrateLabelsForTickets([ticketId], tx);
+      const oldNames = (oldLabelMap.get(ticketId) ?? []).map((label) => label.name);
+      const newLabelRows = await tx
+        .select({ name: labels.name })
+        .from(labels)
+        .where(inArray(labels.id, patch.labelIds));
+      const newNames = Array.from(new Set(newLabelRows.map((row) => row.name)));
+      const oldNameSet = new Set(oldNames);
+      const newNameSet = new Set(newNames);
+      labelDiff = {
+        added: newNames.filter((name) => !oldNameSet.has(name)),
+        removed: oldNames.filter((name) => !newNameSet.has(name)),
+      };
+    }
 
-  // F14: replace the label set when labelIds is present in the patch.
-  // replaceTicketLabels validates all labelIds belong to the ticket's project
-  // (foreign → VALIDATION_FAILED). Runs after the attribute update so the ticket
-  // row is confirmed to exist. The { old, new } seam is preserved for F18.
-  if (patch.labelIds !== undefined) {
-    await replaceTicketLabels({ ticketId, labelIds: patch.labelIds });
-  }
+    const updateSet: Partial<TicketRow> = { updatedAt: new Date() };
+    if (patch.title !== undefined) {
+      updateSet.title = patch.title;
+    }
+    if (patch.description !== undefined) {
+      updateSet.description =
+        patch.description === null ? null : sanitizeDescription(patch.description);
+    }
+    if (patch.priority !== undefined) {
+      updateSet.priority = patch.priority;
+    }
+    if (patch.assigneeId !== undefined) {
+      updateSet.assigneeId = patch.assigneeId;
+    }
+    if (patch.checklist !== undefined) {
+      updateSet.checklist = patch.checklist;
+    }
 
-  // TODO(F18): diff {old, new} and write ActivityLogs here. REQ-5.2 covers
-  // priority/assignee old→new; REQ-5.3 covers description (CONTENT_UPDATED).
-  // F13 returns the diff shape; F18 hooks at this seam.
-  return { old: oldRow, new: newRow };
+    const updated = await tx
+      .update(tickets)
+      .set(updateSet)
+      .where(eq(tickets.id, ticketId))
+      .returning();
+    const newRow = updated[0];
+    if (!newRow) {
+      throw new AppError(ErrorCode.INTERNAL_ERROR, `Update returned no row for ticket '${ticketId}'`, {
+        details: { ticketId },
+      });
+    }
+
+    // F14: replace the label set. Now INSIDE the txn (D7 tx-aware labelService).
+    // replaceTicketLabels validates all labelIds belong to the ticket's project.
+    if (patch.labelIds !== undefined) {
+      await replaceTicketLabels({ ticketId, labelIds: patch.labelIds }, tx);
+    }
+
+    // F18 T5: diff {old, new} + label changes -> ActivityLogs rows. A no-op
+    // patch (no field changed) yields zero entries -> zero rows written.
+    const entries = diffTicketChanges(
+      {
+        title: oldRow.title,
+        description: oldRow.description,
+        priority: oldRow.priority,
+        assigneeId: oldRow.assigneeId,
+      },
+      {
+        title: newRow.title,
+        description: newRow.description,
+        priority: newRow.priority,
+        assigneeId: newRow.assigneeId,
+      },
+      labelDiff,
+    );
+    for (const entry of entries) {
+      await recordActivity(tx, {
+        ticketId,
+        actorId: actingUserId,
+        action: entry.action,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+      });
+    }
+
+    return { old: oldRow, new: newRow };
+  });
 }
