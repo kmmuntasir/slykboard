@@ -22,3 +22,9 @@ export const labelKeys = {
   forProject: (slug: string) => [...labelKeys.all, 'project', slug] as const,
   detail: (id: string) => [...labelKeys.all, 'detail', id] as const,
 };
+
+// F20 T4: server-authoritative timer query keys (user's single open timer).
+export const timerKeys = {
+  all: ['timer'] as const,
+  active: () => [...timerKeys.all, 'active'] as const,
+};

@@ -14,6 +14,7 @@ import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
 import { DeleteTicketConfirm } from './DeleteTicketConfirm';
 import { ActivityFeed } from './ActivityFeed';
 import { TicketAttributeForm } from './TicketAttributeForm';
+import { TimerControls } from './TimerControls';
 
 // F16: the unified ticket detail modal. Read-only header (display ID, creator,
 // timestamps) + the reused TicketAttributeForm edit body (F13/F14/F15). Wires the
@@ -123,6 +124,9 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                     <div>Created: {formatDate(ticket.createdAt)}</div>
                     <div>Updated: {formatDate(ticket.updatedAt)}</div>
                 </dl>
+
+                {/* F20 T7: server-authoritative timer controls. Hidden for soft-deleted tickets. */}
+                {!ticket.deletedAt && <TimerControls ticketId={ticket.id} />}
 
                 {/* EDIT BODY — reuse the F13/F14/F15 form (D2). */}
                 <TicketAttributeForm
