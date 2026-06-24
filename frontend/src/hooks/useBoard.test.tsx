@@ -79,7 +79,7 @@ describe('useBoard', () => {
         await waitFor(() => expect(result.current.data).toBeDefined());
 
         expect(result.current.data).toEqual(boardPayloadMock);
-        expect(fetchBoard).toHaveBeenCalledWith('SLYK');
+        expect(fetchBoard).toHaveBeenCalledWith('SLYK', '');
     });
 
     it('enabled only when slug present', async () => {
@@ -101,7 +101,7 @@ describe('useBoard', () => {
 
         await waitFor(() => expect(result.current.data).toBeDefined());
 
-        expect(fetchBoard).toHaveBeenCalledWith('SLYK');
+        expect(fetchBoard).toHaveBeenCalledWith('SLYK', '');
         expect(result.current.data).toEqual(boardPayloadMock);
     });
 

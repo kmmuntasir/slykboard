@@ -1,6 +1,6 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
-import { tickets, users } from '../db/schema';
+import { tickets, users, ticketLabels } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { logger } from '../config/logger';
@@ -49,11 +49,59 @@ export interface BoardPayload {
   columns: BoardColumn[];
 }
 
-export async function getBoard(slug: string): Promise<BoardPayload> {
+export interface BoardFilters {
+  search?: string;
+  assignee?: string;
+  priority?: string;
+  label?: string;
+}
+
+export async function getBoard(slug: string, filters?: BoardFilters): Promise<BoardPayload> {
   // F08: project lookup by slug.
   const project = await getProjectBySlug(slug);
   if (!project) {
     throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`);
+  }
+
+  // F26: build extra WHERE conditions from optional filters. Numeric search →
+  // ticketNumber exact match; otherwise title ilike. Each filter only applies
+  // when present and non-empty. Empty array → spread is a no-op (unchanged SQL).
+  const extraConditions: SQL[] = [];
+
+  if (filters) {
+    const search = filters.search?.trim();
+    if (search) {
+      if (/^\d+$/.test(search)) {
+        extraConditions.push(eq(tickets.ticketNumber, parseInt(search, 10)));
+      } else {
+        extraConditions.push(ilike(tickets.title, `%${search}%`));
+      }
+    }
+
+    const assignee = filters.assignee?.trim();
+    if (assignee) {
+      extraConditions.push(eq(tickets.assigneeId, assignee));
+    }
+
+    const priority = filters.priority?.trim();
+    if (priority) {
+      // Cast to the Priority enum union (mirrors ticketService.Priority; schema
+      // doesn't export the inferred type). BoardFilters keeps priority as string
+      // per the route contract; invalid values simply yield no matches at the DB.
+      extraConditions.push(
+        eq(tickets.priority, priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL'),
+      );
+    }
+
+    const label = filters.label?.trim();
+    if (label) {
+      extraConditions.push(
+        inArray(
+          tickets.id,
+          db.select({ id: ticketLabels.ticketId }).from(ticketLabels).where(eq(ticketLabels.labelId, label)),
+        ),
+      );
+    }
   }
 
   // F09: load this project's tickets ordered by position ASC (parameterized —
@@ -77,7 +125,7 @@ export async function getBoard(slug: string): Promise<BoardPayload> {
     })
     .from(tickets)
     .leftJoin(users, eq(users.id, tickets.assigneeId))
-    .where(and(eq(tickets.projectId, project.id), isNull(tickets.deletedAt)))
+    .where(and(eq(tickets.projectId, project.id), isNull(tickets.deletedAt), ...extraConditions))
     .orderBy(asc(tickets.position));
 
   // F14 D8: batch-hydrate labels for all board tickets in a single query (no N+1).

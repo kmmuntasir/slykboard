@@ -44,6 +44,13 @@ vi.mock('@/components/EditTicketModal', () => ({
     EditTicketModal: () => null,
 }));
 
+// F26: BoardFilters calls useUsers + a labels useQuery (both need QueryClient).
+// Its behavior is unit-tested in BoardFilters.test.tsx — stub it here so
+// BoardPage's static-render tests stay QueryClient-free.
+vi.mock('@/components/BoardFilters', () => ({
+    BoardFilters: () => null,
+}));
+
 const ticket101: Ticket = {
     id: 't101',
     ticketNumber: 101,

@@ -8,10 +8,23 @@ import { useBoardUiStore } from '@/stores/useBoardUiStore';
 // dragInProgress (F11 seam) DEFERS (returns false) -> next tick resumes after drag-end.
 // refetchIntervalInBackground:false (v5 default, explicit) pauses on document.hidden;
 // existing global refetchOnWindowFocus:true resumes on focus.
+//
+// F26: reactive filter state drives the queryKey + queryFn so changing any
+// filter refires the board query with a fresh server-side query string.
 export function useBoard(slug: string | undefined) {
+  const { searchQuery, assigneeFilter, priorityFilter, labelFilter } =
+    useBoardUiStore();
+
+  const params = new URLSearchParams();
+  if (searchQuery) params.set('search', searchQuery);
+  if (assigneeFilter) params.set('assignee', assigneeFilter);
+  if (priorityFilter) params.set('priority', priorityFilter);
+  if (labelFilter) params.set('label', labelFilter);
+  const queryString = params.toString();
+
   return useQuery({
-    queryKey: boardKeys.detail(slug ?? ''),
-    queryFn: () => fetchBoard(slug!),
+    queryKey: [...boardKeys.detail(slug ?? ''), queryString],
+    queryFn: () => fetchBoard(slug!, queryString),
     enabled: !!slug,
     refetchInterval: () =>
       useBoardUiStore.getState().dragInProgress ? false : POLL_INTERVAL_MS,
