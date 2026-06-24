@@ -64,7 +64,7 @@
 
 **Phase 5 — Time Tracking**
 - [x] **F20** Server-authoritative timer (start/stop, browser-independent) — ✨ Feature · _deps: F16_ — DONE (T1-T8 ✅; TimeEntries table + partial unique index (migration 0010), timerService (auto-stop-on-start, admin-stop-any, deleteTicket auto-stop), GET /api/time clock-skew, TimerControls (live elapsed from server offset), TimeLog (entries list + total), no abandoned-timer (runs indefinitely); typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
-- [ ] **F21** Manual time entry — ✨ Feature · _deps: F20_
+- [x] **F21** Manual time entry — ✨ Feature · _deps: F20_ — DONE (T1-T4 ✅; addManualEntry + POST /timer/manual, parseDuration util (2h 30m → minutes), ManualEntryForm, TimeLog Manual badge + "Logged:" display, total includes manual durations; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-24)
 - [ ] **F22** Time log list per ticket — ✨ Feature · _deps: F20_
 
 **Phase 6 — Reporting**
