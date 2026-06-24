@@ -38,6 +38,9 @@ export const updateProjectBodySchema = z.object({
   columns: z
     .array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(50) }))
     .min(1, 'At least one column is required')
+    .refine((cols) => new Set(cols.map((c) => c.id)).size === cols.length, {
+      message: 'Column ids must be unique',
+    })
     .optional(),
 });
 
