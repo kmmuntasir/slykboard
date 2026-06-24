@@ -59,7 +59,7 @@
 - [ ] **F17** Ticket permissions (admin-only delete) — ✨ Feature · _deps: F16, F18_
 
 **Phase 4 — Audit Trail**
-- [ ] **F18** Activity log capture — ✨ Feature · _deps: F12_
+- [x] **F18** Activity log capture — ✨ Feature · _deps: F12_ — DONE (T1-T7 ✅; ActivityLogs table + 6-value enum incl. LABELS_CHANGED (migration 0008), recordActivity + diffTicketChanges, CREATED/STATUS_CHANGED/PRIORITY_CHANGED/ASSIGNEE_CHANGED/LABELS_CHANGED/CONTENT_UPDATED captured in-txn, label readable-name diff, no-op skip, capture-only; 399 BE tests; typecheck/lint/format/build green; live psql smoke passed 2026-06-24)
 - [ ] **F19** Activity feed UI — ✨ Feature · _deps: F18_
 
 **Phase 5 — Time Tracking**
