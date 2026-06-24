@@ -69,7 +69,7 @@
 
 **Phase 6 — Reporting**
 - [x] **F23** Time log report (per-user, weekly/monthly) — ✨ Feature · _deps: F22_ — DONE (T1-T3 ✅; reportService per-user aggregation (UTC weekly/monthly windows), GET /api/reports/time route, ReportsPage UI (toggle + nav + per-user table), open timer excluded, all authenticated users; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
-- [ ] **F24** Ticket summary report (resolved by priority) — ✨ Feature · _deps: F12_
+- [x] **F24** Ticket summary report (resolved by priority) — ✨ Feature · _deps: F12_ — DONE (T1-T3 ✅; getTicketSummary per-user priority counts (resolved = last column), GET /api/reports/tickets, ReportsPage ticket-summary table; no schema/migration; typecheck/lint/format/test/build green; live browser smoke passed 2026-06-25)
 
 **Phase 7 — Admin & Polish**
 - [ ] **F25** User & role management (admin) — ✨ Feature · _deps: F06_
