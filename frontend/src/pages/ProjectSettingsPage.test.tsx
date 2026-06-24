@@ -1,14 +1,17 @@
 // F14 T9 / F27: ProjectSettingsPage test.
 // Renders LabelManager with the slug extracted from the route via MemoryRouter.
 // Mocks the project + mutation hooks so no QueryClientProvider is needed.
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+// Also covers the admin-only ProjectNameSection rename behavior: pre-fill,
+// edit, trimmed Save, disabled-on-empty, and the isAdmin gate.
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProjectSettingsPage } from './ProjectSettingsPage';
 import type { Project } from '@/types/project';
 
-// Capture the slug prop the page passes to LabelManager.
-const { captured, mockState } = vi.hoisted(() => ({
+// Capture the slug prop the page passes to LabelManager, and share a single
+// assertable mutation mock across renders/tests.
+const { captured, mockState, updateMut } = vi.hoisted(() => ({
     captured: { slug: '' as string },
     mockState: {
         project: {
@@ -24,6 +27,11 @@ const { captured, mockState } = vi.hoisted(() => ({
             updatedAt: '2024-01-01T00:00:00.000Z',
         } as Project,
         isAdmin: true,
+    },
+    updateMut: {
+        mutateAsync: vi.fn(),
+        isPending: false,
+        error: null as Error | null,
     },
 }));
 
@@ -49,12 +57,7 @@ vi.mock('@/hooks/useRequireRole', () => ({
 }));
 
 vi.mock('@/hooks/useUpdateProject', () => ({
-    useUpdateProject: () => ({
-        mutateAsync: vi.fn(),
-        mutate: vi.fn(),
-        isPending: false,
-        error: null,
-    }),
+    useUpdateProject: () => updateMut,
 }));
 
 function renderAt(path: string) {
@@ -68,6 +71,13 @@ function renderAt(path: string) {
 }
 
 describe('ProjectSettingsPage', () => {
+    beforeEach(() => {
+        updateMut.mutateAsync.mockReset();
+        updateMut.isPending = false;
+        updateMut.error = null;
+        mockState.isAdmin = true;
+    });
+
     it('renders the heading + LabelManager', () => {
         renderAt('/projects/SLYK/settings');
 
@@ -96,5 +106,55 @@ describe('ProjectSettingsPage', () => {
 
         expect(screen.queryByTestId('columns-manager')).toBeNull();
         mockState.isAdmin = true;
+    });
+
+    it('renders the name input pre-filled with the project name (admin)', () => {
+        renderAt('/projects/SLYK/settings');
+
+        const input = screen.getByLabelText('Project name') as HTMLInputElement;
+        expect(input).toBeInTheDocument();
+        expect(input.value).toBe(mockState.project.name);
+
+        fireEvent.change(input, { target: { value: 'New Name' } });
+        expect(input.value).toBe('New Name');
+    });
+
+    it('clicking Save calls the update mutation with the trimmed name', async () => {
+        renderAt('/projects/SLYK/settings');
+
+        const input = screen.getByLabelText('Project name');
+        fireEvent.change(input, { target: { value: '  Renamed Board  ' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save Name' }));
+
+        await waitFor(() => {
+            expect(updateMut.mutateAsync).toHaveBeenCalledTimes(1);
+        });
+        expect(updateMut.mutateAsync).toHaveBeenCalledWith({ name: 'Renamed Board' });
+    });
+
+    it.each(['', '   '])(
+        'disables Save when the name is empty or whitespace-only (%j)',
+        (value) => {
+            renderAt('/projects/SLYK/settings');
+
+            const input = screen.getByLabelText('Project name');
+            fireEvent.change(input, { target: { value } });
+
+            expect(screen.getByRole('button', { name: 'Save Name' })).toBeDisabled();
+        },
+    );
+
+    it('renders the name section for admins', () => {
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.getByLabelText('Project name')).toBeInTheDocument();
+    });
+
+    it('hides the name section for non-admins', () => {
+        mockState.isAdmin = false;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.queryByLabelText('Project name')).toBeNull();
     });
 });
