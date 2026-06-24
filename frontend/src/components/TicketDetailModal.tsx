@@ -91,6 +91,18 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 title={formatTicketId(slug, ticket.ticketNumber)}
                 blockBackdropClose={isDirty}
             >
+                {/* F17: deleted-ticket banner — shown when the ticket is soft-deleted. */}
+                {ticket.deletedAt && (
+                    <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 px-3 py-2">
+                        <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+                            Deleted
+                        </span>
+                        <span className="text-sm text-red-700">
+                            This ticket was removed from the board. Its data is archived.
+                        </span>
+                    </div>
+                )}
+
                 {/* VIEW HEADER — display ID is the modal title; creator + timestamps read-only */}
                 <dl className="mb-4 space-y-1 text-sm text-gray-600">
                     <div className="flex items-center gap-2">
@@ -132,8 +144,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                     onCancel={requestClose}
                 />
 
-                {/* F17 T4: admin-only delete entry point. Members (isAdmin=false) render nothing. */}
-                {isAdmin && (
+                {/* F17 T4: admin-only delete entry point. Hidden for members + soft-deleted tickets. */}
+                {isAdmin && !ticket.deletedAt && (
                     <div className="mt-4 border-t border-gray-200 pt-4">
                         <button
                             type="button"
