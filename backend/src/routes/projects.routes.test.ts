@@ -31,6 +31,7 @@ vi.mock('../services/projectService', () => ({
   createProject: vi.fn(),
   listProjects: vi.fn(),
   getProjectBySlug: vi.fn(),
+  updateProject: vi.fn(),
 }));
 vi.mock('../services/boardService', () => ({
   getBoard: vi.fn(),
@@ -52,6 +53,7 @@ const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedCreate = vi.mocked(projectService.createProject);
 const mockedList = vi.mocked(projectService.listProjects);
 const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
+const mockedUpdate = vi.mocked(projectService.updateProject);
 const mockedGetBoard = vi.mocked(boardService.getBoard);
 const mockedCreateTicket = vi.mocked(ticketService.createTicket);
 
@@ -410,5 +412,122 @@ describe('POST /:slug/tickets (F12)', () => {
       .send({ title: 'New' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
+  });
+});
+
+describe('PATCH /api/projects/:slug (F27)', () => {
+  const updatedProjectRow = {
+    id: 'p1',
+    name: 'Slykboard',
+    slug: 'SLYK',
+    columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+    creatorId: 'u1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  };
+
+  it('returns 403 FORBIDDEN for MEMBER (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 + updated project for ADMIN', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdate.mockResolvedValue(
+      updatedProjectRow as unknown as Awaited<ReturnType<typeof projectService.updateProject>>,
+    );
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.slug).toBe('SLYK');
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'SLYK',
+        name: 'Slykboard',
+        columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+      }),
+    );
+  });
+
+  const malformedBodies: Array<{ name: string; body: Record<string, unknown> }> = [
+    { name: 'empty name string', body: { name: '' } },
+    {
+      name: 'column with empty name',
+      body: { columns: [{ id: '11111111-1111-4111-8111-111111111111', name: '' }] },
+    },
+    {
+      name: 'column missing id',
+      body: { columns: [{ name: 'To Do' }] },
+    },
+    { name: 'columns array empty', body: { columns: [] } },
+    { name: 'non-string name', body: { name: 123 } },
+  ];
+
+  malformedBodies.forEach(({ name, body }) => {
+    it(`returns 400 VALIDATION_FAILED on malformed body — ${name}`, async () => {
+      mockedFindVersion.mockResolvedValue(0);
+
+      const res = await request(app)
+        .patch('/api/projects/SLYK')
+        .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+        .send(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+      expect(mockedUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer (updateProject NOT called)', async () => {
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on duplicate column ids (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({
+        columns: [
+          { id: '11111111-1111-4111-8111-111111111111', name: 'To Do' },
+          { id: '11111111-1111-4111-8111-111111111111', name: 'Done' },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on lowercase slug (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/projects/slyk')
+      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdate).not.toHaveBeenCalled();
   });
 });
