@@ -11,7 +11,7 @@
 
 **Goal:** Admins govern membership — promote/demote roles + manage the manual email whitelist.
 
-**Ships:** An admin-only view at `/settings` (existing `SettingsPage.tsx` stub) listing all users with their roles. Admin can promote (`MEMBER`→`ADMIN`) / demote (`ADMIN`→`MEMBER`). **Cannot demote yourself if you're the last admin** (prevent lockout). The manual email whitelist (allow/block specific emails regardless of `ALLOWED_DOMAIN`) is owned by F25 per F06's deferred decision.
+**Ships:** An admin-only view at `/settings` (existing `SettingsPage.tsx` stub) listing all users with their roles + active/blocked status. Admin can: (1) promote/demote roles (`MEMBER`↔`ADMIN`); (2) **deactivate/reactivate users** (blocked flag — deactivated users cannot log in, historical data preserved); (3) **cannot demote yourself if you're the last admin** (prevent lockout). The manual email whitelist is deferred (separate concern).
 
 **Acceptance (definition of done):**
 - Admin can change a user's role (`ADMIN` ↔ `MEMBER`).
@@ -53,7 +53,7 @@
 | D3 | Session invalidation | Call `bumpTokenVersion(targetUserId)` after the role change. The target's next request has a stale `ver` → 401 → re-login with the new role. | F07's mechanism. `tokenVersion.ts:bumpTokenVersion`. |
 | D4 | No self-demotion when last admin | If `req.user.id === targetUserId AND target.role === 'ADMIN' AND adminCount <= 1` → `409 CONFLICT 'Cannot demote the last admin'`. | Spec: "Cannot demote yourself if you're the last admin." |
 | D5 | Whitelist deferred | F25 ships ONLY role management. Whitelist (allow/block specific emails) deferred — adds a table + middleware scope. Document. | F06 §9: "Manual email whitelist — deferred to F25." But whitelist is a separate concern; F25's primary value is role management. |
-| D6 | No user deletion | Historical data (tickets, time entries, activity) must survive. Users are never deleted; role management is the access control. | Spec: "keep historical data, mark user inactive." MVP: role alone suffices. |
+| D6 | User deactivation (not deletion) | **NEW per owner sign-off.** Add `users.blocked boolean default false`. Admin can deactivate (blocked=true + bumpTokenVersion). Deactivated users rejected at SSO login. Historical data preserved. Schema delta: migration 0011. |
 | D7 | SettingsPage route | Already routed at `/settings` inside `RequireRole('ADMIN')`. F25 fills the stub with the user table. No route changes. | `routes/index.tsx:56-60`. |
 
 ---
@@ -127,6 +127,8 @@ Typecheck/lint/format/test/build. Live smoke: admin navigates to `/settings` →
 - [ ] Role change bumps token_version (target's session invalidated).
 - [ ] `PATCH /api/users/:userId/role` admin-only (403 for members).
 - [ ] SettingsPage at `/settings` shows all users + promote/demote.
+- [ ] Admin can deactivate/reactivate users (blocked flag + token-version bump).
+- [ ] Deactivated users cannot log in (SSO rejects).
 - [ ] No user deletion (historical data preserved).
 - [ ] Whitelist deferred (documented).
 - [ ] No schema/migration.
@@ -136,15 +138,19 @@ Typecheck/lint/format/test/build. Live smoke: admin navigates to `/settings` →
 
 ## 7. Schema deltas owned by this feature
 
-**F25 owns NONE.** `users.role` + `users.tokenVersion` already exist (F06/F07). No migration, no schema change.
+**F25 owns ONE — `users.blocked` (NEW per owner sign-off #2).** Add `blocked boolean default false notNull` to the `users` table. Migration `0011`. Deactivated users (`blocked=true`) are rejected at SSO login.
+
+| Delta | Detail | Migration |
+| --- | --- | --- |
+| `users.blocked` (NEW) | `boolean('blocked').default(false).notNull()` — admin deactivation toggle. SSO login rejects `blocked=true`. `bumpTokenVersion` kills existing sessions. | `0011_*.sql` — `ALTER TABLE "Users" ADD COLUMN "blocked" boolean NOT NULL DEFAULT false;` |
 
 ---
 
-## 8. Cross-cutting decisions — owner sign-off needed
+## 8. Cross-cutting decisions — CONFIRMED (owner-approved 2026-06-25)
 
-1. **Whitelist deferred.** F25 ships ONLY role management (promote/demote). Whitelist (allow/block specific emails) deferred — recommend defer. **Needs confirmation.**
-2. **No user deletion.** Users are never deleted; role management is the access control. Historical data preserved via FK SET NULL (but we don't delete). **Needs confirmation.**
-3. **Last-admin guard mechanism.** Explicit count check in the service (not the partial unique index). The index prevents zero-admin at DB level but the count check prevents the last demotion. **Needs confirmation.**
+1. **Whitelist deferred.** F25 ships role management + deactivation. Whitelist deferred. **CONFIRMED.**
+2. **User deactivation (not deletion).** Users are never deleted. Admins can DEACTIVATE a user (blocked flag + token-version bump). Deactivated users cannot log in. Historical data preserved. **CONFIRMED.**
+3. **Last-admin guard.** Explicit count check in the service. **CONFIRMED.**
 
 ---
 
