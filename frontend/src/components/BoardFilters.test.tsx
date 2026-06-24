@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { BoardFilters } from './BoardFilters';
@@ -64,14 +64,18 @@ describe('BoardFilters', () => {
         }
     });
 
-    it('search input writes to store.searchQuery', () => {
+    it('search input writes to store.searchQuery (debounced)', async () => {
         render(<BoardFilters slug="SLYK" />, { wrapper: wrapper(newClient()) });
 
         fireEvent.change(screen.getByPlaceholderText('Search tickets…'), {
             target: { value: 'ci' },
         });
 
-        expect(useBoardUiStore.getState().searchQuery).toBe('ci');
+        // Debounced: wait for the store to update after 300ms.
+        await waitFor(
+            () => expect(useBoardUiStore.getState().searchQuery).toBe('ci'),
+            { timeout: 1000 },
+        );
     });
 
     it('selecting an assignee writes the user id (or null for All)', async () => {
