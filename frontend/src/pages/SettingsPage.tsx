@@ -1,8 +1,18 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AssigneeAvatar } from '@/components/AssigneeAvatar';
+import { Modal } from '@/components/Modal';
 import { fetchUsers, type WorkspaceUser } from '@/api/users';
 import { useUpdateUserRole, useSetUserBlocked } from '@/hooks/useUserManagement';
 import { useAuthStore } from '@/stores/useAuthStore';
+
+type ConfirmAction = 'deactivate' | 'reactivate';
+
+interface ConfirmTarget {
+    userId: string;
+    fullName: string;
+    action: ConfirmAction;
+}
 
 // F25: admin user management. Lists every workspace user with role + status
 // badges and per-row Promote/Demote + Activate/Deactivate actions. The route is
@@ -17,6 +27,17 @@ export function SettingsPage() {
 
     const roleMutation = useUpdateUserRole();
     const blockMutation = useSetUserBlocked();
+
+    // F25: confirmation gate for the deactivation/reactivation mutation. The row
+    // button only stages a target; the modal's Confirm button fires the mutation.
+    const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+
+    const handleConfirm = (target: ConfirmTarget) => {
+        blockMutation.mutate(
+            { userId: target.userId, blocked: target.action === 'deactivate' },
+            { onSuccess: () => setConfirmTarget(null) },
+        );
+    };
 
     const roster = users ?? [];
     // Client hint: disable self-demote when you are the only admin. Server still
@@ -66,13 +87,60 @@ export function SettingsPage() {
                                         roleMutation.mutate({ userId: user.id, role })
                                     }
                                     onBlockChange={(blocked) =>
-                                        blockMutation.mutate({ userId: user.id, blocked })
+                                        setConfirmTarget({
+                                            userId: user.id,
+                                            fullName: user.fullName,
+                                            action: blocked ? 'deactivate' : 'reactivate',
+                                        })
                                     }
                                 />
                             ))}
                         </tbody>
                     </table>
                 </div>
+            )}
+
+            {confirmTarget && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => setConfirmTarget(null)}
+                    titleId="confirm-block-title"
+                    title={
+                        confirmTarget.action === 'deactivate'
+                            ? `Deactivate ${confirmTarget.fullName}?`
+                            : `Reactivate ${confirmTarget.fullName}?`
+                    }
+                >
+                    <p className="text-sm text-gray-600">
+                        {confirmTarget.action === 'deactivate'
+                            ? 'This user will no longer be able to log in.'
+                            : 'This user will be able to log in again.'}
+                    </p>
+                    <div className="mt-6 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setConfirmTarget(null)}
+                            disabled={blockMutation.isPending}
+                            className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleConfirm(confirmTarget)}
+                            disabled={blockMutation.isPending}
+                            className={
+                                confirmTarget.action === 'deactivate'
+                                    ? 'rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40'
+                                    : 'rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40'
+                            }
+                        >
+                            {confirmTarget.action === 'deactivate'
+                                ? 'Deactivate'
+                                : 'Reactivate'}
+                        </button>
+                    </div>
+                </Modal>
             )}
         </div>
     );
