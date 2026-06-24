@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router';
 import { queryClient } from '@/lib/queryClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Toaster } from '@/components/Toaster';
 import { router } from '@/routes';
 import { env } from '@/config/env';
 import './index.css';
@@ -20,6 +21,7 @@ createRoot(rootElement).render(
             <ErrorBoundary>
                 <QueryClientProvider client={queryClient}>
                     <RouterProvider router={router} />
+                    <Toaster />
                 </QueryClientProvider>
             </ErrorBoundary>
         </GoogleOAuthProvider>
