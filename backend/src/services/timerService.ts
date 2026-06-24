@@ -229,6 +229,16 @@ export async function addManualEntry(args: {
       description: timeEntries.description,
     });
 
+  // F22: resolve the author so manual entries carry the same user shape as timer entries.
+  const [userRow] = await db
+    .select({ fullName: users.fullName, avatarUrl: users.avatarUrl })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const user = userRow
+    ? { id: userId, fullName: userRow.fullName, avatarUrl: userRow.avatarUrl }
+    : null;
+
   return {
     id: row!.id,
     startTime: row!.startTime.toISOString(),
@@ -236,5 +246,6 @@ export async function addManualEntry(args: {
     durationMs: (row!.manualEntryMinutes ?? 0) * 60_000,
     description: row!.description,
     type: 'manual',
+    user,
   };
 }

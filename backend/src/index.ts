@@ -17,6 +17,7 @@ import { timerRouter } from './routes/timer.routes';
 import { timeRouter } from './routes/time.routes';
 import { usersRouter } from './routes/users.routes';
 import { labelsRouter } from './routes/labels.routes';
+import { reportRouter } from './routes/report.routes';
 
 const app: Express = express();
 
@@ -58,6 +59,7 @@ app.use('/api/timer', timerRouter);
 app.use('/api/time', timeRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/labels', labelsRouter);
+app.use('/api/reports', reportRouter);
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);

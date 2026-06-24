@@ -30,3 +30,10 @@ export const timerKeys = {
   // F20: per-ticket time-tracking log cache key.
   entries: (id: string) => [...timerKeys.all, 'entries', id] as const,
 };
+
+// F23 T3: per-user aggregated time report cache keys (period + offset scoped).
+export const reportKeys = {
+  all: ['reports'] as const,
+  time: (period: 'weekly' | 'monthly', offset: number) =>
+    [...reportKeys.all, 'time', period, offset] as const,
+};
