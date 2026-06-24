@@ -6,6 +6,7 @@ import { success, ErrorCode } from '../utils/envelope'
 import { AppError } from '../utils/appError'
 import * as ticketService from '../services/ticketService'
 import * as activityService from '../services/activityService'
+import * as timerService from '../services/timerService'
 import { ticketIdParam, updateTicketBody, type TicketIdParam, type UpdateTicketBody } from './tickets.schema'
 
 export const ticketsRouter = Router()
@@ -110,5 +111,36 @@ ticketsRouter.delete(
         const { ticketId } = req.params as TicketIdParam
         await ticketService.deleteTicket(ticketId)
         res.status(204).end()
+    },
+)
+
+// F20 — timer sub-resource (start/stop). Start auto-stops the user's prior
+// open timer; stop allows admin to close any timer, members only their own.
+ticketsRouter.post(
+    '/:ticketId/timer/start',
+    authenticate,
+    validateRequest({ params: ticketIdParam }),
+    async (req, res) => {
+        const { ticketId } = req.params as TicketIdParam
+        const { entry, serverNow } = await timerService.startTimer({
+            ticketId,
+            userId: req.user!.id,
+        })
+        res.json(success({ entry, serverNow }))
+    },
+)
+
+ticketsRouter.post(
+    '/:ticketId/timer/stop',
+    authenticate,
+    validateRequest({ params: ticketIdParam }),
+    async (req, res) => {
+        const { ticketId } = req.params as TicketIdParam
+        const entry = await timerService.stopTimer({
+            ticketId,
+            userId: req.user!.id,
+            isAdmin: req.user!.role === 'ADMIN',
+        })
+        res.json(success({ entry, serverNow: new Date().toISOString() }))
     },
 )
