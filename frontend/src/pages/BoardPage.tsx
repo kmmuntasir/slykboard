@@ -6,6 +6,7 @@ import { useUpdateTicket } from '@/hooks/useUpdateTicket';
 import { computeDestinationPosition, type MoveDescriptor } from '@/utils/boardReorder';
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import { BoardColumn } from '@/components/BoardColumn';
+import { EmptyState } from '@/components/EmptyState';
 import { UnsortedBucket } from '@/components/UnsortedBucket';
 import { BoardFilters } from '@/components/BoardFilters';
 import { NewTicketButton } from '@/components/NewTicketButton';
@@ -19,6 +20,14 @@ export function BoardPage() {
     const { data: board, isLoading, error } = useBoard(slug);
     const { mutate } = useMoveTicket(slug);
     const setDragInProgress = useBoardUiStore((s) => s.setDragInProgress);
+    const hasActiveFilters = useBoardUiStore(
+        (s) =>
+            s.searchQuery !== '' ||
+            s.assigneeFilter !== null ||
+            s.priorityFilter !== null ||
+            s.labelFilter !== null,
+    );
+    const clearFilters = useBoardUiStore((s) => s.clearFilters);
 
     if (!slug) {
         return <div className="p-4">No project selected.</div>;
@@ -69,8 +78,8 @@ export function BoardPage() {
         setDragInProgress(false);
     };
 
-    const totalTickets = board.columns.reduce((sum, c) => sum + c.tickets.length, 0);
-    const isWholeBoardEmpty = totalTickets === 0;
+    const filteredTicketCount = board?.columns.reduce((sum, c) => sum + c.tickets.length, 0) ?? 0;
+    const isEmpty = filteredTicketCount === 0;
 
     return (
         <div className="flex h-full flex-col gap-4 p-4">
@@ -84,13 +93,18 @@ export function BoardPage() {
 
             <BoardFilters slug={slug} />
 
-            {isWholeBoardEmpty ? (
-                <div
-                    role="status"
-                    className="rounded border border-dashed p-8 text-center text-muted-foreground"
-                >
-                    No tickets yet. Create one to get started.
-                </div>
+            {isEmpty && hasActiveFilters ? (
+                <EmptyState
+                    title="No tickets match your filters"
+                    description="Try adjusting or clearing your filters."
+                    action={{ label: 'Clear filters', onClick: clearFilters }}
+                />
+            ) : isEmpty ? (
+                <EmptyState
+                    title="No tickets yet"
+                    description="Create one to get started."
+                    action={<NewTicketButton slug={slug} />}
+                />
             ) : (
                 <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                     <div className="flex gap-4 overflow-x-auto">
