@@ -7,7 +7,7 @@ import { useTimer } from '@/hooks/useTimer';
 import { useServerTime } from '@/hooks/useServerTime';
 import { formatDuration } from '@/utils/formatDuration';
 
-// F20 T7: per-ticket timer controls. Renders Start when no timer is running on
+// F20: per-ticket timer controls. Renders Start when no timer is running on
 // this ticket, or Stop + a live elapsed readout when this ticket's timer is the
 // active one. Elapsed tracks server-authoritative startTime via the server-time
 // offset (useServerTime) and ticks every second.
@@ -26,21 +26,21 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
     const activeTimer = activeTimerData?.activeTimer ?? null;
     const isRunning = activeTimer !== null && activeTimer.ticketId === ticketId;
 
-    const [elapsedMs, setElapsedMs] = useState(0);
+    // F20: live elapsed via a ticking `now` state. The interval sets `now` inside
+    // its callback (NOT synchronously in the effect body — avoids set-state-in-effect).
+    // Date.now() lives in the lazy initializer + the interval callback, never in render.
+    const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
-        if (!isRunning || !activeTimer) {
-            setElapsedMs(0);
-            return;
-        }
-
-        const compute = () =>
-            setElapsedMs(Date.now() + offset - Date.parse(activeTimer.startTime));
-
-        compute();
-        const interval = window.setInterval(compute, 1000);
+        if (!isRunning) return;
+        const interval = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(interval);
-    }, [isRunning, activeTimer?.startTime, offset, activeTimer]);
+    }, [isRunning]);
+
+    const elapsedMs =
+        isRunning && activeTimer
+            ? now + offset - Date.parse(activeTimer.startTime)
+            : 0;
 
     return (
         <div className="mb-4 flex items-center gap-3">
