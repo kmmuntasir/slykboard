@@ -6,7 +6,7 @@ import { fetchUsers, type WorkspaceUser } from '@/api/users';
 import { useUpdateUserRole, useSetUserBlocked } from '@/hooks/useUserManagement';
 import { useAuthStore } from '@/stores/useAuthStore';
 
-type ConfirmAction = 'deactivate' | 'reactivate';
+type ConfirmAction = 'promote' | 'demote' | 'deactivate' | 'reactivate';
 
 interface ConfirmTarget {
     userId: string;
@@ -33,10 +33,17 @@ export function SettingsPage() {
     const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
 
     const handleConfirm = (target: ConfirmTarget) => {
-        blockMutation.mutate(
-            { userId: target.userId, blocked: target.action === 'deactivate' },
-            { onSuccess: () => setConfirmTarget(null) },
-        );
+        if (target.action === 'promote' || target.action === 'demote') {
+            roleMutation.mutate(
+                { userId: target.userId, role: target.action === 'promote' ? 'ADMIN' : 'MEMBER' },
+                { onSuccess: () => setConfirmTarget(null) },
+            );
+        } else {
+            blockMutation.mutate(
+                { userId: target.userId, blocked: target.action === 'deactivate' },
+                { onSuccess: () => setConfirmTarget(null) },
+            );
+        }
     };
 
     const roster = users ?? [];
@@ -84,7 +91,11 @@ export function SettingsPage() {
                                     rolePending={roleMutation.isPending}
                                     blockPending={blockMutation.isPending}
                                     onRoleChange={(role) =>
-                                        roleMutation.mutate({ userId: user.id, role })
+                                        setConfirmTarget({
+                                            userId: user.id,
+                                            fullName: user.fullName,
+                                            action: role === 'ADMIN' ? 'promote' : 'demote',
+                                        })
                                     }
                                     onBlockChange={(blocked) =>
                                         setConfirmTarget({
@@ -104,23 +115,15 @@ export function SettingsPage() {
                 <Modal
                     isOpen={true}
                     onClose={() => setConfirmTarget(null)}
-                    titleId="confirm-block-title"
-                    title={
-                        confirmTarget.action === 'deactivate'
-                            ? `Deactivate ${confirmTarget.fullName}?`
-                            : `Reactivate ${confirmTarget.fullName}?`
-                    }
+                    titleId="confirm-action-title"
+                    title={confirmTitle(confirmTarget)}
                 >
-                    <p className="text-sm text-gray-600">
-                        {confirmTarget.action === 'deactivate'
-                            ? 'This user will no longer be able to log in.'
-                            : 'This user will be able to log in again.'}
-                    </p>
+                    <p className="text-sm text-gray-600">{confirmBody(confirmTarget)}</p>
                     <div className="mt-6 flex justify-end gap-2">
                         <button
                             type="button"
                             onClick={() => setConfirmTarget(null)}
-                            disabled={blockMutation.isPending}
+                            disabled={roleMutation.isPending || blockMutation.isPending}
                             className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             Cancel
@@ -128,16 +131,10 @@ export function SettingsPage() {
                         <button
                             type="button"
                             onClick={() => handleConfirm(confirmTarget)}
-                            disabled={blockMutation.isPending}
-                            className={
-                                confirmTarget.action === 'deactivate'
-                                    ? 'rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40'
-                                    : 'rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40'
-                            }
+                            disabled={roleMutation.isPending || blockMutation.isPending}
+                            className={confirmButtonClass(confirmTarget.action)}
                         >
-                            {confirmTarget.action === 'deactivate'
-                                ? 'Deactivate'
-                                : 'Reactivate'}
+                            {confirmButtonLabel(confirmTarget.action)}
                         </button>
                     </div>
                 </Modal>
@@ -232,6 +229,60 @@ function UserRow({
             </td>
         </tr>
     );
+}
+
+function confirmTitle(t: ConfirmTarget): string {
+    switch (t.action) {
+        case 'promote':
+            return `Promote ${t.fullName} to Admin?`;
+        case 'demote':
+            return `Demote ${t.fullName} to Member?`;
+        case 'deactivate':
+            return `Deactivate ${t.fullName}?`;
+        case 'reactivate':
+            return `Reactivate ${t.fullName}?`;
+    }
+}
+
+function confirmBody(t: ConfirmTarget): string {
+    switch (t.action) {
+        case 'promote':
+            return 'This user will gain full admin privileges, including user management and project settings.';
+        case 'demote':
+            return 'This user will lose admin privileges and become a regular member.';
+        case 'deactivate':
+            return 'This user will no longer be able to log in.';
+        case 'reactivate':
+            return 'This user will be able to log in again.';
+    }
+}
+
+function confirmButtonLabel(action: ConfirmAction): string {
+    switch (action) {
+        case 'promote':
+            return 'Promote';
+        case 'demote':
+            return 'Demote';
+        case 'deactivate':
+            return 'Deactivate';
+        case 'reactivate':
+            return 'Reactivate';
+    }
+}
+
+function confirmButtonClass(action: ConfirmAction): string {
+    const base =
+        'rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40';
+    switch (action) {
+        case 'promote':
+            return `${base} bg-blue-600 hover:bg-blue-700`;
+        case 'demote':
+            return `${base} bg-gray-600 hover:bg-gray-700`;
+        case 'deactivate':
+            return `${base} bg-red-600 hover:bg-red-700`;
+        case 'reactivate':
+            return `${base} bg-green-600 hover:bg-green-700`;
+    }
 }
 
 function RoleBadge({ role }: { role: 'ADMIN' | 'MEMBER' }) {
