@@ -39,6 +39,12 @@ export function TimeLog({ ticketId }: TimeLogProps) {
                 <ul className="divide-y divide-gray-100">
                     {entries.map((entry) => (
                         <li key={entry.id} className="py-2">
+                            <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-400">
+                                {entry.user?.avatarUrl && (
+                                    <img src={entry.user.avatarUrl} alt="" className="h-4 w-4 rounded-full" />
+                                )}
+                                {entry.user?.fullName ?? 'Unknown user'}
+                            </div>
                             {entry.type === 'manual' ? (
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 text-sm">
