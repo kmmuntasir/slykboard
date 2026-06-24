@@ -135,7 +135,7 @@ export async function moveTicket({
     const columnRows = await tx
       .select({ id: tickets.id, position: tickets.position })
       .from(tickets)
-      .where(and(eq(tickets.projectId, ticket.projectId), eq(tickets.statusColumn, statusColumn)))
+      .where(and(eq(tickets.projectId, ticket.projectId), eq(tickets.statusColumn, statusColumn), isNull(tickets.deletedAt)))
       .orderBy(asc(tickets.position));
 
     if (columnNeedsRebalance(columnRows.map((row) => row.position))) {

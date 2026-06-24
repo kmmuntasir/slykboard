@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { db } from '../db/client';
 import { labels, projects, ticketLabels, tickets } from '../db/schema';
@@ -121,7 +121,7 @@ export async function replaceTicketLabels(args: {
   ticketId: string;
   labelIds: string[];
 }, tx: Tx = db): Promise<void> {
-  const ticket = await tx.select().from(tickets).where(eq(tickets.id, args.ticketId)).limit(1);
+  const ticket = await tx.select().from(tickets).where(and(eq(tickets.id, args.ticketId), isNull(tickets.deletedAt))).limit(1);
   if (!ticket[0]) throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
 
   if (args.labelIds.length > 0) {
