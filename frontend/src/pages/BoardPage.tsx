@@ -7,6 +7,7 @@ import { computeDestinationPosition, type MoveDescriptor } from '@/utils/boardRe
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import { BoardColumn } from '@/components/BoardColumn';
 import { UnsortedBucket } from '@/components/UnsortedBucket';
+import { BoardFilters } from '@/components/BoardFilters';
 import { NewTicketButton } from '@/components/NewTicketButton';
 import { TicketDetailModal } from '@/components/TicketDetailModal';
 import { ApiClientError } from '@/api/client';
@@ -80,6 +81,8 @@ export function BoardPage() {
                 </div>
                 <NewTicketButton slug={slug} />
             </header>
+
+            <BoardFilters slug={slug} />
 
             {isWholeBoardEmpty ? (
                 <div

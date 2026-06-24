@@ -42,7 +42,13 @@ projectsRouter.get(
   validateRequest({ params: slugParamSchema }),
   async (req, res) => {
     const slug = req.params.slug as string;
-    const board = await boardService.getBoard(slug);
+    const filters = {
+      search: req.query.search as string | undefined,
+      assignee: req.query.assignee as string | undefined,
+      priority: req.query.priority as string | undefined,
+      label: req.query.label as string | undefined,
+    };
+    const board = await boardService.getBoard(slug, filters);
     res.json(success(board));
   },
 );
