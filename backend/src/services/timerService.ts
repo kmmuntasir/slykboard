@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
-import { tickets, timeEntries } from '../db/schema';
+import { tickets, timeEntries, users } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 
@@ -133,6 +133,7 @@ export interface TimeEntryWithDuration {
   durationMs: number | null; // null if running; else end - start (or minutes*60000 for manual)
   description: string | null;
   type: 'manual' | 'timer';
+  user: { id: string; fullName: string; avatarUrl: string | null } | null;
 }
 
 export interface TimeEntriesResponse {
@@ -148,8 +149,12 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
       endTime: timeEntries.endTime,
       manualEntryMinutes: timeEntries.manualEntryMinutes,
       description: timeEntries.description,
+      userId: users.id,
+      userFullName: users.fullName,
+      userAvatarUrl: users.avatarUrl,
     })
     .from(timeEntries)
+    .leftJoin(users, eq(users.id, timeEntries.userId))
     .where(eq(timeEntries.ticketId, ticketId))
     .orderBy(desc(timeEntries.startTime));
 
@@ -167,6 +172,11 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
       durationMs,
       description: r.description,
       type: isManual ? 'manual' : 'timer',
+      user: r.userId === null ? null : {
+        id: r.userId,
+        fullName: r.userFullName ?? 'Unknown user',
+        avatarUrl: r.userAvatarUrl,
+      },
     };
   });
 

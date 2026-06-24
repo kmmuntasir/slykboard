@@ -35,6 +35,7 @@ export interface TimeEntryWithDuration {
     durationMs: number | null; // null if running; else end - start
     type: 'manual' | 'timer'; // F21: manual entry vs. live-timer run
     description: string | null;
+    user: { id: string; fullName: string; avatarUrl: string | null } | null; // F22: who tracked it
 }
 
 export interface TimeEntriesResponse {
