@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { BoardPage } from './BoardPage';
 import { renderInDnd } from '@/test/dndWrapper';
 import { ApiClientError } from '@/api/client';
+import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import type { BoardPayload } from '@/types/board';
 import type { Ticket } from '@/types/ticket';
 
@@ -86,6 +87,9 @@ function renderBoard() {
 describe('BoardPage', () => {
     beforeEach(() => {
         mockState.boardValue = { isLoading: false };
+        // Filter state lives in a real zustand store shared across renders;
+        // reset it so no test leaks an active filter into another.
+        useBoardUiStore.getState().clearFilters();
     });
 
     it('renders loading state', () => {
@@ -93,7 +97,10 @@ describe('BoardPage', () => {
         renderBoard();
 
         // BoardPage now renders <BoardSkeleton /> while loading.
-        expect(screen.getAllByTestId('board-skeleton-column').length).toBeGreaterThan(0);
+        const columns = screen.getAllByTestId('board-skeleton-column');
+        expect(columns.length).toBeGreaterThan(0);
+        // Skeleton columns are decorative (aria-hidden) — screen readers skip them.
+        expect(columns[0]).toHaveAttribute('aria-hidden', 'true');
         expect(screen.queryByText('Slyk')).not.toBeInTheDocument();
     });
 
@@ -142,6 +149,49 @@ describe('BoardPage', () => {
 
         expect(screen.getByText(/No tickets yet/i)).toBeInTheDocument();
         expect(screen.getByRole('status')).toHaveTextContent(/No tickets yet/i);
+        // Truly-empty CTA: the EmptyState surfaces a New-ticket button.
+        expect(
+            within(screen.getByRole('status')).getByRole('button', { name: 'New ticket' }),
+        ).toBeInTheDocument();
+    });
+
+    it('renders filtered-empty state with a Clear-filters CTA', () => {
+        // Simulate an active filter via the shared board-UI store (the source of
+        // truth BoardPage reads for hasActiveFilters / clearFilters).
+        useBoardUiStore.getState().setSearchQuery('nomatch');
+        mockState.boardValue = {
+            data: {
+                project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
+                columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [] }],
+            },
+            isLoading: false,
+        };
+        renderBoard();
+
+        const status = screen.getByRole('status');
+        expect(within(status).getByText(/No tickets match your filters/i)).toBeInTheDocument();
+        const clearBtn = within(status).getByRole('button', { name: /clear filters/i });
+        expect(clearBtn).toBeInTheDocument();
+
+        // Clear-filters CTA resets the shared store.
+        fireEvent.click(clearBtn);
+        expect(useBoardUiStore.getState().searchQuery).toBe('');
+    });
+
+    it('renders Retry (role=alert) on a non-404 error and refetches on retry', () => {
+        const refetch = vi.fn();
+        mockState.boardValue = {
+            error: new ApiClientError('Kaboom', 500, 'INTERNAL_ERROR'),
+            isLoading: false,
+            data: undefined,
+            refetch,
+        };
+        renderBoard();
+
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByText('Kaboom')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+        expect(refetch).toHaveBeenCalledTimes(1);
     });
 
     it('renders unsorted bucket for orphan', () => {

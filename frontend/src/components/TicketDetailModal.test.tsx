@@ -200,11 +200,11 @@ describe('TicketDetailModal', () => {
         expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
     });
 
-    it('returns null (no dialog) while the ticket is loading', () => {
-        // Never-resolving fetchTicket so the query stays pending.
+    it('renders the TicketModalSkeleton while the ticket is loading', () => {
+        // Never-resolving fetchTicket so the query stays pending (isLoading).
         vi.mocked(fetchTicket).mockReturnValue(new Promise(() => {}));
         const client = newQueryClient();
-        const { container } = render(
+        render(
             <Providers client={client}>
                 <TicketDetailModal
                     slug="SLYK"
@@ -214,9 +214,63 @@ describe('TicketDetailModal', () => {
                 />
             </Providers>,
         );
-        // No dialog yet; the only rendered output is the (unportalled) null branch.
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        expect(container).toBeEmptyDOMElement();
+        // The shell renders immediately; the body is the loading skeleton. The
+        // title falls back to the loading label while the ticket is absent.
+        expect(screen.getByRole('dialog', { name: 'Loading ticket…' })).toBeInTheDocument();
+        // TicketModalSkeleton renders decorative (aria-hidden) pulse placeholders.
+        expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+        // The edit form is NOT rendered while loading.
+        expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    });
+
+    it('renders the "Ticket not found" block when the detail resolves absent', async () => {
+        // Resolve to null → query succeeds with falsy data (e.g. deleted server-side
+        // after the board last resolved it). React Query v5 forbids undefined data
+        // (treats it as an error), so null is the way to exercise the absent branch.
+        vi.mocked(fetchTicket).mockResolvedValue(null as unknown as Ticket);
+        const client = newQueryClient();
+        render(
+            <Providers client={client}>
+                <TicketDetailModal
+                    slug="SLYK"
+                    ticketId={TICKET_ID}
+                    onClose={vi.fn()}
+                    onSubmit={vi.fn()}
+                />
+            </Providers>,
+        );
+
+        expect(await screen.findByText('Ticket not found')).toBeInTheDocument();
+        expect(screen.getByText(/deleted or no longer exists/i)).toBeInTheDocument();
+        // The not-found block offers a Close button (distinct from the modal's
+        // aria-label "Close dialog" close affordance).
+        expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+        // The edit form is NOT rendered for an absent ticket.
+        expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    });
+
+    it('renders Retry (role=alert) on a detail-query error and refetches on retry', async () => {
+        vi.mocked(fetchTicket).mockRejectedValue(new Error('Server boom'));
+        const client = newQueryClient();
+        render(
+            <Providers client={client}>
+                <TicketDetailModal
+                    slug="SLYK"
+                    ticketId={TICKET_ID}
+                    onClose={vi.fn()}
+                    onSubmit={vi.fn()}
+                />
+            </Providers>,
+        );
+
+        // Initial rejection → Retry surfaces inside the modal body.
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(screen.getByText('Server boom')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+
+        // Retry re-runs the query (onRetry -> refetch -> queryFn).
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+        await waitFor(() => expect(fetchTicket).toHaveBeenCalledTimes(2));
     });
 
     it('submit: editing the title + Save calls onSubmit with the new title, then onClose', async () => {

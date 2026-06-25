@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectsPage } from '@/pages/ProjectsPage';
@@ -156,5 +156,50 @@ describe('ProjectsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
         expect(await screen.findByText('Slug already exists')).toBeInTheDocument();
+    });
+
+    it('renders skeleton loading state', () => {
+        mockState.projectsValue = {
+            data: [],
+            isLoading: true,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        // ProjectsPage renders <SkeletonLine /> placeholders while loading.
+        expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+        // The page heading is only rendered in the loaded branch.
+        expect(screen.queryByRole('heading', { name: 'Projects' })).not.toBeInTheDocument();
+    });
+
+    it('renders the empty state with a Create-project CTA for ADMIN', () => {
+        mockState.projectsValue = {
+            data: [],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        const status = screen.getByRole('status');
+        expect(within(status).getByText('No projects yet')).toBeInTheDocument();
+        expect(within(status).getByRole('button', { name: 'Create project' })).toBeInTheDocument();
+    });
+
+    it('renders Retry (role=alert) on a query error and refetches on retry', () => {
+        const refetch = vi.fn();
+        mockState.projectsValue = {
+            data: [],
+            isLoading: false,
+            error: new ApiClientError('Projects unavailable', 500, 'INTERNAL_ERROR'),
+            refetch,
+        };
+        renderPage();
+
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByText('Projects unavailable')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+        expect(refetch).toHaveBeenCalledTimes(1);
     });
 });
