@@ -5,12 +5,23 @@ export interface Config {
   frontendUrl: string;
   nodeEnv: string;
   databaseUrl: string;
+  directDatabaseUrl: string;
+  runMigrationsOnStart: boolean;
   jwtSecret: string;
   jwtTtl: string; // F07 D8: env-driven JWT TTL (jose setExpirationTime string, e.g. '8h', '15m')
   googleClientId: string;
   googleClientSecret: string;
   googleCallbackUrl: string;
   allowedDomain?: string;
+}
+
+// Parse 'true'/'1'/'yes' (case-insensitive) → true; 'false'/'0'/'no' → false; otherwise undefined.
+function parseBooleanFlag(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'no'].includes(normalized)) return false;
+  return undefined;
 }
 
 export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
@@ -36,10 +47,12 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('Missing GOOGLE_CALLBACK_URL');
   }
 
+  const nodeEnv = envSource.NODE_ENV ?? 'development';
+
   return {
     port: Number(envSource.PORT ?? 3000),
     frontendUrl: envSource.FRONTEND_URL,
-    nodeEnv: envSource.NODE_ENV ?? 'development',
+    nodeEnv,
     databaseUrl: envSource.DATABASE_URL,
     jwtSecret: envSource.JWT_SECRET,
     jwtTtl: envSource.JWT_TTL || '8h', // F07 D8: default preserves F05/F06 behavior
@@ -47,6 +60,8 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     googleClientSecret: envSource.GOOGLE_CLIENT_SECRET,
     googleCallbackUrl: envSource.GOOGLE_CALLBACK_URL,
     allowedDomain: envSource.ALLOWED_DOMAIN || undefined,
+    directDatabaseUrl: envSource.DIRECT_DATABASE_URL?.trim() || envSource.DATABASE_URL,
+    runMigrationsOnStart: parseBooleanFlag(envSource.RUN_MIGRATIONS_ON_START) ?? nodeEnv === 'production',
   };
 }
 
