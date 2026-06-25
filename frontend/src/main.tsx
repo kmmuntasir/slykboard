@@ -6,6 +6,7 @@ import { RouterProvider } from 'react-router';
 import { queryClient } from '@/lib/queryClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toaster } from '@/components/Toaster';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import { router } from '@/routes';
 import { env } from '@/config/env';
 import './index.css';
@@ -20,8 +21,10 @@ createRoot(rootElement).render(
         <GoogleOAuthProvider clientId={env.googleClientId}>
             <ErrorBoundary>
                 <QueryClientProvider client={queryClient}>
-                    <RouterProvider router={router} />
-                    <Toaster />
+                    <ThemeProvider>
+                        <RouterProvider router={router} />
+                        <Toaster />
+                    </ThemeProvider>
                 </QueryClientProvider>
             </ErrorBoundary>
         </GoogleOAuthProvider>
