@@ -11,6 +11,7 @@ interface BoardMockValue {
     data?: BoardPayload;
     isLoading: boolean;
     error?: unknown;
+    refetch?: () => void;
 }
 
 const { mockState } = vi.hoisted(() => ({
@@ -88,10 +89,11 @@ describe('BoardPage', () => {
     });
 
     it('renders loading state', () => {
-        mockState.boardValue = { isLoading: true };
+        mockState.boardValue = { isLoading: true, refetch: vi.fn() };
         renderBoard();
 
-        expect(screen.getByText('Loading board…')).toBeInTheDocument();
+        // BoardPage now renders <BoardSkeleton /> while loading.
+        expect(screen.getAllByTestId('board-skeleton-column').length).toBeGreaterThan(0);
         expect(screen.queryByText('Slyk')).not.toBeInTheDocument();
     });
 

@@ -49,7 +49,12 @@ vi.mock('@/components/ProjectColumnsManager', () => ({
 }));
 
 vi.mock('@/hooks/useProjects', () => ({
-    useProject: () => ({ data: mockState.project, isLoading: false }),
+    useProject: () => ({
+        data: mockState.project,
+        isLoading: false,
+        error: undefined,
+        refetch: vi.fn(),
+    }),
 }));
 
 vi.mock('@/hooks/useRequireRole', () => ({
