@@ -39,7 +39,7 @@
 
 **Phase 0 — Foundations (design-system plumbing; hard prerequisite for all visible work)**
 - [x] **F31** Install redesign deps (lucide-react + Radix dropdown/tooltip) — 🏗 Scaffolding · _deps: —_
-- [ ] **F32** Define full semantic token set + `@custom-variant dark` — 🔧 Infrastructure · _deps: F31_
+- [x] **F32** Define full semantic token set + `@custom-variant dark` — 🔧 Infrastructure · _deps: F31_
 - [ ] **F33** No-flash theme bootstrap (`color-scheme` meta + pre-React script) — 🔧 Infrastructure · _deps: F32_
 - [ ] **F34** ThemeProvider + `useTheme` hook (persist + matchMedia + `.dark` toggle) — 🔧 Infrastructure · _deps: F33_
 - [ ] **F35** Shared UI primitives (Button/Field/TextInput/Textarea/SelectInput/Avatar/Badge/Card) — 🔧 Infrastructure · _deps: F32_
