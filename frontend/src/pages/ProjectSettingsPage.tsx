@@ -6,7 +6,6 @@ import { useParams } from 'react-router';
 import { useProject } from '@/hooks/useProjects';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
 import { useRequireRole } from '@/hooks/useRequireRole';
-import { ApiClientError } from '@/api/client';
 import { LabelManager } from '@/components/LabelManager';
 import { ProjectColumnsManager } from '@/components/ProjectColumnsManager';
 import { Retry } from '@/components/Retry';
@@ -78,17 +77,14 @@ function ProjectNameSection({ slug, name }: ProjectNameSectionProps) {
     const handleSaveName = async () => {
         const trimmed = draftName.trim();
         if (!trimmed) return;
+        // F28 T12: a failed rename is toasted by the global mutation funnel
+        // (single surface) — no inline error to avoid double-surfacing.
         try {
             await updateMut.mutateAsync({ name: trimmed });
         } catch {
-            // error surfaced via updateMut.error below
+            // toasted via MutationCache.onError
         }
     };
-
-    const errMsg =
-        updateMut.error instanceof ApiClientError
-            ? updateMut.error.message
-            : updateMut.error?.message;
 
     return (
         <section className="space-y-2 rounded border border-border p-4">
@@ -108,7 +104,6 @@ function ProjectNameSection({ slug, name }: ProjectNameSectionProps) {
             >
                 {updateMut.isPending ? 'Saving…' : 'Save Name'}
             </button>
-            {errMsg && <p className="text-sm text-red-600">{errMsg}</p>}
         </section>
     );
 }

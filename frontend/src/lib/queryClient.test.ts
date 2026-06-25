@@ -119,4 +119,31 @@ describe('MutationCache wiring', () => {
     await expect(mutation.execute({})).rejects.toThrow('nope');
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('nope'));
   });
+
+  it('prefers meta.revertMessage over the generic fallback (T12)', async () => {
+    const mutation = queryClient.getMutationCache().build(queryClient, {
+      mutationFn: async () => {
+        throw new ApiClientError('nope', 500, 'INTERNAL_ERROR');
+      },
+      meta: { revertMessage: 'Reverted by hand' },
+    });
+    await expect(mutation.execute({})).rejects.toThrow('nope');
+    expect(errorSpy).toHaveBeenCalledWith('Reverted by hand');
+    expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('nope'));
+  });
+});
+
+describe('QueryCache no longer toasts (T12)', () => {
+  it('does NOT toast on a failing query — inline <Retry> is the only surface', async () => {
+    // FORBIDDEN does not retry, so the query rejects on the first attempt with
+    // no backoff delay. With QueryCache.onError removed, nothing is toasted.
+    const query = queryClient.getQueryCache().build(queryClient, {
+      queryKey: ['q-no-toast', 'f28-t12'],
+      queryFn: async () => {
+        throw new ApiClientError('Forbidden', 403, 'FORBIDDEN');
+      },
+    });
+    await expect(query.fetch()).rejects.toThrow('Forbidden');
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
 });

@@ -10,6 +10,7 @@ export function useUpdateProject(slug: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (dto: UpdateProjectDto) => updateProject(slug, dto),
+    meta: { revertMessage: "Couldn't save project settings" },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectKeys.detail(slug) });
       qc.invalidateQueries({ queryKey: projectKeys.lists() });

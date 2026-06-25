@@ -1,32 +1,35 @@
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryClient } from '@tanstack/react-query';
 import { ApiClientError } from '@/api/client';
 import { toast } from '@/hooks/useToast';
 
-// F28 T2 (D5): single error→toast funnel shared by both query and mutation
-// caches so all server-failure UX routes through one helper. Branches on the
-// canonical ApiClientError.code; falls back to a generic message otherwise.
-export function reportError(error: ApiClientError | Error): void {
-  let message: string;
+// F28 T2 (D5) / F28 T12: a single error→toast funnel that runs ONLY for
+// mutations. Query failures are no longer toasted globally — each page renders
+// an inline <Retry> (T12), so toasting here too would double-surface. A
+// mutation may carry a per-call meta.revertMessage to override the generic
+// fallback; otherwise we branch on the canonical ApiClientError.code.
+export function defaultMessage(error: ApiClientError | Error): string {
   if (error instanceof ApiClientError) {
     if (error.code === 'NETWORK_ERROR') {
-      message = "You're offline — check your connection.";
+      return "You're offline — check your connection.";
     } else if (error.code === 'FORBIDDEN') {
-      message = "You don't have permission to do that.";
+      return "You don't have permission to do that.";
     } else {
-      message = error.message || 'Something went wrong.';
+      return error.message || 'Something went wrong.';
     }
-  } else {
-    message = 'Action failed — please try again.';
   }
-  toast.error(message);
+  return 'Action failed — please try again.';
+}
+
+export function reportError(error: ApiClientError | Error): void {
+  toast.error(defaultMessage(error));
 }
 
 export const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error) => reportError(error),
-  }),
   mutationCache: new MutationCache({
-    onError: (error) => reportError(error),
+    onError: (error, _variables, _onMutateResult, mutation) => {
+      const meta = mutation.meta as { revertMessage?: string } | undefined;
+      toast.error(meta?.revertMessage ?? defaultMessage(error));
+    },
   }),
   defaultOptions: {
     queries: {
