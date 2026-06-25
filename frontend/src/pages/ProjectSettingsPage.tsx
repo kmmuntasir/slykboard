@@ -9,6 +9,8 @@ import { useRequireRole } from '@/hooks/useRequireRole';
 import { ApiClientError } from '@/api/client';
 import { LabelManager } from '@/components/LabelManager';
 import { ProjectColumnsManager } from '@/components/ProjectColumnsManager';
+import { Retry } from '@/components/Retry';
+import { SkeletonBlock, SkeletonLine } from '@/components/Skeleton';
 
 export function ProjectSettingsPage() {
     const { slug } = useParams<{ slug: string }>();
@@ -25,11 +27,24 @@ interface SettingsBodyProps {
 }
 
 function SettingsBody({ slug }: SettingsBodyProps) {
-    const { data: project, isLoading } = useProject(slug);
+    const { data: project, isLoading, error, refetch } = useProject(slug);
     const isAdmin = useRequireRole('ADMIN');
 
     if (isLoading) {
-        return <div className="p-4 text-muted">Loading project…</div>;
+        return (
+            <div className="space-y-3 p-4">
+                <SkeletonLine className="h-6 w-40" />
+                <SkeletonLine className="h-4 w-full" />
+                <SkeletonBlock />
+            </div>
+        );
+    }
+    if (error) {
+        return (
+            <div className="p-4">
+                <Retry message={error.message} onRetry={refetch} />
+            </div>
+        );
     }
     if (!project) {
         return <div className="p-4">Project not found.</div>;

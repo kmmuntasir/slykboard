@@ -10,7 +10,12 @@ import type { Project } from '@/types/project';
 const { navigateMock, mockState } = vi.hoisted(() => ({
     navigateMock: vi.fn(),
     mockState: {
-        projectsValue: { data: [] as Project[], isLoading: false },
+        projectsValue: {
+            data: [] as Project[],
+            isLoading: false,
+            error: undefined as unknown,
+            refetch: vi.fn(),
+        },
         createProjectValue: { mutateAsync: vi.fn(), isPending: false },
     },
 }));
@@ -63,7 +68,7 @@ describe('ProjectsPage', () => {
         localStorage.clear();
         useAuthStore.getState().clear();
         navigateMock.mockReset();
-        mockState.projectsValue = { data: [], isLoading: false };
+        mockState.projectsValue = { data: [], isLoading: false, error: undefined, refetch: vi.fn() };
         mockState.createProjectValue = { mutateAsync: vi.fn(), isPending: false };
         useAuthStore.getState().setUser({
             token: 't',
@@ -77,7 +82,12 @@ describe('ProjectsPage', () => {
     });
 
     it('renders project list', () => {
-        mockState.projectsValue = { data: [projectMock, otherMock], isLoading: false };
+        mockState.projectsValue = {
+            data: [projectMock, otherMock],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
         renderPage();
 
         expect(screen.getByText('Slyk')).toBeInTheDocument();
@@ -85,7 +95,7 @@ describe('ProjectsPage', () => {
     });
 
     it('clicking a project navigates', () => {
-        mockState.projectsValue = { data: [projectMock], isLoading: false };
+        mockState.projectsValue = { data: [projectMock], isLoading: false, error: undefined, refetch: vi.fn() };
         renderPage();
 
         fireEvent.click(screen.getByRole('button', { name: /Slyk/i }));

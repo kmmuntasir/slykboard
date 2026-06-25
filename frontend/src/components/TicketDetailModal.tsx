@@ -17,6 +17,8 @@ import { TicketAttributeForm } from './TicketAttributeForm';
 import { TimerControls } from './TimerControls';
 import { TimeLog } from './TimeLog';
 import { ManualEntryForm } from './ManualEntryForm';
+import { TicketModalSkeleton } from './TicketModalSkeleton';
+import { Retry } from './Retry';
 
 // F16: the unified ticket detail modal. Read-only header (display ID, creator,
 // timestamps) + the reused TicketAttributeForm edit body (F13/F14/F15). Wires the
@@ -42,7 +44,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     // F16 D7: reconcile board/modal drift — refetch the detail while the modal is
     // open (30s, matching the board). RHF defaultValues are seeded once (below),
     // so a background refetch updates the cache but never overwrites unsaved input.
-    const { data: ticket } = useQuery({
+    const { data: ticket, isLoading, isError, error, refetch } = useQuery({
         queryKey: ticketKeys.detail(ticketId),
         queryFn: () => fetchTicket(ticketId),
         refetchInterval: 30_000,
@@ -83,18 +85,25 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         onClose();
     };
 
-    if (!ticket) return null;
+    // The modal shell is always rendered while open; only the body branches on
+    // the query state (loading / error / absent / resolved).
+    const modalTitle = ticket ? formatTicketId(slug, ticket.ticketNumber) : 'Loading ticket…';
 
-    return (
-        <>
-            <Modal
-                isOpen
-                onClose={requestClose}
-                onEsc={requestClose}
-                titleId="ticket-detail-title"
-                title={formatTicketId(slug, ticket.ticketNumber)}
-                blockBackdropClose={isDirty}
-            >
+    let modalBody: React.ReactNode;
+    if (isLoading) {
+        modalBody = <TicketModalSkeleton />;
+    } else if (isError) {
+        modalBody = (
+            <Retry
+                message={error instanceof Error ? error.message : 'Failed to load ticket'}
+                onRetry={() => void refetch()}
+            />
+        );
+    } else if (!ticket) {
+        modalBody = <div className="p-4 text-sm text-muted">Ticket not found.</div>;
+    } else {
+        modalBody = (
+            <>
                 {/* F17: deleted-ticket banner — shown when the ticket is soft-deleted. */}
                 {ticket.deletedAt && (
                     <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 px-3 py-2">
@@ -172,6 +181,21 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 )}
                 {/* F19 T5: reverse-chronological activity feed (REQ-5.1, REQ-5.2). */}
                 <ActivityFeed ticketId={ticketId} />
+            </>
+        );
+    }
+
+    return (
+        <>
+            <Modal
+                isOpen
+                onClose={requestClose}
+                onEsc={requestClose}
+                titleId="ticket-detail-title"
+                title={modalTitle}
+                blockBackdropClose={isDirty}
+            >
+                {modalBody}
             </Modal>
 
             <ConfirmDiscardDialog

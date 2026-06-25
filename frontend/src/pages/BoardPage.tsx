@@ -11,13 +11,15 @@ import { UnsortedBucket } from '@/components/UnsortedBucket';
 import { BoardFilters } from '@/components/BoardFilters';
 import { NewTicketButton } from '@/components/NewTicketButton';
 import { TicketDetailModal } from '@/components/TicketDetailModal';
+import { BoardSkeleton } from '@/components/BoardSkeleton';
+import { Retry } from '@/components/Retry';
 import { ApiClientError } from '@/api/client';
 import type { UpdateTicketDto } from '@/types/ticket';
 
 export function BoardPage() {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
-    const { data: board, isLoading, error } = useBoard(slug);
+    const { data: board, isLoading, error, refetch } = useBoard(slug);
     const { mutate } = useMoveTicket(slug);
     const setDragInProgress = useBoardUiStore((s) => s.setDragInProgress);
     const hasActiveFilters = useBoardUiStore(
@@ -33,13 +35,17 @@ export function BoardPage() {
         return <div className="p-4">No project selected.</div>;
     }
     if (isLoading) {
-        return <div className="p-4">Loading board…</div>;
+        return <BoardSkeleton />;
     }
     if (error instanceof ApiClientError) {
         if (error.status === 404) {
             return <div className="p-4">Project '{slug}' not found.</div>;
         }
-        return <div className="p-4 text-destructive">Failed to load board: {error.message}</div>;
+        return (
+            <div className="p-4">
+                <Retry message={error.message} onRetry={refetch} />
+            </div>
+        );
     }
     if (!board) {
         return null;

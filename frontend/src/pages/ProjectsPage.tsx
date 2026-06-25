@@ -4,11 +4,13 @@ import { useProjects, useCreateProject } from '@/hooks/useProjects';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useRequireRole } from '@/hooks/useRequireRole';
 import { EmptyState } from '@/components/EmptyState';
+import { Retry } from '@/components/Retry';
+import { SkeletonLine } from '@/components/Skeleton';
 import { ApiClientError } from '@/api/client';
 
 export function ProjectsPage() {
     const navigate = useNavigate();
-    const { data: projects, isLoading } = useProjects();
+    const { data: projects, isLoading, error: queryError, refetch } = useProjects();
     const createProject = useCreateProject();
     const setLastSelectedSlug = useProjectStore((s) => s.setLastSelectedSlug);
     const isAdmin = useRequireRole('ADMIN');
@@ -36,7 +38,20 @@ export function ProjectsPage() {
     };
 
     if (isLoading) {
-        return <div className="p-4 text-muted">Loading projects…</div>;
+        return (
+            <div className="space-y-2 p-4">
+                <SkeletonLine />
+                <SkeletonLine />
+                <SkeletonLine />
+            </div>
+        );
+    }
+    if (queryError) {
+        return (
+            <div className="p-4">
+                <Retry message={queryError.message} onRetry={refetch} />
+            </div>
+        );
     }
 
     return (
