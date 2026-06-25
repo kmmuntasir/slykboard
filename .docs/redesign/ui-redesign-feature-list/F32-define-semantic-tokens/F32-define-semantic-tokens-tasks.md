@@ -17,14 +17,14 @@
 1. `frontend/src/index.css` declares a `:root` (light) block and a `.dark` block with the full shadcn-style set: `--background/--foreground`, `--card/--card-foreground`, `--popover/--popover-foreground`, `--primary/--primary-foreground`, `--secondary/--secondary-foreground`, `--muted/--muted-foreground`, `--accent/--accent-foreground`, `--border`, `--input`, `--ring`, `--destructive/--destructive-foreground`, plus status tints `--success/--success-foreground`, `--warning/--warning-foreground`, `--danger/--danger-foreground`.
 2. `@theme inline` maps every one of those CSS vars to the `--color-*` namespace so Tailwind v4 emits the corresponding `bg-*` / `text-*` / `border-*` / `ring-*` utilities (the `inline` keyword is what makes `bg-card` / `text-muted-foreground` resolve and what lets `.dark` overrides cascade).
 3. `@custom-variant dark (&:where(.dark, .dark *));` is present (PRD §3.1's exact form).
-4. The 5 existing light seed token **values** are preserved (restructured into the shadcn split, not deleted): `#ffffff`, `#111827`, `#2563eb`, `#6b7280`, `#e5e7eb`. Primary stays **blue** `#2563eb` (PRD §1.1 "one accent").
+4. The 5 existing light seed token **values** are preserved as their exact Tailwind-v4 **OKLCH** equivalents (same appearance, modern format): white `oklch(1 0 0)`, gray-900 `oklch(0.21 0.034 264.665)`, blue-600 `oklch(0.541 0.241 262.261)`, gray-500 `oklch(0.551 0.027 264.364)`, gray-200 `oklch(0.929 0.013 255.508)`. Primary stays **blue** (PRD §1.1 "one accent").
 5. **Spike/verify (load-bearing):** build a smoke component using `bg-card text-muted-foreground border-border` and confirm computed color is non-transparent in light **and** with `.dark` on `<html>`. jsdom cannot assert computed color (no layout engine) — so the F32 spike is a **static source-presence test** + **`vite build` clean** + **manual DevTools `.dark` toggle smoke**. The real computed-color assertion is deferred to F46/F51 visual QA (or a future Playwright add — out of scope).
 
 **Edge cases to resolve up front:**
 - **Tailwind v4 `@theme inline` vs plain `@theme`** → **Decision: `@theme inline`.** Plain `@theme` copies the value at build time and emits `--color-*` globally to `:root` (Tailwind owns the var, so `.dark` overrides on `--background` never reach the utility). `@theme inline { --color-card: var(--card) }` inlines the `var(--card)` reference into the utility itself, so you own `--card` in `:root`/`.dark` and the cascade does the override. Confirmed by Tailwind v4 docs (theme/colors) and GH discussion #18560. PRD §3.1 mandates `@theme inline`. Getting this wrong silently re-breaks dark mode — the acceptance spike exists to catch it.
-- **Keep the 5 existing light tokens as the seed** → **Decision: preserve the 5 VALUES, restructure into the shadcn split.** `--color-background:#ffffff` → `:root { --background:#ffffff }` + `@theme inline { --color-background: var(--background) }`, and likewise for `--foreground:#111827`, `--primary:#2563eb`, `--muted:#6b7280`, `--border:#e5e7eb`. Blue primary preserved (PRD §1.1). Do NOT delete mid-sweep or F46 churns harder. **Load-bearing coupling:** because `@theme inline` does NOT emit `--color-*` globally, the existing `@layer base { body { background-color: var(--color-background); color: var(--color-foreground) } }` rule breaks — it MUST switch to `var(--background)` / `var(--foreground)`. Called out in T1.
-- **Status tint tokens are new vs the PRD's §3.1 list** → **Correction: PRD §3.1 DOES name `--success`/`--warning`/`--danger`** ("status tints: `--success`, `--warning`, `--danger` (for health/priority badges)"). So the 3 background tints are **NOT an addition** — the spec's framing was wrong. What IS an addition: the `-foreground` pairs (`--success-foreground` etc.), which PRD omits but badges need for readable text. F32 adds those pairs. Values grounded in the existing-palette audit (greens `#22c55e`/`#16a34a`, reds `#dc2626`, ambers). `--danger` is aliased to the destructive red (one red, not two).
-- **Color model: HEX vs OKLCH** → **Decision: preserve HEX.** The existing seed tokens are HEX; PRD §1.1 mandates the blue accent be preserved (shadcn's neutral-black OKLCH primary would break app identity); HEX minimizes appearance churn; Tailwind v4 alpha modifiers (`bg-muted/40`) work with any color format via `color-mix`. OKLCH migration noted as a future polish option (out of F32 scope). Full light + dark HEX palette in T1.
+- **Keep the 5 existing light tokens as the seed** → **Decision: preserve the 5 VALUES (as OKLCH equivalents), restructure into the shadcn split.** `--color-background:#ffffff` → `:root { --background: oklch(1 0 0) }` + `@theme inline { --color-background: var(--background) }`, and likewise for the other four seeds. Blue primary preserved (PRD §1.1). Do NOT delete mid-sweep or F46 churns harder. **Load-bearing coupling:** because `@theme inline` does NOT emit `--color-*` globally, the existing `@layer base { body { background-color: var(--color-background); color: var(--color-foreground) } }` rule breaks — it MUST switch to `var(--background)` / `var(--foreground)`. Called out in T1.
+- **Status tint tokens are new vs the PRD's §3.1 list** → **Correction: PRD §3.1 DOES name `--success`/`--warning`/`--danger`** ("status tints: `--success`, `--warning`, `--danger` (for health/priority badges)"). So the 3 background tints are **NOT an addition** — the spec's framing was wrong. What IS an addition: the `-foreground` pairs (`--success-foreground` etc.), which PRD omits but badges need for readable text. F32 adds those pairs. Values grounded in the existing-palette audit (greens, reds, ambers → their OKLCH equivalents). `--danger` is aliased to the destructive red (one red, not two).
+- **Color model: OKLCH** → **Decision (owner-confirmed 2026-06-26): OKLCH.** Owner chose OKLCH over HEX. OKLCH is Tailwind v4's native default color space (shadcn v4 ships OKLCH since Mar 2025), perceptually uniform for consistent lightness steps, and `color-mix`/alpha modifiers work natively. Seed VALUES preserved as their **exact Tailwind-v4 OKLCH equivalents** (same appearance): white→`oklch(1 0 0)`, gray-900 #111827→`oklch(0.21 0.034 264.665)`, blue-600 #2563eb→`oklch(0.541 0.241 262.261)`, gray-500 #6b7280→`oklch(0.551 0.027 264.364)`, gray-200 #e5e7eb→`oklch(0.929 0.013 255.508)`. Blue primary hue preserved (PRD §1.1). Full light + dark OKLCH palette in T1.
 - **`@custom-variant dark` form** → **Decision: `@custom-variant dark (&:where(.dark, .dark *));`** (PRD §3.1 + Tailwind v4 docs canonical). `:where()` has zero specificity and matches `.dark` itself + descendants. Deliberately deviates from shadcn's current starter (`&:is(.dark *)`) — `:is()` takes max specificity of args and matches descendants only (not `.dark` itself). PRD + Tailwind docs win; document the deviation.
 - **Verification ceiling** → **Decision: build clean + static source-presence test + manual DevTools toggle.** jsdom cannot resolve `var()` or compute color (jsdom #2986/#3339); Playwright (real Chromium, can assert computed color) is **not installed**. Do NOT install Playwright in F32. Defer real computed-color assertion to F46/F51. (Cite research Q7.)
 - **`color-scheme` CSS property** → **Decision: add `color-scheme: light` under `:root` and `color-scheme: dark` under `.dark`.** This CSS property (in F32's file) tells the UA to render native chrome (scrollbars, form controls) in the matching scheme. F33 adds the HTML `<meta name="color-scheme">` + no-flash script. No overlap (CSS prop vs HTML meta both contribute). Absent from shadcn default; needed to avoid the scrollbar flash PRD §2.3 notes.
@@ -51,11 +51,11 @@
   - `frontend/src/main.tsx:11` → `import './index.css'` (import confirmed; F32 edits the imported file).
   - `frontend/vite.config.ts:4,7` → `@tailwindcss/vite` plugin confirmed; **NO** `tailwind.config.js`/`tailwind.config.ts` (v4 CSS-first config). `tailwindcss@^4`, `@tailwindcss/vite@^4` in `frontend/package.json`.
   - `frontend/vite.config.ts:13-17` → Vitest configured, env `jsdom`, setupFiles `./src/test-setup.ts`.
-- **5 seed token values to preserve:** `--color-background:#ffffff`, `--color-foreground:#111827`, `--color-primary:#2563eb`, `--color-muted:#6b7280`, `--color-border:#e5e7eb`. **Primary is BLUE (`#2563eb`)** — the app's accent (PRD §1.1 "one accent"). F32 must preserve blue primary, NOT adopt shadcn's neutral-black primary.
+- **5 seed token values to preserve (converted to OKLCH, same appearance):** white `#ffffff`→`oklch(1 0 0)`, gray-900 `#111827`→`oklch(0.21 0.034 264.665)`, blue-600 `#2563eb`→`oklch(0.541 0.241 262.261)`, gray-500 `#6b7280`→`oklch(0.551 0.027 264.364)`, gray-200 `#e5e7eb`→`oklch(0.929 0.013 255.508)`. **Primary is BLUE** — the app's accent (PRD §1.1 "one accent"). F32 must preserve blue primary, NOT adopt shadcn's neutral-black primary.
 - **Truly broken utilities today** (no backing token → class never emitted → silently transparent): `bg-card`, `text-muted-foreground`, `text-primary-foreground`, `bg-secondary`. Representative cites: `frontend/src/components/TicketCard.tsx:31` (`bg-card`), `frontend/src/components/BoardColumn.tsx:30` (`text-muted-foreground`), `frontend/src/components/AssigneeAvatar.tsx:29` (`text-primary-foreground`), `frontend/src/components/BoardFilters.tsx:119` (`bg-secondary`). ~21 hits across TicketCard/RichTextEditor/AssigneeAvatar/BoardColumn/ChecklistEditor/BoardFilters. (`bg-muted/40`, `border-border`, `bg-background`, `text-foreground` already resolve via the seed set — `bg-muted/40` works via `color-mix` alpha.)
 - **Prior art / partial work:** The 5 seed tokens in `index.css` are the partial work F32 completes. No `:root`/`.dark`/`@theme inline`/`@custom-variant` exists. PRD §2.3 cites the same broken utilities verbatim (`TicketCard.tsx:15,18`, `RichTextEditor.tsx`, `TicketAttributeForm.tsx:168,177`, `BoardColumn.tsx:22`).
 - **File paths the plan references that do NOT exist yet** (will be created): `frontend/src/tokens.test.ts` (co-located static source-presence test). No other files created.
-- **Existing status-color usage (grounds tint values):** `frontend/src/components/HealthBadge.tsx:28` (`bg-green-500`/`bg-red-500`); `frontend/src/components/PriorityBadge.tsx:5-11` (PRIORITY_TONE: LOW slate, MEDIUM blue, HIGH amber, URGENT orange, CRITICAL red); `frontend/src/components/ChecklistEditor.tsx:71` (`bg-green-500` progress); `frontend/src/components/LabelManager.tsx:125,146` (green-600/red-600); destructive `bg-red-600` in ConfirmDiscardDialog/OfflineBanner/ProjectColumnsManager; `text-red-600` validation text widely. Greens ≈ `#22c55e`/`#16a34a`; reds ≈ `#ef4444`/`#dc2626`; ambers ≈ `amber-100/700` (Tailwind `amber-600` = `#d97706`, `amber-100` = `#fef3c7`).
+- **Existing status-color usage (grounds tint values):** `frontend/src/components/HealthBadge.tsx:28` (`bg-green-500`/`bg-red-500`); `frontend/src/components/PriorityBadge.tsx:5-11` (PRIORITY_TONE: LOW slate, MEDIUM blue, HIGH amber, URGENT orange, CRITICAL red); `frontend/src/components/ChecklistEditor.tsx:71` (`bg-green-500` progress); `frontend/src/components/LabelManager.tsx:125,146` (green-600/red-600); destructive `bg-red-600` in ConfirmDiscardDialog/OfflineBanner/ProjectColumnsManager; `text-red-600` validation text widely. Tint OKLCH values map these: green-600 `oklch(0.627 0.194 149.214)` / green-500 `oklch(0.723 0.191 149)`; red-600 `oklch(0.595 0.225 27.167)` / red-500 `oklch(0.637 0.237 25.333)`; amber-600 `oklch(0.666 0.179 58.318)` / amber-500 `oklch(0.795 0.164 70.08)`.
 - **No Playwright/E2E harness** in `frontend/package.json` or config. Vitest + jsdom only. jsdom CANNOT assert computed color (no layout engine; `getComputedStyle().backgroundColor` returns `''`/transparent). → F32 verification ceiling is `vite build` clean + manual DevTools `.dark` toggle + a static source-presence Vitest test. Defer computed-color assertion to F46/F51 visual QA.
 - **Project rules this plan satisfies:**
   - `js-development-rules.md` — Tailwind v4 stack pin (`@tailwindcss/vite`); Vercel deploy `npm run build` → `dist`; React 19+ / Node 24+.
@@ -65,7 +65,7 @@
   - `persona.md` — frontend code → `./frontend/`; reply concise.
 - **Hidden coupling to plan for:**
   - **`@layer base` var rename.** `index.css:12-29` references `var(--color-background)`/`var(--color-foreground)` — these stop being emitted globally once `@theme` becomes `@theme inline`. T1 MUST rename them to `var(--background)`/`var(--foreground)` or body styling breaks silently. This is the single most easily-missed break in F32.
-  - **Alpha-modifier compatibility.** `bg-muted/40` works with HEX via Tailwind v4 `color-mix` — format is free, no special handling. No action needed; documented to prevent a false "must use oklch for alpha" assumption.
+  - **Alpha-modifier compatibility.** `bg-muted/40` works with OKLCH via Tailwind v4 `color-mix` — no special handling. No action needed.
   - **`@import 'tailwindcss'` must be first; `@custom-variant dark` conventionally right after** (shadcn starter order). CSS var resolution is lazy, so `@theme inline` may sit before or after `:root`/`.dark` — safe either way; T1 picks a canonical order.
   - **No component/source changes.** F32 owns only `index.css` + one test. The ~21 broken-utility call sites stay as-is (they start resolving once tokens exist); F46 owns the raw-color sweep.
 
@@ -77,17 +77,17 @@
 |---|----------|--------|-----------|
 | D1 | Token mechanism | **`@theme inline` + `:root`/`.dark` raw CSS vars** | Plain `@theme` emits `--color-*` globally (Tailwind owns the var; `.dark` override on `--background` never reaches the utility). `@theme inline { --color-card: var(--card) }` inlines the `var(--card)` reference so you own `--card` in `:root`/`.dark` and the cascade does the override. PRD §3.1 mandates `@theme inline`; Tailwind v4 docs (theme/colors) + GH discussion #18560 confirm. |
 | D2 | Dark variant | **`@custom-variant dark (&:where(.dark, .dark *));`** | PRD §3.1 verbatim + Tailwind v4 docs canonical. `:where()` has zero specificity; matches `.dark` itself + descendants. Deliberately deviates from shadcn's current starter (`&:is(.dark *)`) — `:is()` takes max specificity of args and matches descendants only (not `.dark` itself). PRD + Tailwind docs win; deviation documented. |
-| D3 | Color model | **Preserve HEX (existing seed values) + extend in HEX**, NOT OKLCH | PRD edge case "keep seed tokens"; PRD §1.1 blue accent must be preserved (shadcn neutral-black primary would break identity); HEX minimizes appearance churn; Tailwind v4 alpha via `color-mix` works with HEX. OKLCH migration is a future polish option (out of F32 scope). Full light + dark HEX palette in T1. |
-| D4 | Status tints | **`--success`/`--warning`/`--danger` + `-foreground` pairs** | PRD §3.1 names the 3 background tints ("status tints: `--success`, `--warning`, `--danger`"); F32 adds the `-foreground` pairs PRD omits (badges need readable text). Values grounded in audit: success green `#16a34a` (light) / `#22c55e` (dark), warning amber `#d97706`/`#fef3c7`, danger aliased to destructive `#dc2626` (one red, not two). |
+| D3 | Color model | **OKLCH** (owner-confirmed 2026-06-26) | Owner chose OKLCH over HEX. OKLCH is Tailwind v4's native default color space (shadcn v4 ships OKLCH since Mar 2025), perceptually uniform for consistent lightness steps, `color-mix`/alpha modifiers work natively. Seed VALUES preserved as their **exact Tailwind-v4 OKLCH equivalents** (same appearance): white→`oklch(1 0 0)`, gray-900 #111827→`oklch(0.21 0.034 264.665)`, blue-600 #2563eb→`oklch(0.541 0.241 262.261)`, gray-500 #6b7280→`oklch(0.551 0.027 264.364)`, gray-200 #e5e7eb→`oklch(0.929 0.013 255.508)`. Blue primary hue preserved (PRD §1.1). |
+| D4 | Status tints | **`--success`/`--warning`/`--danger` + `-foreground` pairs** | PRD §3.1 names the 3 background tints ("status tints: `--success`, `--warning`, `--danger`"); F32 adds the `-foreground` pairs PRD omits (badges need readable text). Values grounded in audit (their OKLCH equivalents): success green-600 `oklch(0.627 0.194 149.214)` (light) / green-500 `oklch(0.723 0.191 149)` (dark), warning amber-600 `oklch(0.666 0.179 58.318)` (light) / amber-500 `oklch(0.795 0.164 70.08)` (dark), danger aliased to destructive (one red). |
 | D5 | Verification path | **`vite build` clean + static source-presence Vitest test + manual DevTools `.dark` toggle smoke (documented)** | jsdom cannot resolve `var()`/compute color (jsdom #2986/#3339); Playwright (real Chromium) NOT installed and out of scope. Static test asserts token-name presence + `--color-*` mapping existence; build gate catches syntax; manual toggle proves non-transparency. Defer computed-color assertion to F46/F51. |
 | D6 | `color-scheme` CSS property | **Add `color-scheme: light` under `:root`, `color-scheme: dark` under `.dark`** | CSS property in F32's file tells UA to render native chrome (scrollbars, form controls) in matching scheme — avoids the scrollbar flash PRD §2.3 notes. Absent from shadcn default; needed. F33 adds HTML `<meta color-scheme>` + no-flash script — no overlap (CSS prop vs HTML meta both contribute). |
 | D7 | Scope boundaries | **Do NOT migrate components (F46); do NOT wire toggle (F34); do NOT add no-flash script/meta (F33); do NOT install Playwright; do NOT change primary hue** | Prevents scope creep. F32 owns only `index.css` + one co-located static test. The ~21 broken-utility call sites start resolving once tokens exist; F46 owns the raw-color sweep (~147 `gray-*` usages). |
 
-> **Out of F32 scope (explicitly deferred):** component raw-color migration (F46 — owns the ~147 `gray-*` usages); theme toggle wiring / persistence (F34); no-flash script + `<meta color-scheme>` (F33); Playwright install + real computed-color E2E (out of redesign scope — F46/F51 visual QA covers it); primary hue change (never — PRD §1.1 blue accent is fixed); OKLCH migration (future polish); chart/sidebar token namespaces (shadcn has them — not used in Slykboard; skip).
+> **Out of F32 scope (explicitly deferred):** component raw-color migration (F46 — owns the ~147 `gray-*` usages); theme toggle wiring / persistence (F34); no-flash script + `<meta color-scheme>` (F33); Playwright install + real computed-color E2E (out of redesign scope — F46/F51 visual QA covers it); primary hue change (never — PRD §1.1 blue accent is fixed); chart/sidebar token namespaces (shadcn has them — not used in Slykboard; skip).
 
-> **Owner sign-off needed:**
-> 1. **HEX vs OKLCH choice.** Default chosen: **preserve HEX** (minimizes churn, preserves blue identity, PRD edge case). Owner can opt for OKLCH migration in review — would re-open T1's palette values.
-> 2. **Exact dark palette values.** The dark HEX values are a judgment call (PRD §3.1 gives names only, no values). Defaults chosen ground in a standard dark-neutral palette (background `#0b1120`, foreground `#e5e7eb`, etc. — see T1). Owner can adjust any dark value in review without changing the mechanism.
+> **Owner sign-off (resolved 2026-06-26):**
+> 1. **Color model** → **OKLCH.** Owner confirmed. Seed values converted to exact Tailwind-v4 OKLCH equivalents (appearance preserved); blue primary hue unchanged.
+> 2. **Dark palette values** → **decided (owner-delegated).** Coherent gray-900-base dark neutral matching the app's blue-gray identity: background = gray-900 `oklch(0.21 0.034 264.665)`; surfaces (card/popover/secondary/muted/accent) = gray-800 `oklch(0.278 0.033 256.848)`; muted-foreground = gray-400 `oklch(0.707 0.022 261.325)`; border/input = gray-700 `oklch(0.37 0.034 259.733)`; primary = blue-500 `oklch(0.623 0.214 259.815)` (brighter on dark); destructive/danger = red-500 `oklch(0.637 0.237 25.333)`; success = green-500 `oklch(0.723 0.191 149)`; warning = amber-500 `oklch(0.795 0.164 70.08)`. Foreground = gray-200 `oklch(0.929 0.013 255.508)`. Full block in T1.
 
 ---
 
@@ -100,8 +100,8 @@ slykboard/
       ├─ index.css              # MODIFIED — restructured:
       │                          #   @import 'tailwindcss';
       │                          #   @custom-variant dark (&:where(.dark, .dark *));
-      │                          #   :root { ...light tokens...; color-scheme: light; }
-      │                          #   .dark { ...dark tokens...; color-scheme: dark; }
+      │                          #   :root { ...light OKLCH tokens...; color-scheme: light; }
+      │                          #   .dark { ...dark OKLCH tokens...; color-scheme: dark; }
       │                          #   @theme inline { --color-*: var(--*); ... }  (all mappings)
       │                          #   @layer base { body { var(--background)/var(--foreground) } }  (renamed)
       └─ tokens.test.ts         # NEW — co-located static source-presence test (Vitest + jsdom)
@@ -150,13 +150,13 @@ F32 is small. It decomposes into **2 sequential tasks** — there is **no safe p
 
 ## 6. Tasks
 
-### T1 — Restructure `index.css`: full semantic token set (`:root` light + `.dark` dark) + `@theme inline` mapping + `@custom-variant dark`
+### T1 — Restructure `index.css`: full semantic token set (`:root` light + `.dark` dark, OKLCH) + `@theme inline` mapping + `@custom-variant dark`
 
 **Batch:** A · **Depends on:** None · **Parallel with:** —
 
-**Description:** Replace the plain 5-token `@theme` block with the full shadcn-style semantic token architecture: `@import` → `@custom-variant dark` → `:root` (light) → `.dark` (dark) → `@theme inline` (mapping) → `@layer base` (body, var-renamed). Preserve the 5 seed VALUES (`#ffffff`/`#111827`/`#2563eb`/`#6b7280`/`#e5e7eb`). Primary stays **blue** `#2563eb` (PRD §1.1). Use HEX throughout (D3). Add `color-scheme` to both blocks (D6).
+**Description:** Replace the plain 5-token `@theme` block with the full shadcn-style semantic token architecture: `@import` → `@custom-variant dark` → `:root` (light) → `.dark` (dark) → `@theme inline` (mapping) → `@layer base` (body, var-renamed). Use **OKLCH** throughout (D3, owner-confirmed). Preserve the 5 seed VALUES as their exact Tailwind-v4 OKLCH equivalents (same appearance). Primary stays **blue** `oklch(0.541 0.241 262.261)` (PRD §1.1). Add `color-scheme` to both blocks (D6).
 
-The full concrete palette below is the load-bearing artifact — a dev can paste it. Light values preserve the seed + standard shadcn-equivalent neutrals; dark values are a standard dark-neutral palette (owner sign-off surface, D7).
+The full concrete palette below is the load-bearing artifact — a dev can paste it. Light values = seed OKLCH equivalents + standard neutrals; dark values = a coherent gray-900-base dark neutral (owner-delegated decision, see §3).
 
 Modify `frontend/src/index.css` to (replace the entire current 30-line contents with):
 
@@ -168,90 +168,90 @@ Modify `frontend/src/index.css` to (replace the entire current 30-line contents 
    excludes .dark itself and inherits specificity — see D2). */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ── Light tokens (seed VALUES preserved: #ffffff / #111827 / #2563eb / #6b7280 / #e5e7eb) ── */
+/* ── Light tokens (OKLCH — D3. Seed VALUES preserved as Tailwind-v4 OKLCH equivalents) ── */
 :root {
-  --background: #ffffff;
-  --foreground: #111827;
+  --background: oklch(1 0 0);                      /* white (seed #ffffff) */
+  --foreground: oklch(0.21 0.034 264.665);         /* gray-900 (seed #111827) */
 
-  --card: #ffffff;
-  --card-foreground: #111827;
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.034 264.665);
 
-  --popover: #ffffff;
-  --popover-foreground: #111827;
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.034 264.665);
 
-  --primary: #2563eb;            /* BLUE accent — PRD §1.1 "one accent" */
-  --primary-foreground: #ffffff;
+  --primary: oklch(0.541 0.241 262.261);           /* blue-600 (seed #2563eb) — PRD §1.1 accent */
+  --primary-foreground: oklch(1 0 0);
 
-  --secondary: #f3f4f6;          /* gray-100 */
-  --secondary-foreground: #111827;
+  --secondary: oklch(0.968 0.007 247.896);         /* gray-100 */
+  --secondary-foreground: oklch(0.21 0.034 264.665);
 
-  --muted: #f3f4f6;              /* gray-100 */
-  --muted-foreground: #6b7280;   /* SEED value preserved */
+  --muted: oklch(0.968 0.007 247.896);             /* gray-100 */
+  --muted-foreground: oklch(0.551 0.027 264.364);  /* gray-500 (seed #6b7280) */
 
-  --accent: #f3f4f6;             /* gray-100 */
-  --accent-foreground: #111827;
+  --accent: oklch(0.968 0.007 247.896);            /* gray-100 */
+  --accent-foreground: oklch(0.21 0.034 264.665);
 
-  --destructive: #dc2626;        /* red-600 */
-  --destructive-foreground: #ffffff;
+  --destructive: oklch(0.595 0.225 27.167);        /* red-600 */
+  --destructive-foreground: oklch(1 0 0);
 
-  --border: #e5e7eb;             /* SEED value preserved (gray-200) */
-  --input: #e5e7eb;              /* gray-200 */
-  --ring: #2563eb;               /* primary blue */
+  --border: oklch(0.929 0.013 255.508);            /* gray-200 (seed #e5e7eb) */
+  --input: oklch(0.929 0.013 255.508);             /* gray-200 */
+  --ring: oklch(0.541 0.241 262.261);              /* blue-600 */
 
   /* Status tints (PRD §3.1 names backgrounds; F32 adds -foreground pairs — D4).
      Values grounded in existing usage: HealthBadge/PriorityBadge/ChecklistEditor. */
-  --success: #16a34a;            /* green-600 */
-  --success-foreground: #ffffff;
+  --success: oklch(0.627 0.194 149.214);           /* green-600 */
+  --success-foreground: oklch(1 0 0);
 
-  --warning: #d97706;            /* amber-600 */
-  --warning-foreground: #ffffff;
+  --warning: oklch(0.666 0.179 58.318);            /* amber-600 */
+  --warning-foreground: oklch(1 0 0);
 
-  --danger: #dc2626;             /* aliased to destructive (one red) — D4 */
-  --danger-foreground: #ffffff;
+  --danger: oklch(0.595 0.225 27.167);             /* aliased to destructive (one red) — D4 */
+  --danger-foreground: oklch(1 0 0);
 
-  color-scheme: light;           /* native UA chrome — D6 (scrollbars/controls) */
+  color-scheme: light;                             /* native UA chrome — D6 (scrollbars/controls) */
 }
 
-/* ── Dark tokens (new; toggle wired by F34, values exist now) ── */
+/* ── Dark tokens (new; toggle wired by F34, values exist now) — gray-900 base ── */
 .dark {
-  --background: #0b1120;         /* slate-950-ish */
-  --foreground: #e5e7eb;         /* gray-200 */
+  --background: oklch(0.21 0.034 264.665);         /* gray-900 (#111827) — dark base */
+  --foreground: oklch(0.929 0.013 255.508);        /* gray-200 (#e5e7eb) */
 
-  --card: #111827;               /* gray-900 */
-  --card-foreground: #e5e7eb;
+  --card: oklch(0.278 0.033 256.848);              /* gray-800 (#1f2937) */
+  --card-foreground: oklch(0.929 0.013 255.508);
 
-  --popover: #111827;
-  --popover-foreground: #e5e7eb;
+  --popover: oklch(0.278 0.033 256.848);
+  --popover-foreground: oklch(0.929 0.013 255.508);
 
-  --primary: #3b82f6;            /* blue-500 — slightly brighter dark-mode primary */
-  --primary-foreground: #ffffff;
+  --primary: oklch(0.623 0.214 259.815);           /* blue-500 (#3b82f6) — brighter on dark */
+  --primary-foreground: oklch(1 0 0);
 
-  --secondary: #1f2937;          /* gray-800 */
-  --secondary-foreground: #e5e7eb;
+  --secondary: oklch(0.278 0.033 256.848);         /* gray-800 */
+  --secondary-foreground: oklch(0.929 0.013 255.508);
 
-  --muted: #1f2937;              /* gray-800 */
-  --muted-foreground: #9ca3af;   /* gray-400 */
+  --muted: oklch(0.278 0.033 256.848);             /* gray-800 */
+  --muted-foreground: oklch(0.707 0.022 261.325);  /* gray-400 (#9ca3af) */
 
-  --accent: #1f2937;             /* gray-800 */
-  --accent-foreground: #e5e7eb;
+  --accent: oklch(0.278 0.033 256.848);            /* gray-800 */
+  --accent-foreground: oklch(0.929 0.013 255.508);
 
-  --destructive: #ef4444;        /* red-500 — brighter on dark */
-  --destructive-foreground: #ffffff;
+  --destructive: oklch(0.637 0.237 25.333);        /* red-500 (#ef4444) — brighter on dark */
+  --destructive-foreground: oklch(1 0 0);
 
-  --border: #374151;             /* gray-700 */
-  --input: #374151;
-  --ring: #3b82f6;
+  --border: oklch(0.37 0.034 259.733);             /* gray-700 (#374151) */
+  --input: oklch(0.37 0.034 259.733);
+  --ring: oklch(0.623 0.214 259.815);              /* blue-500 */
 
-  --success: #22c55e;            /* green-500 — brighter on dark */
-  --success-foreground: #052e16; /* green-950 */
+  --success: oklch(0.723 0.191 149);               /* green-500 (#22c55e) — brighter on dark */
+  --success-foreground: oklch(0.27 0.05 150);      /* green-950 */
 
-  --warning: #f59e0b;            /* amber-500 */
-  --warning-foreground: #1c1917; /* stone-900 */
+  --warning: oklch(0.795 0.164 70.08);             /* amber-500 (#f59e0b) */
+  --warning-foreground: oklch(0.21 0.034 264.665); /* gray-900 */
 
-  --danger: #ef4444;
-  --danger-foreground: #ffffff;
+  --danger: oklch(0.637 0.237 25.333);
+  --danger-foreground: oklch(1 0 0);
 
-  color-scheme: dark;            /* native UA chrome — D6 */
+  color-scheme: dark;                              /* native UA chrome — D6 */
 }
 
 /* ── Tailwind v4 mapping (inline keeps var() reference so .dark overrides cascade — D1) ── */
@@ -309,7 +309,7 @@ Modify `frontend/src/index.css` to (replace the entire current 30-line contents 
 **Key edits vs current `index.css`:**
 1. `@import 'tailwindcss';` stays first (unchanged).
 2. Add `@custom-variant dark (&:where(.dark, .dark *));` right after (D2).
-3. Replace the plain `@theme { --color-*: #hex }` block with the `:root` (light) + `.dark` (dark) raw-var blocks above. Seed values preserved.
+3. Replace the plain `@theme { --color-*: #hex }` block with the `:root` (light) + `.dark` (dark) raw-var OKLCH blocks above. Seed values preserved (OKLCH form).
 4. Add the `@theme inline { --color-*: var(--*) }` mapping block (D1) — every one of the 30 tokens mapped.
 5. **Rename the `@layer base` body rule:** `var(--color-background)` → `var(--background)`, `var(--color-foreground)` → `var(--foreground)` (load-bearing — see §2 hidden coupling).
 6. Add `color-scheme: light` / `color-scheme: dark` (D6).
@@ -318,12 +318,12 @@ Modify `frontend/src/index.css` to (replace the entire current 30-line contents 
 **Acceptance Criteria:**
 - [ ] `@import 'tailwindcss';` is line 1 (unchanged).
 - [ ] `@custom-variant dark (&:where(.dark, .dark *));` present immediately after the import.
-- [ ] `:root` block declares all 30 tokens: `--background`, `--foreground`, `--card`/`--card-foreground`, `--popover`/`--popover-foreground`, `--primary`/`--primary-foreground`, `--secondary`/`--secondary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`/`--destructive-foreground`, `--border`, `--input`, `--ring`, `--success`/`--success-foreground`, `--warning`/`--warning-foreground`, `--danger`/`--danger-foreground`, plus `color-scheme: light`.
-- [ ] `.dark` block declares the same 30 tokens with dark values, plus `color-scheme: dark`.
-- [ ] Seed VALUES preserved verbatim in `:root`: `--background:#ffffff`, `--foreground:#111827`, `--primary:#2563eb`, `--muted-foreground:#6b7280`, `--border:#e5e7eb`.
+- [ ] `:root` block declares all 30 tokens (OKLCH values): `--background`, `--foreground`, `--card`/`--card-foreground`, `--popover`/`--popover-foreground`, `--primary`/`--primary-foreground`, `--secondary`/`--secondary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`/`--destructive-foreground`, `--border`, `--input`, `--ring`, `--success`/`--success-foreground`, `--warning`/`--warning-foreground`, `--danger`/`--danger-foreground`, plus `color-scheme: light`.
+- [ ] `.dark` block declares the same 30 tokens with dark OKLCH values, plus `color-scheme: dark`.
+- [ ] Seed VALUES preserved (OKLCH form) in `:root`: `--background: oklch(1 0 0)`, `--foreground: oklch(0.21 0.034 264.665)`, `--primary: oklch(0.541 0.241 262.261)`, `--muted-foreground: oklch(0.551 0.027 264.364)`, `--border: oklch(0.929 0.013 255.508)`.
 - [ ] `@theme inline` block maps every `--color-*` to `var(--*)` (all 30 mappings present).
 - [ ] `@layer base` body rule references `var(--background)` / `var(--foreground)` (NOT `--color-*`).
-- [ ] `--danger` aliases `--destructive` (one red: `#dc2626` light / `#ef4444` dark).
+- [ ] `--danger` aliases `--destructive` (one red: `oklch(0.595 0.225 27.167)` light / `oklch(0.637 0.237 25.333)` dark).
 - [ ] No `tailwind.config.js`/`.ts` created (v4 CSS-first config preserved).
 - [ ] "Board-specific colors deferred to F09" comment preserved.
 
@@ -412,13 +412,26 @@ describe('F32 semantic token architecture (index.css)', () => {
     }
   })
 
-  it('preserves the 5 seed VALUES in :root', () => {
+  it('preserves the 5 seed VALUES in :root (OKLCH equivalents)', () => {
     const rootBlock = css.match(/:root\s*\{([^}]*)\}/s)![1]
-    expect(rootBlock).toContain('--background: #ffffff')
-    expect(rootBlock).toContain('--foreground: #111827')
-    expect(rootBlock).toContain('--primary: #2563eb')
-    expect(rootBlock).toContain('--muted-foreground: #6b7280')
-    expect(rootBlock).toContain('--border: #e5e7eb')
+    expect(rootBlock).toContain('--background: oklch(1 0 0)')
+    expect(rootBlock).toContain('--foreground: oklch(0.21 0.034 264.665)')
+    expect(rootBlock).toContain('--primary: oklch(0.541 0.241 262.261)')
+    expect(rootBlock).toContain('--muted-foreground: oklch(0.551 0.027 264.364)')
+    expect(rootBlock).toContain('--border: oklch(0.929 0.013 255.508)')
+  })
+
+  it('uses OKLCH values (D3) — no raw hex in :root/.dark token values', () => {
+    const themed = (css.match(/:root\s*\{[^}]*\}/s)?.[0] ?? '') +
+      (css.match(/\.dark\s*\{[^}]*\}/s)?.[0] ?? '')
+    expect(themed).toContain('oklch(')
+    // Token value lines should not be raw hex (#rrggbb). (Comments may mention hex for traceability.)
+    const tokenValueLines = themed
+      .split('\n')
+      .filter((l) => l.includes(':') && /--[\w-]+:/.test(l) && !l.trim().startsWith('/*'))
+    for (const line of tokenValueLines) {
+      expect(line, `raw hex in token value: ${line.trim()}`).not.toMatch(/#[0-9a-fA-F]{3,8}/)
+    }
   })
 
   it('@layer base body rule references raw --background/--foreground (not --color-*)', () => {
@@ -504,7 +517,7 @@ Steps:
 4. Confirm `@custom-variant dark (&:where(.dark, .dark *));` is present (PRD §3.1 verbatim form).
 5. Confirm no `tailwind.config.js`/`.ts` was created (v4 CSS-first config preserved).
 6. Capture commit SHA, exit codes, manual-toggle results, and token counts into §7.
-7. Confirm **owner sign-off (D3: HEX vs OKLCH + dark palette values)** is resolved before merge. Defaults chosen (HEX + the dark values in T1); owner can adjust palette in review without changing the mechanism.
+7. Confirm **owner sign-off (D3: OKLCH + dark palette values)** is resolved (done 2026-06-26 — OKLCH chosen; dark palette owner-decided per §3).
 
 **Acceptance Criteria:**
 - [ ] Committed diff is exactly `frontend/src/index.css` + `frontend/src/tokens.test.ts` (no components, no config file).
@@ -515,7 +528,7 @@ Steps:
 - [ ] `@custom-variant dark (&:where(.dark, .dark *));` present verbatim.
 - [ ] No `tailwind.config.js`/`.ts` created.
 - [ ] All F32 §1 acceptance bullets satisfied; SHAs + results recorded in §7.
-- [ ] Owner sign-off on D3 (HEX + dark palette) recorded.
+- [ ] Owner sign-off on D3 (OKLCH + dark palette) recorded.
 
 **Dependencies:** T1, T2.
 
@@ -526,8 +539,8 @@ Steps:
 - [ ] `frontend/src/index.css` declares `:root` (light) and `.dark` blocks with the full shadcn-style set: `--background/--foreground`, `--card/--card-foreground`, `--popover/--popover-foreground`, `--primary/--primary-foreground`, `--secondary/--secondary-foreground`, `--muted/--muted-foreground`, `--accent/--accent-foreground`, `--border`, `--input`, `--ring`, `--destructive/--destructive-foreground`, plus `--success/--warning/--danger` (+ `-foreground` pairs).
 - [ ] `@theme inline` maps every token to the `--color-*` namespace (utilities resolve).
 - [ ] `@custom-variant dark (&:where(.dark, .dark *));` present (PRD §3.1 verbatim form).
-- [ ] 5 seed VALUES preserved in `:root`: `#ffffff`, `#111827`, `#2563eb`, `#6b7280`, `#e5e7eb`.
-- [ ] Primary stays **blue** `#2563eb` (light) / `#3b82f6` (dark) — PRD §1.1 accent preserved.
+- [ ] 5 seed VALUES preserved (OKLCH form): `oklch(1 0 0)`, `oklch(0.21 0.034 264.665)`, `oklch(0.541 0.241 262.261)`, `oklch(0.551 0.027 264.364)`, `oklch(0.929 0.013 255.508)`.
+- [ ] Primary stays **blue** `oklch(0.541 0.241 262.261)` (light) / `oklch(0.623 0.214 259.815)` (dark) — PRD §1.1 accent preserved.
 - [ ] `@layer base` body rule references `var(--background)`/`var(--foreground)` (not `--color-*`).
 - [ ] `color-scheme: light` under `:root`, `color-scheme: dark` under `.dark`.
 - [ ] `--danger` aliases `--destructive` (one red).
@@ -539,7 +552,7 @@ Steps:
 - [ ] Committed diff is exactly `frontend/src/index.css` + `frontend/src/tokens.test.ts`.
 - [ ] No `tailwind.config.js`/`.ts` created (v4 CSS-first config preserved).
 - [ ] No component changes leaked (F46 scope preserved).
-- [ ] D3 owner sign-off (HEX + dark palette values) recorded.
+- [ ] D3 owner sign-off (OKLCH + dark palette values) recorded.
 
 **Integration record (fill during T3):**
 - Feature commit SHA: `________`
@@ -547,7 +560,7 @@ Steps:
 - Token count — `:root`: `30` · `.dark`: `30` · `@theme inline` mappings: `30`
 - Build / typecheck / test exit codes: `0 / 0 / 0`
 - Static resolution check: `bg-card: RESOLVED` · `text-muted-foreground: RESOLVED` · `text-primary-foreground: RESOLVED` · `bg-secondary: RESOLVED`
-- D3 owner sign-off (HEX vs OKLCH + dark palette): `________`
+- D3 owner sign-off (OKLCH + dark palette): `OKLCH chosen 2026-06-26; dark palette owner-decided (gray-900 base)`
 
 ---
 
@@ -557,11 +570,11 @@ F32 owns **CSS-token deltas only — no DB migration** (per the redesign's stand
 
 | Delta | Detail | Mechanism |
 | --- | --- | --- |
-| Light semantic tokens (`:root`) | 30 CSS custom properties added (or restructured from the 5 seed tokens): `--background`, `--foreground`, `--card`/`--card-foreground`, `--popover`/`--popover-foreground`, `--primary`/`--primary-foreground`, `--secondary`/`--secondary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`/`--destructive-foreground`, `--border`, `--input`, `--ring`, `--success`/`--success-foreground`, `--warning`/`--warning-foreground`, `--danger`/`--danger-foreground` + `color-scheme: light` | `frontend/src/index.css` `:root { }` block |
-| Dark semantic tokens (`.dark`) | Same 30 tokens with dark HEX values + `color-scheme: dark` (new — no dark block existed before) | `frontend/src/index.css` `.dark { }` block |
+| Light semantic tokens (`:root`) | 30 CSS custom properties added (or restructured from the 5 seed tokens), **OKLCH** values (D3): `--background`, `--foreground`, `--card`/`--card-foreground`, `--popover`/`--popover-foreground`, `--primary`/`--primary-foreground`, `--secondary`/`--secondary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`/`--destructive-foreground`, `--border`, `--input`, `--ring`, `--success`/`--success-foreground`, `--warning`/`--warning-foreground`, `--danger`/`--danger-foreground` + `color-scheme: light` | `frontend/src/index.css` `:root { }` block |
+| Dark semantic tokens (`.dark`) | Same 30 tokens with dark OKLCH values (gray-900 base) + `color-scheme: dark` (new — no dark block existed before) | `frontend/src/index.css` `.dark { }` block |
 | Tailwind v4 token mapping | `@theme inline { --color-*: var(--*) }` for all 30 tokens (replaces the plain 5-token `@theme` block) | `frontend/src/index.css` `@theme inline { }` block |
 | Class-based dark variant | `@custom-variant dark (&:where(.dark, .dark *));` (PRD §3.1 canonical `:where()` form) | `frontend/src/index.css` directive |
 | `@layer base` var rename | body rule `var(--color-background)` → `var(--background)`, `var(--color-foreground)` → `var(--foreground)` (load-bearing — inline doesn't emit `--color-*` globally) | `frontend/src/index.css` `@layer base { }` block |
-| Static source-presence test | `frontend/src/tokens.test.ts` (new co-located Vitest test asserting structural completeness) | new file |
+| Static source-presence test | `frontend/src/tokens.test.ts` (new co-located Vitest test asserting structural completeness + OKLCH-only values) | new file |
 
 **No DB migration.** F32 touches only `frontend/src/index.css` (modified) and `frontend/src/tokens.test.ts` (new). This aligns with the redesign's "No DB migration" stance and the feature file's schema-delta attribution (CSS tokens, not ORM/SQL).
