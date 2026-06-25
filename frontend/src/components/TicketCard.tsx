@@ -3,11 +3,7 @@ import type { Ticket } from '@/types/ticket';
 import { AssigneeAvatar } from './AssigneeAvatar';
 import { LabelChip } from './LabelChip';
 import { PriorityBadge } from './PriorityBadge';
-
-// F12 D2: display ticket IDs zero-padded to 3 digits (SLYK-001). Display-only;
-// storage holds the raw int (Ticket.ticketNumber). padStart is a minimum width,
-// so SLYK-1000+ render unpadded beyond 3 digits.
-const TICKET_NUMBER_DISPLAY_WIDTH = 3;
+import { formatTicketId } from '@/utils/formatTicketId';
 
 interface TicketCardProps {
     ticket: Ticket;
@@ -17,7 +13,7 @@ interface TicketCardProps {
 }
 
 export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardProps) {
-    const ticketId = `${projectSlug}-${String(ticket.ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`; // REQ-3.1, F12 D2
+    const ticketId = formatTicketId(projectSlug, ticket.ticketNumber, { padded: true }); // REQ-3.1, F12 D2, F30 D1
     // F15: defend against a stale board cache / a raw create response inserted
     // optimistically (missing labels/assignee/checklist joins) — never crash the
     // whole column on an undefined field.
