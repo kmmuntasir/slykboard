@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { BoardPage } from './BoardPage';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BoardPage, TicketDetailRoute } from './BoardPage';
 import { renderInDnd } from '@/test/dndWrapper';
 import { ApiClientError } from '@/api/client';
+import { fetchTicketByRef } from '@/api/tickets';
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import type { BoardPayload } from '@/types/board';
 import type { Ticket } from '@/types/ticket';
+
+// F30 T4: auto-mock the ref-resolver so TicketDetailRoute not-found tests can
+// drive it to reject without hitting the network. Existing BoardPage tests stub
+// the nested detail route with a marker, so they never call this.
+vi.mock('@/api/tickets');
 
 interface BoardMockValue {
     data?: BoardPayload;
@@ -108,6 +115,9 @@ describe('BoardPage', () => {
         // Filter state lives in a real zustand store shared across renders;
         // reset it so no test leaks an active filter into another.
         useBoardUiStore.getState().clearFilters();
+        // T4: reset the auto-mocked ref-resolver between suites so a rejection
+        // configured in one describe block never leaks into another.
+        vi.clearAllMocks();
     });
 
     it('renders loading state', () => {
@@ -266,5 +276,75 @@ describe('BoardPage', () => {
         renderBoard();
 
         expect(screen.getByText(/not found/i)).toBeInTheDocument();
+    });
+});
+
+// F30 T4: fetchTicketByRef rejects for every unresolvable case (malformed
+// SLYK-NNN, prefix mismatch, nonexistent ref, legacy UUID deep-link). The
+// detail route surfaces them uniformly via isError -> TicketNotFound.
+function newQueryClient() {
+    return new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+}
+
+function renderTicketDetailRoute(initialEntry: string) {
+    const client = newQueryClient();
+    return render(
+        <QueryClientProvider client={client}>
+            <MemoryRouter initialEntries={[initialEntry]}>
+                <Routes>
+                    <Route
+                        path="/projects/:slug/tickets/:displayId"
+                        element={<TicketDetailRoute />}
+                    />
+                </Routes>
+            </MemoryRouter>
+        </QueryClientProvider>,
+    );
+}
+
+describe('TicketDetailRoute not-found', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Every unresolvable ref resolves to the same not-found surface.
+        vi.mocked(fetchTicketByRef).mockRejectedValue(
+            new ApiClientError('Ticket not found', 404, 'NOT_FOUND'),
+        );
+    });
+
+    it('renders TicketNotFound for a malformed ref', async () => {
+        renderTicketDetailRoute('/projects/SLYK/tickets/SLYK-abc');
+
+        expect(
+            await screen.findByRole('heading', { name: /ticket not found/i }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: /back to board/i }),
+        ).toBeInTheDocument();
+    });
+
+    it('renders TicketNotFound for a nonexistent ref', async () => {
+        renderTicketDetailRoute('/projects/SLYK/tickets/SLYK-9999');
+
+        expect(
+            await screen.findByRole('heading', { name: /ticket not found/i }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: /back to board/i }),
+        ).toBeInTheDocument();
+    });
+
+    it('renders TicketNotFound for a legacy UUID deep-link', async () => {
+        renderTicketDetailRoute(
+            '/projects/SLYK/tickets/550e8400-e29b-41d4-a716-446655440000',
+        );
+
+        expect(
+            await screen.findByRole('heading', { name: /ticket not found/i }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: /back to board/i }),
+        ).toBeInTheDocument();
     });
 });

@@ -13,6 +13,7 @@ import { UnsortedBucket } from '@/components/UnsortedBucket';
 import { BoardFilters } from '@/components/BoardFilters';
 import { NewTicketButton } from '@/components/NewTicketButton';
 import { TicketDetailModal } from '@/components/TicketDetailModal';
+import { TicketNotFound } from '@/components/TicketNotFound';
 import { BoardSkeleton } from '@/components/BoardSkeleton';
 import { Retry } from '@/components/Retry';
 import { ApiClientError } from '@/api/client';
@@ -175,7 +176,9 @@ export function TicketDetailRoute() {
 
     if (!slug || !displayId) return null;
     if (isLoading) return null; // minimal pending state; T4 owns not-found UI.
-    if (isError || !ticket) return null; // malformed / not-found -> T4 not-found branch.
+    if (isError || !ticket) {
+        return <TicketNotFound onClose={() => navigate(`/projects/${slug}`)} />;
+    }
 
     return (
         <TicketDetailModal
