@@ -1,0 +1,148 @@
+# =============================================================================
+# slykboard — PRODUCTION multi-service stack (one-command self-host).
+#
+# F29 D3 / §9. Three services: Postgres 16 + backend (T1 root Dockerfile) +
+# frontend (T2 nginx SPA). Separate from the dev-only docker-compose.yml
+# (Postgres-only); this file is untouched by dev and vice-versa.
+#
+# ── Quick start ─────────────────────────────────────────────────────────────
+#   1. Copy .env.example → .env and fill in REAL secrets:
+#        JWT_SECRET          (>=32 random chars — generate: openssl rand -hex 32)
+#        GOOGLE_CLIENT_ID    (Google OAuth web client id)
+#        GOOGLE_CLIENT_SECRET (Google OAuth web client secret)
+#        VITE_GOOGLE_CLIENT_ID (same as GOOGLE_CLIENT_ID — baked into FE build)
+#        VITE_API_BASE_URL   (default http://localhost:3000/api — see below)
+#      Optionally change the DB creds (POSTGRES_USER / _PASSWORD / _DB); they
+#      feed both the db container and backend DATABASE_URL consistently.
+#
+#   2. Bring the whole stack up (builds images, runs migrations on boot):
+#        docker compose -f docker-compose.prod.yml up --build
+#
+#   3. Frontend  → http://localhost:8080   (nginx :80 → host :8080)
+#      Backend API → http://localhost:3000/api
+#      Health     → GET http://localhost:3000/api/health        (liveness)
+#                   GET http://localhost:3000/api/health/ready  (DB SELECT 1)
+#
+# ── Important notes ─────────────────────────────────────────────────────────
+#   • SECRETS: the defaults below are LOCAL-SELF-HOST PLACEHOLDERS ONLY.
+#     NEVER deploy them as-is. Set JWT_SECRET / GOOGLE_* in .env for any real
+#     use. compose interpolates .env, overriding these defaults.
+#
+#   • VITE_* are BUILD-TIME: Vite inlines them into the frontend bundle, so they
+#     are NOT runtime-configurable. VITE_API_BASE_URL defaults to
+#     http://localhost:3000/api (a same-host self-host pointing at the backend
+#     port below). To retarget the FE at another backend host, change
+#     VITE_API_BASE_URL and REBUILD: `docker compose -f docker-compose.prod.yml
+#     up --build frontend`.
+#
+#   • MIGRATE-ON-BOOT: backend runs DB migrations before serving (T4:
+#     RUN_MIGRATIONS_ON_START=true). The backend healthcheck uses a generous
+#     start_period so migrations can complete first.
+#
+#   • BUILD CONTEXT: BOTH Dockerfiles expect repo-root context (npm workspaces
+#     — a single root package-lock.json). context is `.` for both; the frontend
+#     image is selected via `dockerfile: frontend/Dockerfile`.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres 16 — single source of truth for the backend.
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      # Local-self-host defaults — OVERRIDE in .env for real use. Never commit
+      # real prod creds here.
+      POSTGRES_USER: ${POSTGRES_USER:-slyk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-slyk}
+      POSTGRES_DB: ${POSTGRES_DB:-slyk}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ escapes to $ at runtime → expands the container's own env inside it.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # DB is internal-only: no host port published. Backend reaches it on the
+    # compose network as `db:5432`. Uncomment to inspect from the host:
+    # ports:
+    #   - "5432:5432"
+
+  # ---------------------------------------------------------------------------
+  # Backend — T1 root Dockerfile (context = repo root, serves on :3000).
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # CORS allow-list origin — the host URL the browser uses to reach the FE.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      # DATABASE_URL mirrors the db service creds above (same vars + defaults).
+      DATABASE_URL: postgres://${POSTGRES_USER:-slyk}:${POSTGRES_PASSWORD:-slyk}@db:5432/${POSTGRES_DB:-slyk}
+      # No pooler in compose → direct URL is identical to DATABASE_URL.
+      DIRECT_DATABASE_URL: postgres://${POSTGRES_USER:-slyk}:${POSTGRES_PASSWORD:-slyk}@db:5432/${POSTGRES_DB:-slyk}
+      # Migrate the schema before serving (T4). Explicit even though prod
+      # defaults to true — keeps intent visible in the stack file.
+      RUN_MIGRATIONS_ON_START: "true"
+      # Google OAuth 2.0 (postmessage flow — same as the hosted app).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: postmessage
+      # JWT signing secret — PLACEHOLDER default; set a real >=32-char value.
+      JWT_SECRET: ${JWT_SECRET:-change-me-please-at-least-32-chars-xxxxxxxx}
+    # Self-host convenience: load the repo .env as runtime env too (required:
+    # false so the stack still validates/starts if .env is absent — compose
+    # interpolation above already pulls values from .env when present).
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "3000:3000"
+    healthcheck:
+      # Final BE image has NO wget/curl (only tini) → use node + global fetch
+      # (Node 24). Readiness probe hits /api/health/ready (DB SELECT 1 → 200
+      # healthy / 503 otherwise). start_period covers the migrate-on-boot run.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # Frontend — T2 frontend/Dockerfile (context = repo root, nginx serves :80).
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # VITE_* are BUILD-TIME (baked into the bundle; rebuild to change).
+        # Default = same-host backend API.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000/api}
+        # REQUIRED at build time (env.ts throws if absent) — set in .env.
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        # Optional; Dockerfile already defaults to 30 if unset.
+        VITE_POLL_INTERVAL_SECONDS: ${VITE_POLL_INTERVAL_SECONDS:-30}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
