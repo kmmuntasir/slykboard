@@ -438,7 +438,9 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
   it('returns 200 + ticket when found (authed MEMBER)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedGetTicketByNumber.mockResolvedValue(
-      hydratedTicketPayload as unknown as Awaited<ReturnType<typeof ticketService.getTicketByNumber>>,
+      hydratedTicketPayload as unknown as Awaited<
+        ReturnType<typeof ticketService.getTicketByNumber>
+      >,
     );
 
     const res = await request(app)
@@ -498,7 +500,9 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
   it('strips leading zeros and queries number 4 for SLYK-004', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedGetTicketByNumber.mockResolvedValue(
-      hydratedTicketPayload as unknown as Awaited<ReturnType<typeof ticketService.getTicketByNumber>>,
+      hydratedTicketPayload as unknown as Awaited<
+        ReturnType<typeof ticketService.getTicketByNumber>
+      >,
     );
 
     const res = await request(app)
@@ -527,7 +531,10 @@ describe('PATCH /api/projects/:slug (F27)', () => {
     const res = await request(app)
       .patch('/api/projects/SLYK')
       .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
-      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+      .send({
+        name: 'Slykboard',
+        columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+      });
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
@@ -543,7 +550,10 @@ describe('PATCH /api/projects/:slug (F27)', () => {
     const res = await request(app)
       .patch('/api/projects/SLYK')
       .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+      .send({
+        name: 'Slykboard',
+        columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.data.slug).toBe('SLYK');
@@ -588,7 +598,10 @@ describe('PATCH /api/projects/:slug (F27)', () => {
   it('returns 401 UNAUTHENTICATED without Bearer (updateProject NOT called)', async () => {
     const res = await request(app)
       .patch('/api/projects/SLYK')
-      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+      .send({
+        name: 'Slykboard',
+        columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+      });
 
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
@@ -619,7 +632,10 @@ describe('PATCH /api/projects/:slug (F27)', () => {
     const res = await request(app)
       .patch('/api/projects/slyk')
       .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ name: 'Slykboard', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] });
+      .send({
+        name: 'Slykboard',
+        columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+      });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');

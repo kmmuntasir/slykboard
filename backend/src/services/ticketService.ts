@@ -237,7 +237,11 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
       .returning();
     // F18 T3: stamp a CREATED activity log inside the same txn so a rollback
     // discards both the ticket row and its log atomically. old/new default null.
-    await recordActivity(tx, { ticketId: inserted!.id, actorId: input.creatorId, action: 'CREATED' });
+    await recordActivity(tx, {
+      ticketId: inserted!.id,
+      actorId: input.creatorId,
+      action: 'CREATED',
+    });
     return inserted!;
   });
 
@@ -439,9 +443,13 @@ export async function updateTicket(args: {
       .returning();
     const newRow = updated[0];
     if (!newRow) {
-      throw new AppError(ErrorCode.INTERNAL_ERROR, `Update returned no row for ticket '${ticketId}'`, {
-        details: { ticketId },
-      });
+      throw new AppError(
+        ErrorCode.INTERNAL_ERROR,
+        `Update returned no row for ticket '${ticketId}'`,
+        {
+          details: { ticketId },
+        },
+      );
     }
 
     // F14: replace the label set. Now INSIDE the txn (D7 tx-aware labelService).

@@ -319,9 +319,7 @@ describe('TicketDetailRoute not-found', () => {
         expect(
             await screen.findByRole('heading', { name: /ticket not found/i }),
         ).toBeInTheDocument();
-        expect(
-            screen.getByRole('button', { name: /back to board/i }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /back to board/i })).toBeInTheDocument();
     });
 
     it('renders TicketNotFound for a nonexistent ref', async () => {
@@ -330,21 +328,15 @@ describe('TicketDetailRoute not-found', () => {
         expect(
             await screen.findByRole('heading', { name: /ticket not found/i }),
         ).toBeInTheDocument();
-        expect(
-            screen.getByRole('button', { name: /back to board/i }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /back to board/i })).toBeInTheDocument();
     });
 
     it('renders TicketNotFound for a legacy UUID deep-link', async () => {
-        renderTicketDetailRoute(
-            '/projects/SLYK/tickets/550e8400-e29b-41d4-a716-446655440000',
-        );
+        renderTicketDetailRoute('/projects/SLYK/tickets/550e8400-e29b-41d4-a716-446655440000');
 
         expect(
             await screen.findByRole('heading', { name: /ticket not found/i }),
         ).toBeInTheDocument();
-        expect(
-            screen.getByRole('button', { name: /back to board/i }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /back to board/i })).toBeInTheDocument();
     });
 });

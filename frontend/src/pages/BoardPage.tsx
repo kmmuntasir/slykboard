@@ -159,7 +159,11 @@ export function TicketDetailRoute() {
     const updateTicket = useUpdateTicket();
     const queryClient = useQueryClient();
 
-    const { data: ticket, isLoading, isError } = useQuery({
+    const {
+        data: ticket,
+        isLoading,
+        isError,
+    } = useQuery({
         queryKey: ticketKeys.detailByRef(slug ?? '', displayId ?? ''),
         queryFn: () => fetchTicketByRef(slug as string, displayId as string),
         enabled: Boolean(slug && displayId),

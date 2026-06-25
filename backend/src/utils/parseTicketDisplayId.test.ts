@@ -41,7 +41,12 @@ describe('parseTicketDisplayId', () => {
         expectedSlug: 'A123456789012345',
         expectedNumber: 99,
       },
-      { name: 'large number SLYK-123456', input: 'SLYK-123456', expectedSlug: 'SLYK', expectedNumber: 123456 },
+      {
+        name: 'large number SLYK-123456',
+        input: 'SLYK-123456',
+        expectedSlug: 'SLYK',
+        expectedNumber: 123456,
+      },
     ];
 
     validCases.forEach(({ name, input, expectedSlug, expectedNumber }) => {

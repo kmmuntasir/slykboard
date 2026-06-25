@@ -10,8 +10,8 @@ export const TICKET_DISPLAY_ID_REGEX = /^([A-Z][A-Z0-9]{1,15})-(\d+)$/;
 export const MIN_TICKET_NUMBER = 1;
 
 export interface ParsedTicketDisplayId {
-    slug: string;
-    ticketNumber: number;
+  slug: string;
+  ticketNumber: number;
 }
 
 /**
@@ -26,22 +26,22 @@ export interface ParsedTicketDisplayId {
  * affects the expectedSlug comparison.
  */
 export function parseTicketDisplayId(
-    ref: string,
-    expectedSlug?: string,
+  ref: string,
+  expectedSlug?: string,
 ): ParsedTicketDisplayId | null {
-    const match = TICKET_DISPLAY_ID_REGEX.exec(ref);
-    if (!match) return null;
+  const match = TICKET_DISPLAY_ID_REGEX.exec(ref);
+  if (!match) return null;
 
-    const slug = match[1];
-    const digits = match[2];
-    if (slug === undefined || digits === undefined) return null;
+  const slug = match[1];
+  const digits = match[2];
+  if (slug === undefined || digits === undefined) return null;
 
-    const ticketNumber = Number.parseInt(digits, 10);
-    if (ticketNumber < MIN_TICKET_NUMBER) return null;
+  const ticketNumber = Number.parseInt(digits, 10);
+  if (ticketNumber < MIN_TICKET_NUMBER) return null;
 
-    if (expectedSlug !== undefined && slug.toLowerCase() !== expectedSlug.toLowerCase()) {
-        return null;
-    }
+  if (expectedSlug !== undefined && slug.toLowerCase() !== expectedSlug.toLowerCase()) {
+    return null;
+  }
 
-    return { slug, ticketNumber };
+  return { slug, ticketNumber };
 }

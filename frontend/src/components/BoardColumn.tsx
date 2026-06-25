@@ -11,7 +11,14 @@ interface BoardColumnProps {
     onEdit?: (displayId: string) => void;
 }
 
-export function BoardColumn({ id, name, tickets, projectSlug, isUnsorted, onEdit }: BoardColumnProps) {
+export function BoardColumn({
+    id,
+    name,
+    tickets,
+    projectSlug,
+    isUnsorted,
+    onEdit,
+}: BoardColumnProps) {
     return (
         <section
             className="flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/40 p-2"
@@ -22,7 +29,12 @@ export function BoardColumn({ id, name, tickets, projectSlug, isUnsorted, onEdit
                 <h3 className="text-sm font-semibold">{name}</h3>
                 <span className="text-xs text-muted-foreground">{tickets.length}</span>
             </header>
-            <Droppable droppableId={id} type="CARD" direction="vertical" isDropDisabled={isUnsorted}>
+            <Droppable
+                droppableId={id}
+                type="CARD"
+                direction="vertical"
+                isDropDisabled={isUnsorted}
+            >
                 {(provided) => (
                     <ul
                         ref={provided.innerRef}

@@ -57,11 +57,14 @@ describe('TicketCard', () => {
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });
 
-    it('calls onEdit with ticket.id when card is clicked', () => {
+    it('calls onEdit with the display ID (SLYK-NNN) when card is clicked', () => {
         const onEdit = vi.fn();
-        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} onEdit={onEdit} />);
+        renderInDnd(
+            <TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} onEdit={onEdit} />,
+        );
         fireEvent.click(screen.getByRole('heading', { name: 'Render board' }));
-        expect(onEdit).toHaveBeenCalledWith('t1');
+        // F30 D1: card click emits the unpadded display ID (SLYK-NNN), not the UUID
+        expect(onEdit).toHaveBeenCalledWith('SLYK-101');
     });
 
     it('renders checklist progress chip (done/total) when checklist non-empty', () => {

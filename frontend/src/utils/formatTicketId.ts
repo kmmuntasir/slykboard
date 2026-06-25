@@ -6,17 +6,17 @@
 const TICKET_NUMBER_DISPLAY_WIDTH = 3;
 
 export interface FormatTicketIdOptions {
-    padded?: boolean;
+  padded?: boolean;
 }
 
 export function formatTicketId(
-    slug: string,
-    ticketNumber: number,
-    options?: FormatTicketIdOptions,
+  slug: string,
+  ticketNumber: number,
+  options?: FormatTicketIdOptions,
 ): string {
-    const upperSlug = slug.toUpperCase();
-    if (options?.padded) {
-        return `${upperSlug}-${String(ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`;
-    }
-    return `${upperSlug}-${ticketNumber}`;
+  const upperSlug = slug.toUpperCase();
+  if (options?.padded) {
+    return `${upperSlug}-${String(ticketNumber).padStart(TICKET_NUMBER_DISPLAY_WIDTH, '0')}`;
+  }
+  return `${upperSlug}-${ticketNumber}`;
 }

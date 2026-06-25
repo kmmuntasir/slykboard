@@ -47,10 +47,7 @@ export async function fetchTicketByRef(slug: string, displayId: string): Promise
 }
 
 // F13 T9: PATCH /tickets/:id — write attribute edits (title/description/priority/assigneeId).
-export async function updateTicket(
-  ticketId: string,
-  dto: UpdateTicketDto,
-): Promise<Ticket> {
+export async function updateTicket(ticketId: string, dto: UpdateTicketDto): Promise<Ticket> {
   return apiFetch<Ticket>(`/tickets/${ticketId}`, {
     method: 'PATCH',
     body: JSON.stringify(dto),

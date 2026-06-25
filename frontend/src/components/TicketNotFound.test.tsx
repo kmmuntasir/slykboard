@@ -8,15 +8,11 @@ describe('TicketNotFound', () => {
         render(<TicketNotFound onClose={onClose} />);
 
         // Modal renders exactly one heading via its `title` prop.
-        expect(
-            screen.getByRole('heading', { name: /ticket not found/i }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /ticket not found/i })).toBeInTheDocument();
         expect(
             screen.getByText(/may have been deleted, or the link is invalid/i),
         ).toBeInTheDocument();
-        expect(
-            screen.getByRole('button', { name: /back to board/i }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /back to board/i })).toBeInTheDocument();
     });
 
     it('calls onClose when the Back-to-board button is clicked', () => {

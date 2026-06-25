@@ -45,8 +45,7 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                                     aria-label={`Checklist progress ${checklist.filter((i) => i.done).length} of ${checklist.length} done`}
                                 >
                                     <span aria-hidden="true">✓</span>
-                                    {checklist.filter((i) => i.done).length}/
-                                    {checklist.length}
+                                    {checklist.filter((i) => i.done).length}/{checklist.length}
                                 </span>
                             )}
                         </div>
