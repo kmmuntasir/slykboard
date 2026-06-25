@@ -63,8 +63,9 @@ export const router = createBrowserRouter([
                                         element: <BoardPage />,
                                         children: [
                                             // F16: deep-link modal overlay over the mounted board.
+                                            // F30 T3: param is now the human-readable SLYK-NNN display-ID.
                                             {
-                                                path: 'tickets/:ticketId',
+                                                path: 'tickets/:displayId',
                                                 element: <TicketDetailRoute />,
                                             },
                                         ],

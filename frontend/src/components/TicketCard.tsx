@@ -9,7 +9,7 @@ interface TicketCardProps {
     ticket: Ticket;
     projectSlug: string;
     index: number;
-    onEdit?: (ticketId: string) => void;
+    onEdit?: (displayId: string) => void;
 }
 
 export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardProps) {
@@ -27,7 +27,7 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
                     style={provided.draggableProps.style}
-                    onClick={() => onEdit?.(ticket.id)}
+                    onClick={() => onEdit?.(formatTicketId(projectSlug, ticket.ticketNumber))}
                     className="cursor-pointer space-y-2 rounded border bg-card p-2 text-sm shadow-sm"
                     aria-label={`Ticket ${ticketId}: ${ticket.title}`}
                 >

@@ -12,6 +12,10 @@ export const boardKeys = {
 export const ticketKeys = {
   all: ['tickets'] as const,
   detail: (id: string) => [...ticketKeys.all, 'detail', id] as const,
+  // F30 T3: SLYK-NNN-ref-keyed detail cache — kept separate from UUID-keyed
+  // detail above to avoid cache-key collisions between the two addressing schemes.
+  detailByRef: (slug: string, displayId: string) =>
+    [...ticketKeys.all, 'detail-by-ref', slug, displayId] as const,
   // F19: per-ticket activity feed cache key.
   activity: (id: string) => [...ticketKeys.all, 'activity', id] as const,
 };

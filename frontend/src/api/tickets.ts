@@ -38,6 +38,14 @@ export async function fetchTicket(ticketId: string): Promise<Ticket> {
   return apiFetch<Ticket>(`/tickets/${ticketId}`);
 }
 
+// F30 T3: GET /projects/:slug/tickets/:displayId — resolve a human-readable
+// SLYK-NNN ref to the full Ticket (used by the deep-link route layer). Modal
+// still resolves UUID-keyed detail via fetchTicket — kept separate here to
+// avoid a second round-trip (the route seeds the UUID cache via setQueryData).
+export async function fetchTicketByRef(slug: string, displayId: string): Promise<Ticket> {
+  return apiFetch<Ticket>(`/projects/${slug}/tickets/${displayId}`);
+}
+
 // F13 T9: PATCH /tickets/:id — write attribute edits (title/description/priority/assigneeId).
 export async function updateTicket(
   ticketId: string,

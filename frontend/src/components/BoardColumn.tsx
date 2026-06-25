@@ -8,7 +8,7 @@ interface BoardColumnProps {
     tickets: Ticket[];
     projectSlug: string;
     isUnsorted?: boolean;
-    onEdit?: (ticketId: string) => void;
+    onEdit?: (displayId: string) => void;
 }
 
 export function BoardColumn({ id, name, tickets, projectSlug, isUnsorted, onEdit }: BoardColumnProps) {

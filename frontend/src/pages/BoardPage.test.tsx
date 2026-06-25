@@ -84,6 +84,24 @@ function renderBoard() {
     );
 }
 
+// F30 T3: render with the same nested tickets/:displayId route the real router
+// registers, plus a marker element that mounts only when navigation lands on
+// the deep-link path — so a card click can assert the display-ID URL.
+function renderBoardWithDetailRoute() {
+    return renderInDnd(
+        <MemoryRouter initialEntries={['/projects/SLYK']}>
+            <Routes>
+                <Route path="/projects/:slug" element={<BoardPage />}>
+                    <Route
+                        path="tickets/:displayId"
+                        element={<div data-testid="detail-route-marker" />}
+                    />
+                </Route>
+            </Routes>
+        </MemoryRouter>,
+    );
+}
+
 describe('BoardPage', () => {
     beforeEach(() => {
         mockState.boardValue = { isLoading: false };
@@ -118,6 +136,31 @@ describe('BoardPage', () => {
         expect(screen.getByText('SLYK')).toBeInTheDocument();
         expect(screen.getByText('SLYK-101')).toBeInTheDocument();
         expect(screen.getByLabelText('Column To Do')).toBeInTheDocument();
+    });
+
+    // F30 T3: card click deep-links to the human-readable display-ID URL
+    // (/projects/SLYK/tickets/SLYK-101), not the legacy UUID path. Uses the
+    // nested tickets/:displayId route with a marker so we don't need a
+    // QueryClient (TicketDetailRoute's useQuery is out of scope here).
+    it('navigates to the display-ID URL on card click', () => {
+        mockState.boardValue = {
+            data: {
+                project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
+                columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [ticket101] }],
+            },
+            isLoading: false,
+        };
+        renderBoardWithDetailRoute();
+
+        // Before click: nested route not yet matched.
+        expect(screen.queryByTestId('detail-route-marker')).not.toBeInTheDocument();
+
+        // Card aria-label is the padded badge form (SLYK-101); click deep-links.
+        fireEvent.click(screen.getByLabelText('Ticket SLYK-101: First ticket'));
+
+        // After click: nested tickets/:displayId route mounted -> URL is the
+        // unpadded display-ID form (SLYK-101 for ticketNumber 101).
+        expect(screen.getByTestId('detail-route-marker')).toBeInTheDocument();
     });
 
     it('renders per-column empty state', () => {

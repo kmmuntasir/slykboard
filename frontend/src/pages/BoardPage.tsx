@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams, Outlet } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useBoard } from '@/hooks/useBoard';
 import { useMoveTicket } from '@/hooks/useMoveTicket';
@@ -14,6 +16,8 @@ import { TicketDetailModal } from '@/components/TicketDetailModal';
 import { BoardSkeleton } from '@/components/BoardSkeleton';
 import { Retry } from '@/components/Retry';
 import { ApiClientError } from '@/api/client';
+import { fetchTicketByRef } from '@/api/tickets';
+import { ticketKeys } from '@/api/queryKeys';
 import type { UpdateTicketDto } from '@/types/ticket';
 
 export function BoardPage() {
@@ -52,9 +56,10 @@ export function BoardPage() {
     }
 
     // F16: card click deep-links to the ticket modal via the nested route
-    // /projects/:slug/tickets/:id — BoardPage stays mounted under the modal.
-    const handleEdit = (ticketId: string) => {
-        navigate(`tickets/${ticketId}`);
+    // /projects/:slug/tickets/:displayId. F30 T3: TicketCard now passes the
+    // human-readable SLYK-NNN display-ID; BoardPage stays mounted under the modal.
+    const handleEdit = (displayId: string) => {
+        navigate(`tickets/${displayId}`);
     };
 
     const handleDragStart = () => setDragInProgress(true);
@@ -142,20 +147,43 @@ export function BoardPage() {
     );
 }
 
-// F16: child route element for /projects/:slug/tickets/:ticketId. Renders the
+// F16: child route element for /projects/:slug/tickets/:displayId. Renders the
 // TicketDetailModal over the mounted board (BoardPage stays mounted via <Outlet/>).
+// F30 T3: the URL param is the human-readable SLYK-NNN display-ID; the route
+// resolves it to a full Ticket once and seeds the modal's UUID-keyed detail
+// cache (TicketDetailModal hydrates by UUID — its contract is unchanged).
 export function TicketDetailRoute() {
-    const { slug, ticketId } = useParams<{ slug: string; ticketId: string }>();
+    const { slug, displayId } = useParams<{ slug: string; displayId: string }>();
     const navigate = useNavigate();
     const updateTicket = useUpdateTicket();
-    if (!slug || !ticketId) return null;
+    const queryClient = useQueryClient();
+
+    const { data: ticket, isLoading, isError } = useQuery({
+        queryKey: ticketKeys.detailByRef(slug ?? '', displayId ?? ''),
+        queryFn: () => fetchTicketByRef(slug as string, displayId as string),
+        enabled: Boolean(slug && displayId),
+    });
+
+    // D2: resolve SLYK-NNN -> UUID once at the route layer, then seed the modal's
+    // UUID-keyed detail cache so TicketDetailModal hydrates by UUID (contract
+    // unchanged) without a second round-trip.
+    useEffect(() => {
+        if (ticket) {
+            queryClient.setQueryData(ticketKeys.detail(ticket.id), ticket);
+        }
+    }, [queryClient, ticket]);
+
+    if (!slug || !displayId) return null;
+    if (isLoading) return null; // minimal pending state; T4 owns not-found UI.
+    if (isError || !ticket) return null; // malformed / not-found -> T4 not-found branch.
+
     return (
         <TicketDetailModal
             slug={slug}
-            ticketId={ticketId}
+            ticketId={ticket.id}
             onClose={() => navigate(`/projects/${slug}`)}
             onSubmit={async (dto: UpdateTicketDto) => {
-                await updateTicket.mutateAsync({ ticketId, dto, slug });
+                await updateTicket.mutateAsync({ ticketId: ticket.id, dto, slug });
             }}
         />
     );

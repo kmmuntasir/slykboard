@@ -4,7 +4,7 @@ import { BoardColumn } from './BoardColumn';
 interface UnsortedBucketProps {
     tickets: Ticket[];
     projectSlug: string;
-    onEdit?: (ticketId: string) => void;
+    onEdit?: (displayId: string) => void;
 }
 
 // F09 D-Unsorted-Bucket: trailing pseudo-column for tickets whose status_column
