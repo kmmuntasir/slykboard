@@ -1,0 +1,44 @@
+# Render Blueprint — slykboard backend (Docker web service).
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Apply: Render dashboard → New → Blueprint → connect repo → this file is auto-detected.
+# Env vars with `sync: false` must be filled in the Render dashboard (never committed here).
+#
+# NOTE on build context: the repo-root Dockerfile expects the build context to be the
+# REPO ROOT (npm workspaces monorepo; single root package-lock.json; no backend/package-lock.json).
+# Therefore dockerContext is intentionally omitted → Render defaults to the repo root.
+# Do NOT set `dockerContext: backend` — it would break the Docker build (root lockfile unreachable).
+#
+# `plan: starter` is the minimum that supports the Docker runtime on Render.
+# The Render free tier historically does NOT support Docker web services; if you run a
+# native Node runtime instead, you may downgrade to `free`. Adjust in the dashboard.
+services:
+  - type: web
+    name: slykboard-api
+    runtime: docker
+    plan: starter
+    # Build context defaults to repo root (see NOTE above).
+    dockerfilePath: ./Dockerfile
+    # Render runs its own HTTP health check against this path; Docker HEALTHCHECK is ignored.
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RUN_MIGRATIONS_ON_START
+        value: "true"
+      # Secrets — fill in the Render dashboard.
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
