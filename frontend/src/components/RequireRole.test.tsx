@@ -50,18 +50,19 @@ describe('RequireRole', () => {
         expect(screen.queryByTestId('home')).toBeNull();
     });
 
-    it('redirects to / when role mismatch', () => {
+    it('renders the 403 page when role mismatch', () => {
         setUserWithRole('MEMBER');
         renderGuarded();
         expect(screen.queryByTestId('outlet')).toBeNull();
-        expect(screen.getByTestId('home')).toBeInTheDocument();
-        // from location preserved in navigate state
-        expect(screen.getByTestId('home').textContent).toContain('/settings');
+        // SLYK-F28: deny now renders ForbiddenPage instead of redirecting
+        expect(screen.getByRole('heading', { name: /403/i })).toBeInTheDocument();
+        expect(screen.queryByTestId('home')).toBeNull();
     });
 
-    it('redirects to / when no user', () => {
+    it('renders the 403 page when no user', () => {
         renderGuarded();
         expect(screen.queryByTestId('outlet')).toBeNull();
-        expect(screen.getByTestId('home')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /403/i })).toBeInTheDocument();
+        expect(screen.queryByTestId('home')).toBeNull();
     });
 });
