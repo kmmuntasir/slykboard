@@ -1,14 +1,138 @@
 @import 'tailwindcss';
 
-/* F04 minimal palette (D6). Board-specific colors deferred to F09. */
-@theme {
-  --color-background: #ffffff;
-  --color-foreground: #111827;
-  --color-primary: #2563eb;
-  --color-muted: #6b7280;
-  --color-border: #e5e7eb;
+/* Class-based dark mode — PRD §3.1 canonical form (:where() = zero specificity,
+   matches .dark itself + descendants; deviates from shadcn starter's :is() which
+   excludes .dark itself and inherits specificity — see D2). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Light tokens (OKLCH — D3. Seed VALUES preserved as Tailwind-v4 OKLCH equivalents) ── */
+:root {
+  --background: oklch(1 0 0);                      /* white (seed) */
+  --foreground: oklch(0.21 0.034 264.665);         /* gray-900 (seed) */
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.034 264.665);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.034 264.665);
+
+  --primary: oklch(0.541 0.241 262.261);           /* blue-600 (seed) — PRD §1.1 accent */
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.968 0.007 247.896);         /* gray-100 */
+  --secondary-foreground: oklch(0.21 0.034 264.665);
+
+  --muted: oklch(0.968 0.007 247.896);             /* gray-100 */
+  --muted-foreground: oklch(0.551 0.027 264.364);  /* gray-500 (seed) */
+
+  --accent: oklch(0.968 0.007 247.896);            /* gray-100 */
+  --accent-foreground: oklch(0.21 0.034 264.665);
+
+  --destructive: oklch(0.595 0.225 27.167);        /* red-600 */
+  --destructive-foreground: oklch(1 0 0);
+
+  --border: oklch(0.929 0.013 255.508);            /* gray-200 (seed) */
+  --input: oklch(0.929 0.013 255.508);             /* gray-200 */
+  --ring: oklch(0.541 0.241 262.261);              /* blue-600 */
+
+  /* Status tints (PRD §3.1 names backgrounds; F32 adds -foreground pairs — D4).
+     Values grounded in existing usage: HealthBadge/PriorityBadge/ChecklistEditor. */
+  --success: oklch(0.627 0.194 149.214);           /* green-600 */
+  --success-foreground: oklch(1 0 0);
+
+  --warning: oklch(0.666 0.179 58.318);            /* amber-600 */
+  --warning-foreground: oklch(1 0 0);
+
+  --danger: oklch(0.595 0.225 27.167);             /* aliased to destructive (one red) — D4 */
+  --danger-foreground: oklch(1 0 0);
+
+  color-scheme: light;                             /* native UA chrome — D6 (scrollbars/controls) */
 }
 
+/* ── Dark tokens (new; toggle wired by F34, values exist now) — gray-900 base ── */
+.dark {
+  --background: oklch(0.21 0.034 264.665);         /* gray-900 — dark base */
+  --foreground: oklch(0.929 0.013 255.508);        /* gray-200 */
+
+  --card: oklch(0.278 0.033 256.848);              /* gray-800 */
+  --card-foreground: oklch(0.929 0.013 255.508);
+
+  --popover: oklch(0.278 0.033 256.848);
+  --popover-foreground: oklch(0.929 0.013 255.508);
+
+  --primary: oklch(0.623 0.214 259.815);           /* blue-500 — brighter on dark */
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.278 0.033 256.848);         /* gray-800 */
+  --secondary-foreground: oklch(0.929 0.013 255.508);
+
+  --muted: oklch(0.278 0.033 256.848);             /* gray-800 */
+  --muted-foreground: oklch(0.707 0.022 261.325);  /* gray-400 */
+
+  --accent: oklch(0.278 0.033 256.848);            /* gray-800 */
+  --accent-foreground: oklch(0.929 0.013 255.508);
+
+  --destructive: oklch(0.637 0.237 25.333);        /* red-500 — brighter on dark */
+  --destructive-foreground: oklch(1 0 0);
+
+  --border: oklch(0.37 0.034 259.733);             /* gray-700 */
+  --input: oklch(0.37 0.034 259.733);
+  --ring: oklch(0.623 0.214 259.815);              /* blue-500 */
+
+  --success: oklch(0.723 0.191 149);               /* green-500 — brighter on dark */
+  --success-foreground: oklch(0.27 0.05 150);      /* green-950 */
+
+  --warning: oklch(0.795 0.164 70.08);             /* amber-500 */
+  --warning-foreground: oklch(0.21 0.034 264.665); /* gray-900 */
+
+  --danger: oklch(0.637 0.237 25.333);
+  --danger-foreground: oklch(1 0 0);
+
+  color-scheme: dark;                              /* native UA chrome — D6 */
+}
+
+/* ── Tailwind v4 mapping (inline keeps var() reference so .dark overrides cascade — D1) ── */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+}
+
+/* ── Base layer — body must reference the raw --background/--foreground vars,
+   NOT --color-* (inline does not emit --color-* globally — load-bearing coupling, §2) ── */
 @layer base {
   html,
   body,
@@ -17,8 +141,8 @@
   }
   body {
     margin: 0;
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: var(--background);
+    color: var(--foreground);
     font-family:
       system-ui,
       -apple-system,
@@ -27,3 +151,5 @@
       sans-serif;
   }
 }
+
+/* Board-specific colors deferred to F09 (existing comment preserved). */
