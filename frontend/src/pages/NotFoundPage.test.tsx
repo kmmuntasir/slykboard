@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { NotFoundPage } from './NotFoundPage';
 
 describe('NotFoundPage', () => {
-    it('renders the 404 heading', () => {
+    it('renders the 404 heading and a back link', () => {
         render(
             <MemoryRouter initialEntries={['/anywhere']}>
                 <Routes>
@@ -12,6 +12,9 @@ describe('NotFoundPage', () => {
                 </Routes>
             </MemoryRouter>,
         );
-        expect(screen.getByRole('heading', { name: '404' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: '404 — Page Not Found' })).toBeInTheDocument();
+        const link = screen.getByRole('link', { name: /back to board/i });
+        expect(link).toBeInTheDocument();
+        expect(link).toHaveAttribute('href', '/');
     });
 });

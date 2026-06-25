@@ -100,7 +100,21 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             />
         );
     } else if (!ticket) {
-        modalBody = <div className="p-4 text-sm text-muted">Ticket not found.</div>;
+        modalBody = (
+            <div className="flex flex-col items-center gap-4 p-8 text-center">
+                <p className="text-base font-semibold text-gray-900">Ticket not found</p>
+                <p className="text-sm text-muted">
+                    This ticket may have been deleted or no longer exists.
+                </p>
+                <button
+                    type="button"
+                    onClick={requestClose}
+                    className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                    Close
+                </button>
+            </div>
+        );
     } else {
         modalBody = (
             <>
