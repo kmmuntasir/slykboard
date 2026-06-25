@@ -22,7 +22,7 @@ What ships:
 
 Committed deploy artifacts:
 
-- `Dockerfile` — backend image (multi-stage `node:24-bookworm-slim`, non-root `node` user, `tini` PID 1, runs `backend/dist/index.js`, exposes `:3000`, ships migrations, migrate-on-boot gated by `RUN_MIGRATIONS_ON_START`).
+- `Dockerfile` — backend image (`node:24-bookworm-slim`, non-root `node` user, `tini` PID 1, runs `npx tsx backend/src/index.ts` — the backend uses extensionless ESM imports that native `node` rejects, so the runtime is **tsx** (not compiled `node dist/`); exposes `:3000`, ships migrations at `backend/src/db/migrations`, migrate-on-boot gated by `RUN_MIGRATIONS_ON_START`).
 - `frontend/Dockerfile` — frontend image (`node:24` build → `nginx:alpine` serve, exposes `:80`, `VITE_*` build args).
 - `frontend/nginx.conf` — SPA fallback (`try_files … /index.html`), static-asset caching, security headers. No `/api` proxy by default.
 - `.dockerignore` — excludes `node_modules`, `.env.*` (keeps `.env.example`), build output, docs.
