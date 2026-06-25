@@ -4,7 +4,7 @@
 >
 > This document decomposes the **UI redesign** of the existing Slykboard app into **small, shippable, sequential features**. Each feature is an independently mergeable increment that leaves the system in a working state and is a prerequisite for later features. The redesign builds on a shipped product (features `F01`–`F30` already done in `../../features.md`), so this index starts at **`F31`**.
 >
-> Redesign scope is frontend-heavy (`frontend/`) with a single, tightly-scoped backend carve-out: project-scoped Reports (`F48`/`F49`). Stack: React 19 + Vite + Tailwind v4 (`@tailwindcss/vite`, in-band `@theme` config, **no JS config**) + Express + PostgreSQL.
+> Redesign scope is frontend-heavy (`frontend/`) with a tightly-scoped backend carve-out — a project-membership middleware (`F47`) plus project-scoped Reports (`F48`/`F49`). **Backend is explicitly in scope** for this redesign. Stack: React 19 + Vite + Tailwind v4 (`@tailwindcss/vite`, in-band `@theme` config, **no JS config**) + Express + PostgreSQL.
 
 ## How to read a feature
 
@@ -86,7 +86,7 @@
 - `import { Layers } from 'lucide-react'` resolves in a throwaway smoke component; `import * as DropdownMenu from '@radix-ui/react-dropdown-menu'` and `@radix-ui/react-tooltip` resolve.
 - `rtk pnpm install` (or `rtk vite build`) succeeds with zero new peer warnings.
 **Edge cases:**
-- `@radix-ui/react-tooltip` is **beyond the PRD's §3.4 list** (which names only dropdown-menu). Justified by D5: a `disabled` button is not pointer/focus-reachable, so the "Select a project first" affordance (`F42`) needs a real tooltip primitive. Flagged as a scope addition, not silently added.
+- `@radix-ui/react-tooltip` is **beyond the PRD's §3.4 list** (which names only dropdown-menu). Required by D5: a `disabled` button is not pointer/focus-reachable, so the "Select a project first" affordance (`F42`) needs a real tooltip primitive. **Decided (owner sign-off): add it** — confirmed scope addition.
 - Pin major versions; Radix minor bumps have broken portal behavior before. Lock to a single resolved version per package.
 
 ### F32 — Define full semantic token set + `@custom-variant dark`
@@ -374,7 +374,7 @@
 - Route moved (`routes/index.tsx`); old `/reports` → redirect to last-selected project's reports or `/projects` (D6 default: drop `?period`/`?offset` query on redirect).
 - `api/reports.ts` takes `projectSlug`; `useReport(period, offset, projectSlug)`; `ReportsPage` reads `:slug`.
 - `reportKeys` includes slug (cache correctness).
-- **D7 non-member direct-nav:** render a 403 surface (default), mirroring BE 403 — not a silent redirect.
+- **D7 non-member direct-nav:** on BE 403 (from `requireProjectMember`), FE redirects to `/projects` (decided) — not a 403 surface.
 - Loading skeleton, error/retry, empty-state (lucide `Inbox`/`BarChart3`) all present.
 - Tables in `Card`; period toggle = `Button` variant group.
 - `ReportsPage` tests updated; TopNav Reports link target finalized (was tentatively set in F42).
@@ -396,7 +396,7 @@
 **Acceptance:**
 - Gate script documented (e.g. in `.docs/redesign/` or CI): `rtk tsc --noEmit && rtk vite build && rtk lint && rtk prettier --check` (all green).
 - Beyond the 4 PRD-named test files (`TopNav`, `ProjectPicker`, `Modal`, `TicketAttributeForm`), every file touched by `F46`/`F44`/`F38`/`F49` has updated tests.
-- New tests added: picker retry-on-error, profile menu Sign out, `useTheme` persistence/toggle/system-follow, two-column form submit, `Modal` size prop, Reports 403 surface, membership middleware (BE).
+- New tests added: picker retry-on-error, profile menu Sign out, `useTheme` persistence/toggle/system-follow, two-column form submit, `Modal` size prop, Reports non-member → redirect to `/projects`, membership middleware (BE).
 - A11y: `useModalA11y` semantics intact; Dropdown focus/Esc/outside-click/`aria-expanded`; Tooltip reachable on disabled + focus.
 - Coverage targets per `js-testing-rules.md`: business logic >80%, components >70%.
 **Edge cases:**
@@ -430,24 +430,24 @@ The redesign requires **no database migration**. Be explicit about this — do n
 
 ---
 
-## Cross-cutting decisions to make up front
+## Cross-cutting decisions (resolved)
 
-These are irreversible or cross-cutting choices that should be settled before the dependent features start. Do not silently pick them in a feature's edge cases — surface each as a decision prompt.
+These irreversible / cross-cutting choices were settled with the owner before dependent features start. Each is locked to the chosen value; features below must honor it.
 
-1. **Radix choice (decided §9.2):** `@radix-ui/react-dropdown-menu` for menus; `Modal` keeps hand-rolled `useModalA11y` (Radix `react-dialog` swap **deferred**). Confirm before `F36`/`F43`.
+1. **Radix choice (decided §9.2):** `@radix-ui/react-dropdown-menu` for menus; `Modal` keeps hand-rolled `useModalA11y` (Radix `react-dialog` swap **deferred**). Owned by `F36`/`F43`.
 2. **localStorage key `slykboard-theme` (fixed by §3.2):** Changing this is a breaking change (existing users lose their preference). Never rename. Owned by `F34`.
 3. **No-flash script ordering:** inline `<head>` script before any stylesheet, key `slykboard-theme`. Owned by `F33`.
-4. **Radix Tooltip as a new dep (D5, beyond PRD §3.4):** required so the disabled-nav "Select a project first" hint is focus-reachable. Default: add `@radix-ui/react-tooltip`. **Owner sign-off** — this widens the PRD's dependency list.
-5. **Old global `/reports/*` BE routes (D2):** deprecate-one-release (default) vs remove-now. **Owner sign-off** — affects `F48` + the `F49` redirect in the same release.
-6. **Brand mark (D1):** lucide `Layers` (default) vs supplied logo asset. **Owner sign-off** — trivial but blocks `F37` icon choice.
-7. **Membership middleware — BUILD, not reuse (scope correction / `F47`):** PRD §5.2 T5.2 says "reuse existing project-membership middleware"; it does **not** exist (`backend/src/middleware/` has no such file). Default: build it modeled on `requireRole.ts`. **Owner sign-off** — this is a scope increase vs the PRD and adds a backend feature (`F47`).
-8. **Reports FE↔BE dependency:** `F49` is hard-blocked on `F48`. Land BE scoped endpoints before FE route move, or stub the FE behind a flag. Default: sequential (BE first).
-9. **D7 non-member direct-nav to `/projects/:slug/reports`:** render a 403 surface (default, mirrors BE) vs redirect to `/projects`. **Owner sign-off.**
-10. **D8 localStorage unavailable:** fall back to `system` (default) vs `light`. Owned by `F33`/`F34`.
-11. **D6 Reports redirect query:** preserve `?period`/`?offset` vs drop (default). Owned by `F49`.
-12. **D11 mobile slide-down nav focus management:** trap focus (default) vs manage return only. Owned by `F37`.
-13. **D3 project picker on `/projects` listing:** "Select a project" placeholder (default) vs hidden. Owned by `F38`.
-14. **D9 routing/auth change scope:** confirm Reports relocation is the **only** routing/auth change (default: yes). Guards `F49` scope creep.
+4. **Radix Tooltip — DECIDED: add `@radix-ui/react-tooltip`** (owner sign-off). Required so the disabled-nav "Select a project first" hint (`F42`) is focus-reachable; `disabled` buttons aren't tooltip-reachable without a wrapper. Widens PRD §3.4 dep list. Installed in `F31`; primitive built in `F36`.
+5. **Old global `/reports/*` BE routes — DECIDED: deprecate one release, then remove** (owner sign-off). Old routes stay present-but-deprecated (header/log warning) for one release; a removal ticket is filed. `F49` redirect lands regardless. Owned by `F48`.
+6. **Brand mark — DECIDED: lucide `Layers` + "Slykboard" text** (owner sign-off). Drop-in replaceable if a logo asset arrives later. Owned by `F37`.
+7. **Membership middleware — DECIDED: BUILD, not reuse** (owner sign-off; backend in scope). PRD §5.2 T5.2 assumed reuse; no such middleware exists (`backend/src/middleware/` has no such file). Build `requireProjectMember` modeled on `requireRole.ts`. Adds backend feature `F47`. Backend is in scope for this redesign.
+8. **Reports FE↔BE dependency:** `F49` is hard-blocked on `F48`. Sequential (BE first). Owned by `F47`→`F48`→`F49`.
+9. **Non-member direct-nav to `/projects/:slug/reports` — DECIDED: redirect to `/projects`** (owner sign-off; overrode the 403-surface default). FE catches BE 403 from `requireProjectMember` and redirects to `/projects`. Owned by `F49`.
+10. **localStorage unavailable — DECIDED: fall back to `system`** (owner sign-off on minor defaults). Owned by `F33`/`F34`.
+11. **Reports redirect query — DECIDED: drop `?period`/`?offset`** (owner sign-off on minor defaults). Owned by `F49`.
+12. **Mobile slide-down nav focus management — DECIDED: trap focus** (owner sign-off on minor defaults). Owned by `F37`.
+13. **Project picker on `/projects` listing — DECIDED: "Select a project" placeholder** (owner sign-off on minor defaults). Owned by `F38`.
+14. **Routing/auth change scope — DECIDED: Reports relocation is the only routing/auth change** (owner sign-off on minor defaults). Guards `F49` scope creep.
 
 ---
 
