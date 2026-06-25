@@ -3,6 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark">
+    <!--
+      F33 no-flash theme bootstrap — MUST stay inline in <head>, plain <script> (NOT type="module"):
+      module scripts are deferred → they run after parse → white flash on dark-mode refresh.
+      This runs synchronously during HTML parse, BEFORE the /src/main.tsx module mounts React,
+      and BEFORE any Vite-injected stylesheet, so .dark is on <html> in time for first paint.
+
+      Mirrors resolveInitialTheme(stored, prefersDark) in src/utils/theme.ts — keep both in sync.
+      Storage key 'slykboard-theme' is FIXED (PRD §3.2, decision #2): renaming breaks every user.
+      localStorage unavailable (private mode) → try/catch → fall back to light (D8); never throw.
+    -->
+    <script>
+      (function () {
+        var resolvedDark = false;
+        try {
+          var stored = localStorage.getItem('slykboard-theme'); // 'light' | 'dark' | 'system' | null
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          // resolveInitialTheme (D4): dark→dark; light→light; system|null|invalid → follow OS
+          if (stored === 'dark') {
+            resolvedDark = true;
+          } else if (stored === 'light') {
+            resolvedDark = false;
+          } else {
+            resolvedDark = prefersDark; // 'system' | null | invalid → default = system (PRD §1.6, D8)
+          }
+        } catch (_) {
+          // localStorage or matchMedia unavailable (private mode / disabled storage) → light.
+          // D8: never throw on first paint.
+          resolvedDark = false;
+        }
+        if (resolvedDark) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <title>Slykboard</title>
   </head>
   <body>
