@@ -662,15 +662,15 @@ Steps:
 
 ---
 
-## 9. Cross-cutting decisions — NEEDING OWNER SIGN-OFF
+## 9. Cross-cutting decisions — CONFIRMED (owner-approved 2026-06-25)
 
-1. **nginx-served FE vs BE-served FE** (D2) — **Recommend nginx** (multi-stage, ~25MB, SPA fallback). BE-served (`express.static` + catch-all `app.get('*')→sendFile(index.html)`) is simpler (one container) but couples FE release cadence to BE and Express is slower at static serving. nginx = decoupled, independently scalable, matches the 3-service compose model. **Sign-off: confirm nginx (recommended) over single-container BE-served.**
-2. **`RUN_MIGRATIONS_ON_START` default** (D4) — **Recommend: default true in prod image** (derived from `NODE_ENV==='production'` if unset; explicitly `true` in compose/render.yaml; `false` for local dev where `make migrate` is manual). Single BE instance (no replica race per `db/client.ts` comment). **Sign-off: confirm migrate-on-boot is the release step (vs a separate documented `npm run db:migrate` release step).**
-3. **NEW `DIRECT_DATABASE_URL` env var** (D4/D8) — **Recommend: add it.** Supabase transaction-mode pooler (6543) can't reliably run DDL; migrations need direct 5432. New optional var; defaults to `DATABASE_URL` for self-host/compose (no pooler). **Sign-off: confirm adding a new env var.**
-4. **Sub-path hosting scope** (D12) — **Recommend: OUT OF SCOPE for MVP.** `vite.config.ts` (no `base`) + `routes/index.tsx` (no `basename`) assume root `/`. Sub-path needs `base` + `basename` + asset-path changes. Document as future work. MVP assumes root-path or dedicated (sub)domain. **Sign-off: confirm deferral.**
-5. **Extend dev `docker-compose.yml` vs new `docker-compose.prod.yml`** (D3) — **Recommend: separate prod file.** Dev compose is Postgres-only (simple); prod is 3 services. Keeps dev workflow untouched. **Sign-off: confirm separate file.**
-6. **OAuth token revocation TODO** (`auth.routes.ts:93`, D14) — **Recommend: DEFER out of F29.** Pre-existing logout-revocation TODO is a security-feature concern, not deploy/packaging. F29 documents it as a known gap. **Sign-off: defer or include if trivial.**
-7. **Resolve stale `js-development-rules.md` start command** (D5) — Rules say `node src/index.js` (TS source); reality = `node dist/index.js` (compiled). **Decision: use `dist/index.js` (D5); flag the rules doc as stale for a future doc-update (not blocking F29).** Owner aware.
+1. **nginx-served FE vs BE-served FE** (D2) — ✅ **CONFIRMED: nginx** (multi-stage, ~25MB, SPA fallback). Decoupled, independently scalable, matches the 3-service compose model. BE-served (`express.static`) rejected — couples FE release cadence to BE + slower static serving.
+2. **`RUN_MIGRATIONS_ON_START` default** (D4) — ✅ **CONFIRMED: default true in prod image** (derived from `NODE_ENV==='production'` if unset; explicitly `true` in compose/render.yaml; `false` for local dev where `make migrate` is manual). Migrate-on-boot IS the release step (single BE instance, no replica race per `db/client.ts`).
+3. **NEW `DIRECT_DATABASE_URL` env var** (D4/D8) — ✅ **CONFIRMED: add it.** Supabase transaction-mode pooler (6543) can't reliably run DDL; migrations need direct 5432. Optional var; defaults to `DATABASE_URL` for self-host/compose (no pooler).
+4. **Sub-path hosting scope** (D12) — ✅ **CONFIRMED: OUT OF SCOPE for MVP.** `vite.config.ts` (no `base`) + `routes/index.tsx` (no `basename`) assume root `/`. Documented as future work; MVP assumes root-path or dedicated (sub)domain.
+5. **Extend dev `docker-compose.yml` vs new `docker-compose.prod.yml`** (D3) — ✅ **CONFIRMED: separate prod file.** Dev compose stays Postgres-only; prod is 3 services. Dev workflow untouched.
+6. **OAuth token revocation TODO** (`auth.routes.ts:93`, D14) — ✅ **CONFIRMED: DEFER out of F29.** Security-feature concern, not deploy/packaging. F29 documents it as a known gap.
+7. **Stale `js-development-rules.md` start command** (D5) — ✅ **CONFIRMED: use `node dist/index.js`** (compiled), not the rules' `node src/index.js`. Rules doc flagged stale for a future doc-update (not blocking F29).
 
 **Sources:**
 - `basic-PRD.md` §3 (Goal 2 self-hostable; Success Metric "Successful deployment via Docker/Render"), §5 (Dockerized — VPS/Render/Supabase), REQ-1.1 (Google SSO), REQ-1.2 (`ALLOWED_DOMAIN`), REQ-1.3 (roles/JWT).
