@@ -12,8 +12,10 @@ import {
   createProjectBodySchema,
   slugParamSchema,
   createTicketBody,
+  ticketDisplayIdParamSchema,
   updateProjectBodySchema,
 } from './projects.schema';
+import { parseTicketDisplayId } from '../utils/parseTicketDisplayId';
 import { projectLabelsRouter } from './labels.routes';
 
 export const projectsRouter = Router();
@@ -73,6 +75,32 @@ projectsRouter.post(
       ...body,
     });
     res.status(201).json(success(ticket));
+  },
+);
+
+// F30 D-Display-Id-Lookup: human-readable ticket detail route
+// GET /api/projects/:slug/tickets/:displayId (e.g. /api/projects/SLYK/tickets/SLYK-4).
+// Any authenticated user (matches GET /:slug/board, D-ProjectMembers: no membership yet).
+// D5: a malformed displayId (e.g. 'SLYK-abc') is a 404, NOT a 400 — Zod only
+// checks non-emptiness; parseTicketDisplayId does the format check and returns
+// null → NOT_FOUND. D3: a prefix mismatch (path slug ≠ displayId slug, e.g.
+// /SLYK/.../PX-4) is also null → NOT_FOUND. Both happen BEFORE the service is
+// called, so a malformed ref never touches the DB.
+projectsRouter.get(
+  '/:slug/tickets/:displayId',
+  authenticate,
+  validateRequest({ params: ticketDisplayIdParamSchema }),
+  async (req, res) => {
+    const { slug, displayId } = req.params as z.infer<typeof ticketDisplayIdParamSchema>;
+    const parsed = parseTicketDisplayId(displayId, slug);
+    if (!parsed) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
+    }
+    const ticket = await ticketService.getTicketByNumber(parsed.slug, parsed.ticketNumber);
+    if (!ticket) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
+    }
+    res.json(success(ticket));
   },
 );
 

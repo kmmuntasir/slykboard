@@ -259,32 +259,37 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
 // F16: left-join users twice to resolve BOTH creator and assignee into
 // {id,fullName,avatarUrl} objects (mirrors boardService's FK-dangle guard at
 // boardService.ts:96-108). No migration — creator_id/assignee_id FKs already exist.
-export async function getTicket(
-  ticketId: string,
-): Promise<
-  (TicketRow & {
-    labels: HydratedLabel[];
-    creator: TicketActor | null;
-    assignee: TicketActor | null;
-  }) | null
-> {
-  const rows = await db
-    .select({
-      ticket: tickets,
-      creatorId: creatorUser.id,
-      creatorFullName: creatorUser.fullName,
-      creatorAvatarUrl: creatorUser.avatarUrl,
-      assigneeId: assigneeUser.id,
-      assigneeFullName: assigneeUser.fullName,
-      assigneeAvatarUrl: assigneeUser.avatarUrl,
-    })
-    .from(tickets)
-    .leftJoin(creatorUser, eq(creatorUser.id, tickets.creatorId))
-    .leftJoin(assigneeUser, eq(assigneeUser.id, tickets.assigneeId))
-    .where(eq(tickets.id, ticketId))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
+// F16: hydrated single-ticket payload — ticket row plus resolved creator/
+// assignee actors and the ticket's label set. Shared by getTicket (by id) and
+// getTicketByNumber (by slug+number, F30).
+export type HydratedTicket = TicketRow & {
+  labels: HydratedLabel[];
+  creator: TicketActor | null;
+  assignee: TicketActor | null;
+};
+
+// F16: shared shape of a raw joined row from the tickets + 2x users left-join.
+// Both getTicket and getTicketByNumber build this row, then call hydrateTicketRow
+// to map it to HydratedTicket. Keeping the join shape in one place guarantees
+// the two read paths produce identical payloads (F30 requirement: the detail
+// endpoint returns the SAME shape regardless of the lookup key).
+type JoinedTicketRow = {
+  ticket: TicketRow;
+  creatorId: string | null;
+  creatorFullName: string | null;
+  creatorAvatarUrl: string | null;
+  assigneeId: string | null;
+  assigneeFullName: string | null;
+  assigneeAvatarUrl: string | null;
+};
+
+// F30: map a raw joined row → HydratedTicket. Hydrates labels by ticket id and
+// resolves creator/assignee users into {id,fullName,avatarUrl} (null when the
+// FK user row is missing — mirrors boardService's FK-dangle guard). Extracted
+// from getTicket so getTicketByNumber reuses the exact same mapping; behavior
+// of getTicket is unchanged (same query shape, same null/coalesce rules).
+async function hydrateTicketRow(row: JoinedTicketRow): Promise<HydratedTicket> {
+  const ticketId = row.ticket.id;
   const labelMap = await hydrateLabelsForTickets([ticketId]);
   return {
     ...row.ticket,
@@ -306,6 +311,62 @@ export async function getTicket(
           },
     labels: labelMap.get(ticketId) ?? [],
   };
+}
+
+export async function getTicket(ticketId: string): Promise<HydratedTicket | null> {
+  const rows = await db
+    .select({
+      ticket: tickets,
+      creatorId: creatorUser.id,
+      creatorFullName: creatorUser.fullName,
+      creatorAvatarUrl: creatorUser.avatarUrl,
+      assigneeId: assigneeUser.id,
+      assigneeFullName: assigneeUser.fullName,
+      assigneeAvatarUrl: assigneeUser.avatarUrl,
+    })
+    .from(tickets)
+    .leftJoin(creatorUser, eq(creatorUser.id, tickets.creatorId))
+    .leftJoin(assigneeUser, eq(assigneeUser.id, tickets.assigneeId))
+    .where(eq(tickets.id, ticketId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return hydrateTicketRow(row);
+}
+
+// F30 D-Display-Id-Lookup: fetch a ticket by its human-readable ref
+// (slug, ticketNumber). Resolves the project by slug, then selects by the
+// unique (project_id, ticket_number) index (≤1 row guaranteed). Returns the
+// SAME hydrated payload shape as getTicket so the detail route is agnostic
+// to which key the client used. Returns null when the project or the ticket
+// is absent (route layer maps both to 404). Soft-deleted rows are returned
+// for parity with getTicket — both reads are soft-delete-transparent; the
+// unique index and the id lookup behave identically w.r.t. deletedAt.
+export async function getTicketByNumber(
+  slug: string,
+  ticketNumber: number,
+): Promise<HydratedTicket | null> {
+  const project = await getProjectBySlug(slug);
+  if (!project) return null;
+
+  const rows = await db
+    .select({
+      ticket: tickets,
+      creatorId: creatorUser.id,
+      creatorFullName: creatorUser.fullName,
+      creatorAvatarUrl: creatorUser.avatarUrl,
+      assigneeId: assigneeUser.id,
+      assigneeFullName: assigneeUser.fullName,
+      assigneeAvatarUrl: assigneeUser.avatarUrl,
+    })
+    .from(tickets)
+    .leftJoin(creatorUser, eq(creatorUser.id, tickets.creatorId))
+    .leftJoin(assigneeUser, eq(assigneeUser.id, tickets.assigneeId))
+    .where(and(eq(tickets.projectId, project.id), eq(tickets.ticketNumber, ticketNumber)))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return hydrateTicketRow(row);
 }
 
 // F13 T6: partial update of ticket attributes. Accepts any subset of

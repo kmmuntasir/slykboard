@@ -65,3 +65,15 @@ export const createTicketBody = z.object({
 });
 
 export type CreateTicketBody = z.infer<typeof createTicketBody>;
+
+// F30 D5: params for GET /:slug/tickets/:displayId (human-readable ticket URL).
+// Zod only enforces slug shape (inherited from slugParamSchema) and that the
+// displayId is a non-empty string. The full displayId FORMAT validation + the
+// 404 (not 400) for a malformed ref happen in the route handler via
+// parseTicketDisplayId — D5 deliberately treats 'SLYK-abc' as NOT_FOUND so a
+// guessable wrong ID is indistinguishable from a real miss.
+export const ticketDisplayIdParamSchema = slugParamSchema.extend({
+  displayId: z.string().min(1),
+});
+
+export type TicketDisplayIdParam = z.infer<typeof ticketDisplayIdParamSchema>;

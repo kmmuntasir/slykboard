@@ -38,6 +38,7 @@ vi.mock('../services/boardService', () => ({
 }));
 vi.mock('../services/ticketService', () => ({
   createTicket: vi.fn(),
+  getTicketByNumber: vi.fn(),
 }));
 
 import { app } from '../index';
@@ -56,6 +57,7 @@ const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
 const mockedUpdate = vi.mocked(projectService.updateProject);
 const mockedGetBoard = vi.mocked(boardService.getBoard);
 const mockedCreateTicket = vi.mocked(ticketService.createTicket);
+const mockedGetTicketByNumber = vi.mocked(ticketService.getTicketByNumber);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -412,6 +414,99 @@ describe('POST /:slug/tickets (F12)', () => {
       .send({ title: 'New' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
+  });
+});
+
+describe('GET /:slug/tickets/:displayId (F30)', () => {
+  const hydratedTicketPayload = {
+    id: 't1',
+    projectId: 'p1',
+    ticketNumber: 4,
+    title: 'Readable URLs',
+    statusColumn: 'c1',
+    position: 65536,
+    creatorId: 'u1',
+    priority: 'MEDIUM',
+    description: null,
+    assigneeId: null,
+    checklist: [],
+    labels: [],
+    creator: { id: 'u1', fullName: 'User One', avatarUrl: null },
+    assignee: null,
+  };
+
+  it('returns 200 + ticket when found (authed MEMBER)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetTicketByNumber.mockResolvedValue(
+      hydratedTicketPayload as unknown as Awaited<ReturnType<typeof ticketService.getTicketByNumber>>,
+    );
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/tickets/SLYK-4')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.ticketNumber).toBe(4);
+    expect(mockedGetTicketByNumber).toHaveBeenCalledWith('SLYK', 4);
+  });
+
+  it('returns 404 NOT_FOUND on malformed displayId (getTicketByNumber NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/tickets/SLYK-abc')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedGetTicketByNumber).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 NOT_FOUND when service returns null (miss)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetTicketByNumber.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/tickets/SLYK-999')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedGetTicketByNumber).toHaveBeenCalledWith('SLYK', 999);
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer (getTicketByNumber NOT called)', async () => {
+    const res = await request(app).get('/api/projects/SLYK/tickets/SLYK-4');
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedGetTicketByNumber).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 NOT_FOUND on prefix mismatch (getTicketByNumber NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/tickets/PX-4')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedGetTicketByNumber).not.toHaveBeenCalled();
+  });
+
+  it('strips leading zeros and queries number 4 for SLYK-004', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetTicketByNumber.mockResolvedValue(
+      hydratedTicketPayload as unknown as Awaited<ReturnType<typeof ticketService.getTicketByNumber>>,
+    );
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/tickets/SLYK-004')
+      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+
+    expect(res.status).toBe(200);
+    expect(mockedGetTicketByNumber).toHaveBeenCalledWith('SLYK', 4);
   });
 });
 
