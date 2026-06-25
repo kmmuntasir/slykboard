@@ -115,20 +115,18 @@ function newQueryClient(): QueryClient {
 }
 
 // useBlocker requires a data router, so wrap in createMemoryRouter.
-function Providers({
-    client,
-    children,
-}: {
-    client: QueryClient;
-    children: ReactNode;
-}) {
+function Providers({ client, children }: { client: QueryClient; children: ReactNode }) {
     const router = createMemoryRouter([
         {
             path: '/',
             element: <>{children}</>,
         },
     ]);
-    return createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }));
+    return createElement(
+        QueryClientProvider,
+        { client },
+        createElement(RouterProvider, { router }),
+    );
 }
 
 function renderModal(
@@ -281,9 +279,7 @@ describe('TicketDetailModal', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
         await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-        expect(onSubmit).toHaveBeenCalledWith(
-            expect.objectContaining({ title: 'New title' }),
-        );
+        expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: 'New title' }));
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     });
 
@@ -349,9 +345,7 @@ describe('TicketDetailModal', () => {
         // Scope to the confirm dialog: both the form and the confirm expose a
         // "Cancel" button, so query within the confirm's dialog node.
         const confirm = await screen.findByRole('dialog', { name: 'Discard changes?' });
-        fireEvent.click(
-            within(confirm).getByRole('button', { name: 'Cancel' }),
-        );
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
 
         // Confirm gone, the detail modal stays open, onClose not called.
         expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument();
@@ -424,8 +418,8 @@ describe('TicketDetailModal', () => {
         // assert the option rather than the side effect.
         expect((observer?.options as { refetchInterval?: number }).refetchInterval).toBe(30_000);
         expect((observer?.options as { refetchOnMount?: boolean }).refetchOnMount).toBe(true);
-        expect(
-            (observer?.options as { refetchOnWindowFocus?: boolean }).refetchOnWindowFocus,
-        ).toBe(true);
+        expect((observer?.options as { refetchOnWindowFocus?: boolean }).refetchOnWindowFocus).toBe(
+            true,
+        );
     });
 });

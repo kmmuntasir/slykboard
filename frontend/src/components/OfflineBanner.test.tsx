@@ -30,9 +30,7 @@ describe('OfflineBanner', () => {
         render(<OfflineBanner />);
         const banner = screen.getByRole('alert');
         expect(banner).toBeInTheDocument();
-        expect(banner).toHaveTextContent(
-            "You're offline — changes will sync when you reconnect.",
-        );
+        expect(banner).toHaveTextContent("You're offline — changes will sync when you reconnect.");
     });
 
     it('shows the banner when an offline event fires after mount', () => {

@@ -25,7 +25,10 @@ function isActionProps(value: unknown): value is EmptyStateActionProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
     return (
-        <div role="status" className="rounded border border-dashed p-8 text-center text-muted-foreground">
+        <div
+            role="status"
+            className="rounded border border-dashed p-8 text-center text-muted-foreground"
+        >
             {icon ? <div className="mb-2 flex justify-center text-2xl">{icon}</div> : null}
             <p className="font-medium text-foreground">{title}</p>
             {description ? <p className="mt-1 text-sm">{description}</p> : null}

@@ -68,7 +68,12 @@ describe('ProjectsPage', () => {
         localStorage.clear();
         useAuthStore.getState().clear();
         navigateMock.mockReset();
-        mockState.projectsValue = { data: [], isLoading: false, error: undefined, refetch: vi.fn() };
+        mockState.projectsValue = {
+            data: [],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
         mockState.createProjectValue = { mutateAsync: vi.fn(), isPending: false };
         useAuthStore.getState().setUser({
             token: 't',
@@ -95,7 +100,12 @@ describe('ProjectsPage', () => {
     });
 
     it('clicking a project navigates', () => {
-        mockState.projectsValue = { data: [projectMock], isLoading: false, error: undefined, refetch: vi.fn() };
+        mockState.projectsValue = {
+            data: [projectMock],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
         renderPage();
 
         fireEvent.click(screen.getByRole('button', { name: /Slyk/i }));

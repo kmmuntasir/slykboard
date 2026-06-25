@@ -86,9 +86,7 @@ describe('ProjectSettingsPage', () => {
     it('renders the heading + LabelManager', () => {
         renderAt('/projects/SLYK/settings');
 
-        expect(
-            screen.getByRole('heading', { name: 'Project Settings' }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Project Settings' })).toBeInTheDocument();
         expect(screen.getByTestId('label-manager')).toBeInTheDocument();
     });
 

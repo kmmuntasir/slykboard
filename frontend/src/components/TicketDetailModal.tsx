@@ -44,7 +44,13 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     // F16 D7: reconcile board/modal drift — refetch the detail while the modal is
     // open (30s, matching the board). RHF defaultValues are seeded once (below),
     // so a background refetch updates the cache but never overwrites unsaved input.
-    const { data: ticket, isLoading, isError, error, refetch } = useQuery({
+    const {
+        data: ticket,
+        isLoading,
+        isError,
+        error,
+        refetch,
+    } = useQuery({
         queryKey: ticketKeys.detail(ticketId),
         queryFn: () => fetchTicket(ticketId),
         refetchInterval: 30_000,

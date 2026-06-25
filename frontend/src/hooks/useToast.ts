@@ -8,5 +8,5 @@ export type ToastApi = typeof toast;
 export { toast };
 
 export function useToast(): ToastApi {
-    return toast;
+  return toast;
 }

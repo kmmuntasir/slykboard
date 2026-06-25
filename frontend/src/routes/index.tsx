@@ -63,7 +63,10 @@ export const router = createBrowserRouter([
                                         element: <BoardPage />,
                                         children: [
                                             // F16: deep-link modal overlay over the mounted board.
-                                            { path: 'tickets/:ticketId', element: <TicketDetailRoute /> },
+                                            {
+                                                path: 'tickets/:ticketId',
+                                                element: <TicketDetailRoute />,
+                                            },
                                         ],
                                     },
                                     {
