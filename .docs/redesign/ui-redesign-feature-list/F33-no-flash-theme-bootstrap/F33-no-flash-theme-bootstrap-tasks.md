@@ -68,7 +68,7 @@
 
 | # | Decision | Choice | Rationale |
 |---|----------|--------|-----------|
-| D1 | Logic extraction | **Extract `resolveInitialTheme(stored, prefersDark)` + `THEME_STORAGE_KEY` to `frontend/src/utils/theme.ts`** | A pure function is unit-testable (table-driven), is the single source of truth for the resolution rule, and is the import seam F34's ThemeProvider consumes. The inline `<script>` cannot `import` it pre-paint (a module import is async → flash), so the script is self-contained vanilla JS mirroring it. Both carry a cross-reference comment. Standard no-flash pattern (cf. next-themes / shadcn). |
+| D1 | Logic extraction | **Extract `resolveInitialTheme(stored, prefersDark)` + `THEME_STORAGE_KEY` to `frontend/src/utils/theme.ts`** (owner-confirmed 2026-06-26) | A pure function is unit-testable (table-driven), is the single source of truth for the resolution rule, and is the import seam F34's ThemeProvider consumes. The inline `<script>` cannot `import` it pre-paint (a module import is async → flash), so the script is self-contained vanilla JS mirroring it. Both carry a cross-reference comment. Standard no-flash pattern (cf. next-themes / shadcn). |
 | D2 | Script form | **Plain `<script>` (NOT `type="module"`), inline in `<head>`, parser-blocking** | Module scripts are deferred by HTML spec → execute after parse → flash. A plain inline `<script>` runs synchronously during HTML parse, before the L10 `/src/main.tsx` module script and before any Vite-injected stylesheet. Decision #3 mandates inline-`<head>`-before-any-stylesheet; the module-defer constraint forces plain-script form. |
 | D3 | `color-scheme` meta | **`<meta name="color-scheme" content="light dark">` in `<head>` right after viewport** | PRD §3.1 mandates this meta to fix the §2.3 scrollbar/form-control flash. Complementary to F32's CSS `color-scheme` property (F32 covers post-CSS-parse UA chrome; meta covers pre-CSS-parse window). No overlap. |
 | D4 | Resolution rule | **stored `'dark'`→dark; `'light'`→light; `'system'`/`null`/invalid → follow OS (`prefersDark ? 'dark' : 'light'`)** | Default = system per PRD §1.6 ("Respect the user's system") and D8. Apply via `document.documentElement.classList.add('dark')` when resolved is dark; do nothing when light (F34 owns the toggle/remove later). Only `.add` is needed at bootstrap — `.dark` is absent by default in the HTML shell. |
@@ -78,9 +78,9 @@
 
 > **Out of F33 scope (explicitly deferred):** ThemeProvider / `useTheme` hook / theme persistence-on-toggle (F34 — WRITES `slykboard-theme`, subscribes to `matchMedia` changes for `system`); theme toggle UI (F40); any `index.css` edit (F32 closed); auth/routing changes (§10); Playwright / real-browser FOUC E2E (F51 visual QA); matchMedia polyfill (not needed — pure-function test sidesteps it).
 
-> **Owner sign-off needed:**
-> 1. **D1 — extraction vs inline-only.** Default: extraction (testable + F34 seam). Surface alternative: keep the resolution rule only inline in `index.html` (simpler, but untestable and F34 must re-derive it). **Recommendation: extraction (default).** Flag if owner prefers inline-only.
-> 2. **F34 contract being established.** `THEME_STORAGE_KEY` and `resolveInitialTheme(stored, prefersDark)` are F33's exported contract TO F34. F34 will import both. Sign-off confirms these names/signatures are stable for the redesign.
+> **Owner sign-off (resolved 2026-06-26):**
+> 1. **D1 — extraction vs inline-only → extraction.** Owner confirmed extraction: pure `resolveInitialTheme` + `THEME_STORAGE_KEY` in `frontend/src/utils/theme.ts` (testable + F34 import seam). Inline-only alternative rejected.
+> 2. **F34 contract → confirmed stable.** `THEME_STORAGE_KEY` and `resolveInitialTheme(stored, prefersDark)` are F33's exported seam TO F34; F34's ThemeProvider will import both. Names/signatures locked for the redesign.
 
 ---
 
@@ -529,8 +529,8 @@ Steps:
 - `index.css` vs main: `UNCHANGED (F32 preserved)`
 - Manual no-flash smoke (informational; F51 owns formal sign-off) — dark stored: `________` · light stored: `________` · system/OS-dark: `________` (PASS/FAIL each)
 - Build / typecheck / test exit codes: `0 / 0 / 0`
-- D1 owner sign-off (extraction vs inline-only): `extraction chosen (default)`
-- F34 contract confirmed: `THEME_STORAGE_KEY + resolveInitialTheme(stored, prefersDark) stable`
+- D1 owner sign-off (extraction vs inline-only): `extraction chosen (owner-confirmed 2026-06-26)`
+- F34 contract confirmed: `THEME_STORAGE_KEY + resolveInitialTheme(stored, prefersDark) stable (owner-confirmed 2026-06-26)`
 
 ---
 
