@@ -70,5 +70,6 @@ export function useUpdateTicket() {
         queryClient.invalidateQueries({ queryKey: boardKeys.all });
       }
     },
+    meta: { revertMessage: 'Ticket update reverted' },
   });
 }

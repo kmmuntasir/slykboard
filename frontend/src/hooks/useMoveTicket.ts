@@ -39,5 +39,6 @@ export function useMoveTicket(slug: string | undefined) {
       queryClient.invalidateQueries({ queryKey: boardKeys.all });
       queryClient.invalidateQueries({ queryKey: ticketKeys.activity(vars.ticketId) });
     },
+    meta: { revertMessage: 'Move reverted' },
   });
 }

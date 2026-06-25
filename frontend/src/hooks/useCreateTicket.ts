@@ -27,5 +27,6 @@ export function useCreateTicket(slug: string | undefined) {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: boardKeys.all });
     },
+    meta: { revertMessage: 'Ticket create reverted' },
   });
 }

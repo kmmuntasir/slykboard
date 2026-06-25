@@ -43,6 +43,7 @@ export function useUpdateLabel(projectSlug: string) {
       qc.invalidateQueries({ queryKey: labelKeys.forProject(projectSlug) });
       qc.invalidateQueries({ queryKey: boardKeys.all });
     },
+    meta: { revertMessage: 'Label update reverted' },
   });
 }
 
@@ -69,5 +70,6 @@ export function useDeleteLabel(projectSlug: string) {
       qc.invalidateQueries({ queryKey: labelKeys.forProject(projectSlug) });
       qc.invalidateQueries({ queryKey: boardKeys.all });
     },
+    meta: { revertMessage: 'Label delete reverted' },
   });
 }

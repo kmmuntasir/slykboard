@@ -26,5 +26,6 @@ export function useDeleteTicket() {
         /* surfaced via mutation.error */
       }
     },
+    meta: { revertMessage: 'Delete reverted' },
   });
 }
