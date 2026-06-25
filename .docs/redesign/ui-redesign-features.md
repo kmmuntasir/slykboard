@@ -42,7 +42,7 @@
 - [x] **F32** Define full semantic token set + `@custom-variant dark` — 🔧 Infrastructure · _deps: F31_
 - [x] **F33** No-flash theme bootstrap (`color-scheme` meta + pre-React script) — 🔧 Infrastructure · _deps: F32_
 - [x] **F34** ThemeProvider + `useTheme` hook (persist + matchMedia + `.dark` toggle) — 🔧 Infrastructure · _deps: F33_
-- [ ] **F35** Shared UI primitives (Button/Field/TextInput/Textarea/SelectInput/Avatar/Badge/Card) — 🔧 Infrastructure · _deps: F32_
+- [x] **F35** Shared UI primitives (Button/Field/TextInput/Textarea/SelectInput/Avatar/Badge/Card) — 🔧 Infrastructure · _deps: F32_
 - [ ] **F36** Dropdown + Tooltip primitives (Radix wrappers, `.dark`-aware portals) — 🔧 Infrastructure · _deps: F35_
 
 **Phase 1 — Chrome (navbar, picker, profile, health, nav scoping)**
