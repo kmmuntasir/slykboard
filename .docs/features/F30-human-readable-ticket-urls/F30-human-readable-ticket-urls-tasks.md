@@ -445,12 +445,12 @@ Steps:
 
 ---
 
-## 9. Cross-cutting decisions — OWNER SIGN-OFF NEEDED
+## 9. Cross-cutting decisions — CONFIRMED (owner-approved 2026-06-25)
 
-1. **Backwards-compat of old `/tickets/<uuid>` deep-links** (D4) — **Recommend 404.** F16's UUID URLs were internal/not widely shared (deep-link shipped for board UX, not external sharing). 404 is simplest — no alias table, no migration, no detection of UUID-shape-vs-`SLUG-NNN`. **Alternative: redirect-to-new** — detect UUID-shaped param, resolve via existing `getTicket(uuid)`, redirect (301/307) to `/projects/:slug/tickets/SLYK-N`. The redirect needs the project slug from the ticket's project (one extra hop). Owner picks. (F30 plan defaults to 404; flag in §1.)
-2. **URL canonical form** (D1) — **Recommend unpadded `SLYK-4`** (matches the spec example verbatim, features.md:570 "SLYK-4"; cleaner URL). **Alternative: padded `SLYK-004`** (consistent with the F12 D2 display badge). Parser accepts BOTH regardless, so this only affects what `handleEdit`/`formatTicketId(...,{padded:false})` emits. Owner picks.
-3. **Prefix-validation strictness** (D3) — **Recommend validate-prefix-match→404** (a deep-link's embedded project prefix must equal the path `:slug`; shareability integrity). **Alternative: derive-number-only (lenient)** — silently resolve `/projects/SLYK/tickets/PX-4` to ticket 4 of project SLYK (ignoring the `PX-` prefix). Lenient risks cross-project confusion; strict is safer. Owner picks.
-4. **Whether F30 reopens slug-rename** (D7) — **Recommend NO (keep slug permanent).** F27 made the slug non-editable (`projectService.ts:100`); F27 tasks.md:25 left the door open ("F30 can revisit if needed"). With a permanent slug, path `:slug` and the ticket's project slug cannot diverge → simple `(slug, ticket_number)` lookup suffices, NO redirect-by-number needed, NO Model B snapshot column. Reopening slug-rename would force redirect-by-number + a stored display-ID snapshot — significant scope. Owner confirms F30 does NOT reopen.
+1. **Backwards-compat of old `/tickets/<uuid>` deep-links** (D4) — ✅ **CONFIRMED: 404.** F16's UUID URLs were internal/not widely shared (deep-link shipped for board UX, not external sharing). 404 is simplest — no alias table, no migration, no UUID-shape detection. (Redirect-to-new rejected — extra hop + complexity for no shared-link benefit.)
+2. **URL canonical form** (D1) — ✅ **CONFIRMED: unpadded `SLYK-4`** (matches the spec example verbatim, features.md:570; cleaner URL). Display badge stays padded `SLYK-004` (F12 D2). Parser accepts BOTH regardless. `handleEdit`/`formatTicketId(...,{padded:false})` emits the unpadded URL form.
+3. **Prefix-validation strictness** (D3) — ✅ **CONFIRMED: validate-prefix-match → 404.** A deep-link's embedded project prefix must equal the path `:slug` (shareability integrity). (Derive-number-only rejected — risks cross-project confusion.)
+4. **Whether F30 reopens slug-rename** (D7) — ✅ **CONFIRMED: NO (keep slug permanent).** F27 made the slug non-editable; F30 does NOT reopen. Path `:slug` and the ticket's project slug cannot diverge → simple `(slug, ticket_number)` lookup suffices, NO redirect-by-number, NO Model B snapshot column.
 
 **Sources:**
 - `basic-PRD.md` REQ-3.1 (ID format `[SLUG]-[NNN]`, example `PX-101`/`PX-102`); §8.3 schema (Tickets.id UUID PK + ticket_number Integer per-project + project_id FK); §7 User Journey 1 (tickets referenced by display ID `PX-104`).
