@@ -21,7 +21,7 @@
 **Edge cases to resolve up front:**
 - **`@radix-ui/react-tooltip` is beyond PRD §3.4's list** (which names only `dropdown-menu`) → **Decision: add it.** Required by behavior PRD §4.5 ("Select a project first" tooltip on disabled nav) and §4.2 (health tooltip). A `disabled` button is not pointer/focus-reachable, so the F42 affordance needs a real tooltip primitive. D5 owner sign-off already given. F31 installs the package; F36 owns Provider/Portal wiring.
 - **Pin majors; Radix minor bumps have broken portal behavior before** → **Decision: pin `lucide-react@^1`, `@radix-ui/react-dropdown-menu@^2`, `@radix-ui/react-tooltip@^1.2.10`; install all three in a single `npm install` so shared Radix internals dedupe to one version.** The `^1.2.10` floor is load-bearing: earlier 1.2.x (e.g. 1.2.8) crashes on React 19 hover ("Maximum update depth exceeded"); 1.2.10 ships the fix. Verify in `package-lock.json` that `@radix-ui/react-popper`, `@radix-ui/react-dismissable-layer`, `@radix-ui/primitive` each resolve to exactly one version.
-- **PRD §3.3 says `rtk pnpm add`, but the repo uses npm workspaces** → **Owner question (see D1 / §3 callout):** No `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`yarn.lock` exist; root `package.json` declares `"workspaces": ["frontend","backend"]` with a 351 KB root `package-lock.json`. Default: truth-on-disk wins → **npm**. Owner must confirm whether to (a) keep npm (default, in scope) or (b) migrate to pnpm (out of F31 scope, cross-cutting).
+- **PRD §3.3 says `rtk pnpm add`, but the repo uses npm workspaces** → **Decision (owner-confirmed): npm.** No `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`yarn.lock` exist; root `package.json` declares `"workspaces": ["frontend","backend"]` with a 351 KB root `package-lock.json`. Truth-on-disk wins → **npm** (`npm install <pkgs> -w frontend`). Owner confirmed 2026-06-26 to keep npm; pnpm migration is out of scope (separate cross-cutting task if ever wanted). PRD §3.3's `pnpm` reference is stale vs. the actual repo state.
 
 ---
 
@@ -54,7 +54,7 @@
 
 | # | Decision | Choice | Rationale |
 |---|----------|--------|-----------|
-| D1 | Package manager | **npm workspaces** (`npm install <pkgs> -w frontend`) | Root `package.json` declares `"workspaces": ["frontend","backend"]`; lockfile is root `package-lock.json` (351 KB); **no** `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `yarn.lock` exist. **Contradicts PRD §3.3's `rtk pnpm add` — truth-on-disk wins.** Owner sign-off needed (see callout below). |
+| D1 | Package manager | **npm workspaces** (`npm install <pkgs> -w frontend`) | Root `package.json` declares `"workspaces": ["frontend","backend"]`; lockfile is root `package-lock.json` (351 KB); **no** `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `yarn.lock` exist. **Contradicts PRD §3.3's `rtk pnpm add` — truth-on-disk wins.** Owner-confirmed 2026-06-26: keep npm. |
 | D2 | `lucide-react` version | **`^1`** | Latest `1.21.0`; React 19 compatible, no peer friction; tree-shaken via named per-icon imports (`import { Layers } from 'lucide-react'`, Vite drops unused). 0.x→1.x was the breaking major — pin `^1`. Per spec §3.3. |
 | D3 | `@radix-ui/react-dropdown-menu` version | **`^2`** | Latest `2.1.18`; React 19 peer range `^19.0` satisfied — no `--legacy-peer-deps`. Portal to `document.body` by default. Per spec §3.4 + §9.2 decision (adopt this primitive). |
 | D4 | `@radix-ui/react-tooltip` version | **`^1.2.10` floor** | Latest `1.2.10`; **load-bearing floor** — earlier 1.2.x (e.g. 1.2.8) crashes on React 19 hover ("Maximum update depth exceeded"); 1.2.10 ships the fix. D5 scope addition (beyond §3.4's list). React 19 supported. |
@@ -64,8 +64,8 @@
 
 > **Out of F31 scope (explicitly deferred):** `components/ui/` directory and any primitive wrappers (F35); `Tooltip.Provider`/`Tooltip.Portal` wiring (F36); `@radix-ui/react-dialog` install (§9.2 — optional/deferred, Modal keeps `useModalA11y`); wiring any `lucide-react` icon into a real component (F32+ — nav, F33 — buttons, etc.); any CSS token additions (F32); any DB migration (none, per the redesign's no-migration stance).
 
-> **Owner sign-off needed (surface in chat):**
-> 1. **npm vs pnpm.** PRD §3.3 specifies `rtk pnpm add`, but the repo is npm workspaces with a root `package-lock.json` and no pnpm artifacts. **Default action (in F31 scope): use npm.** If owner wants to migrate to pnpm, that is a separate cross-cutting task and out of F31 scope. Confirm before merge.
+> **Owner sign-off (resolved 2026-06-26):**
+> 1. **npm vs pnpm** → **npm.** Owner confirmed the repo stays on npm workspaces (root `package-lock.json`); no pnpm migration. PRD §3.3's `rtk pnpm add` reference is stale and should be read as "install via the repo's package manager" (npm). No further sign-off blocking this feature.
 
 ---
 
@@ -277,7 +277,7 @@ Steps:
 - [ ] Committed diff is exactly two files: `frontend/package.json`, `package-lock.json`.
 - [ ] `components/ui/` was **not** created (F35 scope preserved).
 - [ ] `@radix-ui/react-dialog` was **not** installed (§9.2 deferred scope preserved).
-- [ ] Owner sign-off recorded for D1 (npm workspaces, truth-on-disk).
+- [ ] D1 resolved: npm workspaces (owner-confirmed 2026-06-26).
 
 **Integration record (fill during T3):**
 - Feature commit SHA: `________`
