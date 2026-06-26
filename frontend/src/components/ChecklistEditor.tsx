@@ -13,9 +13,13 @@ interface ChecklistEditorProps {
     value: ChecklistItem[];
     onChange: (items: ChecklistItem[]) => void;
     disabled?: boolean;
+    /** F44: when true, suppress the leading <span>Checklist</span> word (the
+     *  surrounding <Field> supplies the label). The done/total count and the
+     *  progress bar always render. */
+    hideLabel?: boolean;
 }
 
-export function ChecklistEditor({ value, onChange, disabled }: ChecklistEditorProps) {
+export function ChecklistEditor({ value, onChange, disabled, hideLabel = false }: ChecklistEditorProps) {
     const [draft, setDraft] = useState('');
 
     const doneCount = value.filter((i) => i.done).length;
@@ -52,7 +56,7 @@ export function ChecklistEditor({ value, onChange, disabled }: ChecklistEditorPr
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Checklist</span>
+                {!hideLabel && <span className="text-sm font-medium">Checklist</span>}
                 <span className="text-xs text-gray-500">
                     {doneCount}/{total}
                 </span>

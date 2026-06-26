@@ -2,18 +2,19 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { AlignLeft, Flag, UserCircle, Tags, ListChecks } from 'lucide-react';
 
 import { ChecklistEditor } from './ChecklistEditor';
 import { LabelMultiSelect } from './LabelMultiSelect';
 import { RichTextEditor } from './RichTextEditor';
 import { PrioritySelect } from './PrioritySelect';
 import { UserSelect } from './UserSelect';
+import { Field } from './ui/Field';
+import { Button } from './ui/Button';
 import type { ChecklistItem, Priority, UpdateTicketDto } from '@/types/ticket';
 
-// F14 T8: labelIds added to the attribute form schema. Controlled via
-// watch/setValue bridging to <LabelMultiSelect> (matches F13 primitive pattern).
-// F15: checklist added — { id, text, done }[], max 50, text ≤ 200. Bridged to
-// <ChecklistEditor> the same way. Defaults to [] (new ticket starts empty).
+// F44: schema + form state FROZEN (PRD §10). Only the JSX layout, the Field
+// wrapping, and the footer buttons changed vs. the single-column form.
 const schema = z.object({
     title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 chars or fewer'),
     description: z.string().max(5000, 'Description must be 5000 chars or fewer'),
@@ -39,11 +40,7 @@ interface TicketAttributeFormProps {
     defaultValues: FormValues;
     onSubmit: (values: UpdateTicketDto) => void | Promise<void>;
     onCancel: () => void;
-    /** F16: notifies the host (e.g. TicketDetailModal) when dirty state changes,
-     *  so it can drive an unsaved-changes guard. Optional — omitted by create/edit modals. */
     onDirtyChange?: (dirty: boolean) => void;
-    /** F17: read-only mode for soft-deleted tickets. Disables all fields
-     *  (via <fieldset disabled> + read-only description) + hides the Save button. */
     readOnly?: boolean;
 }
 
@@ -78,105 +75,112 @@ export function TicketAttributeForm({
     return (
         <form
             onSubmit={handleSubmit((values) => onSubmit(values as UpdateTicketDto))}
-            className="space-y-4"
+            className="space-y-6"
             noValidate
         >
-            <fieldset disabled={readOnly} className="space-y-4 border-0 p-0 m-0">
-                <div>
-                    <label className="block">
-                        <span className="mb-1 block text-sm font-medium">Title</span>
+            {/* F17: <fieldset disabled> wraps BOTH columns so readOnly disables
+                every editable field at once. The footer lives outside it so
+                Cancel/Close stay clickable while disabled. */}
+            <fieldset
+                disabled={readOnly}
+                className="grid grid-cols-1 gap-6 border-0 p-0 m-0 lg:grid-cols-3"
+            >
+                {/* LEFT 2/3 — Title + Description (+ optional Activity). */}
+                <div className="space-y-4 lg:col-span-2">
+                    <Field label="Title" error={errors.title?.message}>
+                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                            <AlignLeft size={14} />
+                        </span>
                         <input
                             type="text"
                             aria-label="Title"
                             {...register('title')}
                             className="w-full rounded border border-gray-300 p-2"
                         />
-                    </label>
-                    {errors.title?.message && (
-                        <p role="alert" className="mt-1 text-sm text-red-600">
-                            {errors.title.message}
-                        </p>
-                    )}
+                    </Field>
+
+                    <Field
+                        label="Description"
+                        error={errors.description?.message}
+                    >
+                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                            <AlignLeft size={14} />
+                        </span>
+                        {readOnly ? (
+                            // F17: read-only view of the archived (sanitized) description.
+                            <div
+                                className="max-w-none rounded border border-gray-200 bg-gray-50 p-2 text-sm"
+                                dangerouslySetInnerHTML={{ __html: watch('description') ?? '' }}
+                            />
+                        ) : (
+                            <RichTextEditor
+                                value={watch('description') ?? ''}
+                                onChange={(html) => setValue('description', html)}
+                            />
+                        )}
+                    </Field>
                 </div>
 
-                <div>
-                    <span className="mb-1 block text-sm font-medium">Description</span>
-                    {readOnly ? (
-                        // F17: read-only view of the archived (sanitized) description.
-                        <div
-                            className="max-w-none rounded border border-gray-200 bg-gray-50 p-2 text-sm"
-                            dangerouslySetInnerHTML={{ __html: watch('description') ?? '' }}
+                {/* RIGHT 1/3 — Priority / Assignee / Labels / Checklist.
+                    Scrolls independently for long checklists (PRD edge case). */}
+                <div className="space-y-4 lg:col-span-1 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
+                    <Field label="Priority" error={errors.priority?.message}>
+                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                            <Flag size={14} />
+                        </span>
+                        <PrioritySelect
+                            hideLabel
+                            value={watch('priority')}
+                            onChange={(p: Priority) => setValue('priority', p)}
                         />
-                    ) : (
-                        <RichTextEditor
-                            value={watch('description') ?? ''}
-                            onChange={(html) => setValue('description', html)}
+                    </Field>
+
+                    <Field label="Assignee" error={errors.assigneeId?.message}>
+                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                            <UserCircle size={14} />
+                        </span>
+                        <UserSelect
+                            hideLabel
+                            value={watch('assigneeId') ?? null}
+                            onChange={(id) => setValue('assigneeId', id)}
                         />
-                    )}
-                    {errors.description?.message && (
-                        <p role="alert" className="mt-1 text-sm text-red-600">
-                            {errors.description.message}
-                        </p>
-                    )}
-                </div>
+                    </Field>
 
-                <div>
-                    <PrioritySelect
-                        value={watch('priority')}
-                        onChange={(p: Priority) => setValue('priority', p)}
-                    />
-                    {errors.priority?.message && (
-                        <p role="alert" className="mt-1 text-sm text-red-600">
-                            {errors.priority.message}
-                        </p>
-                    )}
-                </div>
+                    <Field label="Labels">
+                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                            <Tags size={14} />
+                        </span>
+                        <LabelMultiSelect
+                            projectSlug={projectSlug}
+                            value={watch('labelIds')}
+                            onChange={(ids: string[]) => setValue('labelIds', ids)}
+                        />
+                    </Field>
 
-                <div>
-                    <UserSelect
-                        value={watch('assigneeId') ?? null}
-                        onChange={(id) => setValue('assigneeId', id)}
-                    />
-                    {errors.assigneeId?.message && (
-                        <p role="alert" className="mt-1 text-sm text-red-600">
-                            {errors.assigneeId.message}
-                        </p>
-                    )}
-                </div>
-
-                <div>
-                    <LabelMultiSelect
-                        projectSlug={projectSlug}
-                        value={watch('labelIds')}
-                        onChange={(ids: string[]) => setValue('labelIds', ids)}
-                    />
-                </div>
-
-                <div>
-                    <ChecklistEditor
-                        value={watch('checklist')}
-                        onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
-                    />
+                    <Field label="Checklist">
+                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                            <ListChecks size={14} />
+                        </span>
+                        <ChecklistEditor
+                            hideLabel
+                            value={watch('checklist')}
+                            onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
+                        />
+                    </Field>
                 </div>
             </fieldset>
 
-            <div className="flex gap-2">
+            {/* F44: sticky footer, right-aligned, single Button size. Lives
+                outside <fieldset disabled> so Cancel/Close remain clickable. */}
+            <div className="sticky bottom-0 -mx-6 -mb-6 mt-6 flex justify-end gap-2 border-t border-border bg-background px-6 py-3">
                 {!readOnly && (
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    >
+                    <Button type="submit" variant="primary" size="md" disabled={isSubmitting}>
                         {submitLabel}
-                    </button>
+                    </Button>
                 )}
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    className="rounded border bg-background px-4 py-2 text-sm hover:bg-secondary"
-                >
+                <Button type="button" variant="outline" size="md" onClick={onCancel}>
                     {readOnly ? 'Close' : 'Cancel'}
-                </button>
+                </Button>
             </div>
         </form>
     );

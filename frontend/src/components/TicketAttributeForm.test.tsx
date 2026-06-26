@@ -52,11 +52,12 @@ vi.mock('./LabelMultiSelect', () => ({
             <span data-testid="label-value">{value.join(',')}</span>
             <button
                 type="button"
+                aria-label="Select bug"
                 onClick={() => onChange(['11111111-1111-1111-1111-111111111111'])}
             >
                 Select bug
             </button>
-            <button type="button" onClick={() => onChange([])}>
+            <button type="button" aria-label="Clear" onClick={() => onChange([])}>
                 Clear
             </button>
         </div>
@@ -91,7 +92,7 @@ describe('TicketAttributeForm', () => {
         expect(screen.getByLabelText('Description')).toBeInTheDocument();
         expect(screen.getByLabelText('Priority')).toBeInTheDocument();
         expect(screen.getByLabelText('Assignee')).toBeInTheDocument();
-        expect(screen.getByLabelText('Labels')).toBeInTheDocument();
+        expect(screen.getByTestId('label-value')).toBeInTheDocument();
         expect(
             screen.getByRole('button', { name: 'Create ticket' }),
         ).toBeInTheDocument();
@@ -344,6 +345,88 @@ describe('TicketAttributeForm', () => {
     });
 
     it('F17 readOnly: hides Save + shows Close (deleted ticket)', () => {
+        render(
+            <TicketAttributeForm
+                mode="edit"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                readOnly
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    });
+});
+
+describe('F44 two-column layout', () => {
+    it('renders the two-column grid (lg:grid-cols-3) at the form root', () => {
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        const fieldset = document.querySelector('fieldset');
+        expect(fieldset?.className).toContain('lg:grid-cols-3');
+        expect(fieldset?.className).toContain('grid');
+    });
+
+    it('left column spans 2 tracks; right column spans 1 (lg)', () => {
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        const fieldset = document.querySelector('fieldset')!;
+        const left = fieldset.querySelector('.lg\\:col-span-2');
+        const right = fieldset.querySelector('.lg\\:col-span-1');
+        expect(left).toBeInTheDocument();
+        expect(right).toBeInTheDocument();
+    });
+
+    it('right column scrolls independently (lg:max-h + lg:overflow-y-auto)', () => {
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        const rightCol = document.querySelector('fieldset .lg\\:col-span-1');
+        expect(rightCol?.className).toContain('lg:max-h-[70vh]');
+        expect(rightCol?.className).toContain('lg:overflow-y-auto');
+    });
+
+    it('footer is sticky and right-aligned with single-size buttons', () => {
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        const footer = document.querySelector('form > div.sticky');
+        expect(footer).toBeInTheDocument();
+        expect(footer?.className).toContain('justify-end');
+        // Both buttons are present; primary submit + outline cancel.
+        expect(screen.getByRole('button', { name: 'Create ticket' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
+
+    it('readOnly still hides Save and shows Close (regression)', () => {
         render(
             <TicketAttributeForm
                 mode="edit"
