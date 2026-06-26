@@ -54,7 +54,7 @@
 - [x] **F42** Project-aware nav (Board/Reports muted+disabled+tooltip when project-less) — ✨ Feature · _deps: F36, F37_
 
 **Phase 2 — Ticket modal & forms**
-- [ ] **F43** Modal size prop + themeable panel + X icon (keep useModalA11y) — ⬆ Enhancement · _deps: F35_
+- [x] **F43** Modal size prop + themeable panel + X icon (keep useModalA11y) — ⬆ Enhancement · _deps: F35_
 - [ ] **F44** Two-column TicketAttributeForm (grid + meta sidebar) — ✨ Feature · _deps: F43_
 - [ ] **F45** Field/input consistency sweep (Field/TextInput/SelectInput migration, focus rings, button sizes) — ⬆ Enhancement · _deps: F35, F44_
 
