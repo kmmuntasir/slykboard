@@ -17,6 +17,7 @@ import {
 } from './projects.schema';
 import { parseTicketDisplayId } from '../utils/parseTicketDisplayId';
 import { projectLabelsRouter } from './labels.routes';
+import { projectReportsRouter } from './report.routes';
 
 export const projectsRouter = Router();
 
@@ -142,3 +143,8 @@ projectsRouter.patch(
 
 // F14: project-scoped label routes (/:slug/labels) mounted on projectsRouter.
 projectsRouter.use(projectLabelsRouter);
+
+// F48: project-scoped report routes (/:slug/reports/{time,tickets}) mounted on
+// projectsRouter. Membership-gated by requireProjectMember (F47). Mirrors the
+// projectLabelsRouter bare-mount pattern.
+projectsRouter.use(projectReportsRouter);
