@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router';
 import {
+    Activity,
     Layers,
     LayoutGrid,
     BarChart3,
@@ -25,9 +26,16 @@ import {
     DropdownSeparator,
     DropdownItem,
 } from '@/components/ui/Dropdown';
+import {
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+    TooltipProvider,
+} from '@/components/ui/Tooltip';
 import { ProjectPicker } from './ProjectPicker';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTheme } from '@/hooks/useTheme';
+import { useHealth } from '@/hooks/useHealth';
 
 // F37 — Full-width navbar: shared px-4 md:px-6 gutter, Layers brand mark,
 // left/center/right clusters, lucide nav icons, ProjectPicker moved left,
@@ -66,6 +74,26 @@ export function TopNav() {
     // F40 — single source of truth for theme. Both the navbar segmented control
     // and the profile-menu mirror read this same Context (D3/D5: no local state).
     const { theme, setTheme } = useTheme();
+    // F41 — server-state for the health indicator. Single source of truth;
+    // this component is a pure consumer. ok===undefined while loading (3-state).
+    const health = useHealth();
+
+    type HealthState = 'healthy' | 'unhealthy' | 'loading';
+    const healthState: HealthState = health.isLoading
+        ? 'loading'
+        : health.ok === false || health.isError
+            ? 'unhealthy'
+            : 'healthy';
+
+    const HEALTH_INDICATOR: Record<
+        HealthState,
+        { dot: string; label: string }
+    > = {
+        healthy: { dot: 'bg-success', label: 'Healthy' },
+        unhealthy: { dot: 'bg-danger', label: `Unhealthy — ${health.detail}` },
+        loading: { dot: 'bg-muted-foreground', label: 'Checking…' },
+    };
+    const indicator = HEALTH_INDICATOR[healthState];
 
     // D11 — slide-down panel refs + trap state.
     const panelRef = useRef<HTMLDivElement>(null);
@@ -284,6 +312,30 @@ export function TopNav() {
                     <div className="flex items-center gap-3">
                         {/* F40 — fill the F37 theme slot with the reusable segmented control. */}
                         <ThemeToggle />
+                        {/* F41 (D2) — health indicator folded into the navbar (PRD §4.2). Activity
+                            icon + colored status dot (3-state) with an F36 Tooltip. Fixed-size
+                            trigger (h-9 w-9) + dot (h-2 w-2) → no layout shift on state flip. */}
+                        <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        aria-label="Health"
+                                        className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Activity className="h-4 w-4" aria-hidden="true" />
+                                        <span
+                                            className={cn(
+                                                'absolute right-1.5 top-1.5 h-2 w-2 rounded-full',
+                                                indicator.dot,
+                                            )}
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent>{indicator.label}</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         {avatarBlock}
                         <button
                             ref={toggleRef}

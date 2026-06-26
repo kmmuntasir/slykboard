@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TopNav } from './TopNav';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -40,14 +41,19 @@ const fullUser: AuthUser = {
 };
 
 function renderTopNav() {
+    const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
     return render(
-        // F40 — TopNav now calls useTheme via <ThemeToggle />; must be inside
-        // <ThemeProvider> or every test throws "must be used within ThemeProvider".
-        <ThemeProvider>
-            <MemoryRouter initialEntries={['/']}>
-                <TopNav />
-            </MemoryRouter>
-        </ThemeProvider>,
+        // F40 — TopNav calls useTheme via <ThemeToggle />; must be inside ThemeProvider.
+        // F41 — TopNav calls useHealth via the health indicator; must be inside QueryClientProvider.
+        <QueryClientProvider client={client}>
+            <ThemeProvider>
+                <MemoryRouter initialEntries={['/']}>
+                    <TopNav />
+                </MemoryRouter>
+            </ThemeProvider>
+        </QueryClientProvider>,
     );
 }
 
