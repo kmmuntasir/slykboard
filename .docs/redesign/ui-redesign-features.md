@@ -59,7 +59,7 @@
 - [x] **F45** Field/input consistency sweep (Field/TextInput/SelectInput migration, focus rings, button sizes) — ⬆ Enhancement · _deps: F35, F44_
 
 **Phase 3 — Token migration sweep (correctness + polish)**
-- [ ] **F46** Raw-color → semantic-token sweep (gray-*/bg-white/hex) — ⬆ Enhancement · _deps: F32, F35_
+- [x] **F46** Raw-color → semantic-token sweep (gray-*/bg-white/hex) — ⬆ Enhancement · _deps: F32, F35_
 
 **Phase 4 — Backend: project-scoped Reports (unblocks F49)**
 - [ ] **F47** Build project-membership middleware (scope correction — does not exist) — 🔧 Infrastructure · _deps: —_
