@@ -50,7 +50,7 @@
 - [x] **F38** Project picker rebuild (Radix Dropdown, controlled, distinct states) — ✨ Feature · _deps: F36, F37_
 - [x] **F39** Avatar → profile Dropdown menu with Sign out — ✨ Feature · _deps: F36, F37_
 - [x] **F40** Theme toggle UI (3-way segmented control in navbar + profile menu) — ✨ Feature · _deps: F34, F36, F37_
-- [ ] **F41** Fold HealthBadge into navbar (Activity icon + dot, delete standalone bar) — ⬆ Enhancement · _deps: F37_
+- [x] **F41** Fold HealthBadge into navbar (Activity icon + dot, delete standalone bar) — ⬆ Enhancement · _deps: F37_
 - [ ] **F42** Project-aware nav (Board/Reports muted+disabled+tooltip when project-less) — ✨ Feature · _deps: F36, F37_
 
 **Phase 2 — Ticket modal & forms**
