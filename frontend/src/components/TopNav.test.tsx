@@ -71,7 +71,8 @@ describe('TopNav', () => {
         useAuthStore.getState().setUser({ ...fullUser, avatarUrl: null, name: 'Alice' });
         renderTopNav();
 
-        expect(screen.getByText('AL')).toBeInTheDocument();
+        // F39 — F35 Avatar per-word algo: single-word "Alice" → "A" (was per-name-char "AL").
+        expect(screen.getByText('A')).toBeInTheDocument();
         expect(screen.queryByRole('img')).toBeNull();
     });
 
@@ -84,16 +85,24 @@ describe('TopNav', () => {
         });
         renderTopNav();
 
-        expect(screen.getByText('BO')).toBeInTheDocument();
+        // F39 — D1: F35 Avatar has no email param; TopNav passes name={user.name||user.email},
+        // so "bob@x.com" becomes the initials source. Per-word algo → "B" (was per-name-char "BO").
+        expect(screen.getByText('B')).toBeInTheDocument();
     });
 
-    it('Sign out button calls logout + clear + navigate', async () => {
+    it('Sign out menu item calls logout + clear + navigate', async () => {
         logoutMock.mockResolvedValue(undefined);
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
+        // F39 — Sign out is now a DropdownItem (role="menuitem") inside a Radix menu.
+        // Radix opens on pointerDown (jsdom + PointerEvent polyfill at test-setup.ts:10).
+        const trigger = screen.getByRole('button', { name: 'Account menu' });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+            fireEvent.pointerDown(trigger, { button: 0 });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('menuitem', { name: /Sign out/ }));
         });
 
         expect(logoutMock).toHaveBeenCalledTimes(1);
@@ -107,14 +116,91 @@ describe('TopNav', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
+        const trigger = screen.getByRole('button', { name: 'Account menu' });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+            fireEvent.pointerDown(trigger, { button: 0 });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('menuitem', { name: /Sign out/ }));
         });
 
         expect(logoutMock).toHaveBeenCalledTimes(1);
         expect(useAuthStore.getState().user).toBeNull();
         expect(broadcastLogoutMock).toHaveBeenCalledTimes(1);
         expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
+    });
+
+    // --- F39 profile-menu coverage (PRD §8) ------------------------------------
+
+    it('profile menu opens on avatar trigger pointerDown (menu role appears)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        const trigger = screen.getByRole('button', { name: 'Account menu' });
+        expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+        fireEvent.pointerDown(trigger, { button: 0 });
+
+        expect(screen.getByRole('menu')).toBeInTheDocument();
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('profile menu header shows "Signed in as" + name + email', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+
+        expect(screen.getByText('Signed in as')).toBeInTheDocument();
+        expect(screen.getByText(fullUser.name)).toBeInTheDocument();
+        expect(screen.getByText(fullUser.email)).toBeInTheDocument();
+    });
+
+    it('Sign out menu item invokes handleSignOut (logout + clear + broadcast + navigate)', async () => {
+        logoutMock.mockResolvedValue(undefined);
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('menuitem', { name: /Sign out/ }));
+        });
+
+        expect(logoutMock).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().user).toBeNull();
+        expect(broadcastLogoutMock).toHaveBeenCalledTimes(1);
+        expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
+    });
+
+    it('Sign out menu item uses the destructive variant (text-destructive)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+
+        const signOutItem = screen.getByRole('menuitem', { name: /Sign out/ });
+        expect(signOutItem.className).toContain('text-destructive');
+    });
+
+    it('does NOT render the floating "Sign out" button (replaced by the menu)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        // Menu is closed → the only "Sign out" affordance is inside the closed menu
+        // (not queryable as a button). The old flat <button> is gone.
+        expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    });
+
+    it('avatar trigger has aria-label="Account menu" (a11y + test contract)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        expect(screen.getByRole('button', { name: 'Account menu' })).toBeInTheDocument();
     });
 
     it('renders Settings link when role is ADMIN', () => {

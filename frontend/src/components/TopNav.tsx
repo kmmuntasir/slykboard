@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router';
-import { Layers, LayoutGrid, BarChart3, Settings } from 'lucide-react';
+import { Layers, LayoutGrid, BarChart3, Settings, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { logout } from '@/api/auth';
 import { useRequireRole } from '@/hooks/useRequireRole';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
 import { cn } from '@/components/ui/cn';
+import { Avatar } from '@/components/ui/Avatar';
+import {
+    Dropdown,
+    DropdownTrigger,
+    DropdownContent,
+    DropdownLabel,
+    DropdownSeparator,
+    DropdownItem,
+} from '@/components/ui/Dropdown';
 import { ProjectPicker } from './ProjectPicker';
 
 // F37 — Full-width navbar: shared px-4 md:px-6 gutter, Layers brand mark,
@@ -29,11 +38,6 @@ const PUBLIC_NAV_LINKS: readonly NavLinkItem[] = [
 const ADMIN_NAV_LINKS: readonly NavLinkItem[] = [
     { to: '/settings', label: 'Settings', end: false, icon: Settings },
 ] as const;
-
-function getInitials(name: string, email: string): string {
-    const source = name || email.split('@')[0] || '?';
-    return source.slice(0, 2).toUpperCase();
-}
 
 // D11 — visible focusable selector (borrows the pattern from useModalA11y.ts:20-21).
 // Hand-rolled (NOT useModalA11y — that hook inerts #app-root + scroll-locks body,
@@ -168,27 +172,55 @@ export function TopNav() {
         </div>
     );
 
+    // F39 — Avatar → profile Dropdown. The inline img/initials + flat "Sign out"
+    // button (F37) is replaced by an F36 Dropdown whose trigger is an F35 Avatar
+    // (md, D4). Header: "Signed in as" + name + email. Sign out is a destructive
+    // DropdownItem (D3) calling the existing handleSignOut VERBATIM (§10 untouched).
+    // Theme toggle OMITTED (D2 — F40 owns the navbar toggle; PRD §4.4 permits).
     const avatarBlock = user && (
-        <div className="flex items-center gap-3">
-            {user.avatarUrl ? (
-                <img
-                    src={user.avatarUrl}
-                    alt={user.name}
-                    className="h-8 w-8 rounded-full"
-                />
-            ) : (
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium text-background">
-                    {getInitials(user.name, user.email)}
-                </span>
-            )}
-            <button
-                type="button"
-                onClick={handleSignOut}
-                className="text-sm text-muted hover:text-foreground"
-            >
-                Sign out
-            </button>
-        </div>
+        <Dropdown>
+            <DropdownTrigger asChild>
+                <button
+                    type="button"
+                    aria-label="Account menu"
+                    aria-haspopup="menu"
+                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                    <Avatar
+                        src={user.avatarUrl}
+                        name={user.name || user.email}
+                        size="md"
+                    />
+                </button>
+            </DropdownTrigger>
+            <DropdownContent align="end" className="min-w-[14rem]">
+                <DropdownLabel>
+                    <div className="flex items-center gap-2">
+                        <Avatar
+                            src={user.avatarUrl}
+                            name={user.name || user.email}
+                            size="sm"
+                        />
+                        <div className="flex flex-col">
+                            <span className="text-xs font-normal text-muted-foreground">
+                                Signed in as
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">
+                                {user.name || user.email}
+                            </span>
+                            <span className="truncate text-xs font-normal text-muted-foreground">
+                                {user.email}
+                            </span>
+                        </div>
+                    </div>
+                </DropdownLabel>
+                <DropdownSeparator />
+                <DropdownItem variant="destructive" onSelect={handleSignOut}>
+                    <LogOut className="h-4 w-4" aria-hidden="true" />
+                    <span>Sign out</span>
+                </DropdownItem>
+            </DropdownContent>
+        </Dropdown>
     );
 
     return (
