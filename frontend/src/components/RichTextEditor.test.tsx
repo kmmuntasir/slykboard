@@ -52,6 +52,16 @@ describe('RichTextEditor', () => {
         expect(screen.getByRole('toolbar', { name: 'Formatting' })).toBeInTheDocument();
     });
 
+    it('applies the focus-within ring family classes to the editor wrapper', () => {
+        const { container } = render(<RichTextEditor value="" onChange={vi.fn()} />);
+        // The outer wrapper is the div carrying the border-input + focus-within ring.
+        const wrapper = container.querySelector('[class*="border-input"]') as HTMLElement;
+        expect(wrapper.className).toContain('border-input');
+        expect(wrapper.className).toContain('focus-within:ring-2');
+        expect(wrapper.className).toContain('focus-within:ring-ring');
+        expect(wrapper.className).toContain('focus-within:border-primary');
+    });
+
     it('populates the editor with the initial value on mount', () => {
         render(<RichTextEditor value="<p>hello world</p>" onChange={vi.fn()} />);
         const editor = document.querySelector('.ProseMirror');

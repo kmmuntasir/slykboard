@@ -163,6 +163,7 @@ export function TicketAttributeForm({
                         </span>
                         <ChecklistEditor
                             hideLabel
+                            dense // D2: compact rows for the narrow right-column sidebar
                             value={watch('checklist')}
                             onChange={(items: ChecklistItem[]) => setValue('checklist', items)}
                         />

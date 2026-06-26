@@ -29,7 +29,11 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
     }, [value, editor]);
 
     return (
-        <div className="rounded border bg-card p-2">
+        // D1: focus-within (not focus) — the editable surface is the inner EditorContent;
+        // the ring must fire when it OR a toolbar button is focused. border-input + the
+        // family ring tokens (ring-ring / border-primary) make the editor read as a
+        // TextInput/Textarea family member. bg-card retained (editor ≠ plain input).
+        <div className="rounded-md border border-input bg-card p-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-primary">
             <div className="mb-2 flex gap-2 text-sm" role="toolbar" aria-label="Formatting">
                 <button
                     type="button"

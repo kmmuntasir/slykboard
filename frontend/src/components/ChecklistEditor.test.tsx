@@ -123,4 +123,29 @@ describe('ChecklistEditor', () => {
         expect(screen.getByLabelText('Edit checklist item "A"')).toHaveAttribute('maxlength', '200');
         expect(screen.getByLabelText('New checklist item')).toHaveAttribute('maxlength', '200');
     });
+
+    // D2: dense prop toggles compact px-2 py-1 on item rows.
+    describe('dense variant padding', () => {
+        const tests = [
+            { name: 'dense=true → compact px-2 py-1', dense: true, expectCompact: true },
+            { name: 'dense=false → primary-field family padding (no px-2 py-1)', dense: false, expectCompact: false },
+        ];
+
+        tests.forEach(({ name, dense, expectCompact }) => {
+            it(name, () => {
+                render(
+                    <ChecklistEditor
+                        value={[makeItem({ id: 'i1', text: 'A' })]}
+                        onChange={vi.fn()}
+                        dense={dense}
+                    />,
+                );
+                const itemInput = screen.getByLabelText('Edit checklist item "A"');
+                const cls = itemInput.getAttribute('class') ?? '';
+                // tailwind-merge dedupes; in dense mode px-2/py-1 win over the
+                // TextInput base px-3 py-2. In non-dense mode only px-3 py-2 remain.
+                expect(cls.includes('px-2') && cls.includes('py-1')).toBe(expectCompact);
+            });
+        });
+    });
 });

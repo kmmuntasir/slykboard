@@ -1,5 +1,8 @@
 import { useState } from 'react';
 
+import { Button } from './ui/Button';
+import { TextInput } from './ui/TextInput';
+import { cn } from './ui/cn';
 import type { ChecklistItem } from '@/types/ticket';
 
 // F15 D9: item ids are client-generated (crypto.randomUUID); the backend only
@@ -9,6 +12,10 @@ import type { ChecklistItem } from '@/types/ticket';
 const CHECKLIST_MAX_ITEMS = 50;
 const CHECKLIST_MAX_TEXT = 200;
 
+// D2: dense variant — repeating list rows are deliberately compact (px-2 py-1)
+// vs the px-3 py-2 primary-field family. A named prop, not a one-off className.
+const DENSE_ITEM_CLASS = 'px-2 py-1 text-sm';
+
 interface ChecklistEditorProps {
     value: ChecklistItem[];
     onChange: (items: ChecklistItem[]) => void;
@@ -17,15 +24,24 @@ interface ChecklistEditorProps {
      *  surrounding <Field> supplies the label). The done/total count and the
      *  progress bar always render. */
     hideLabel?: boolean;
+    /** D2: when true, item inputs use compact px-2 py-1 (repeating-row variant). */
+    dense?: boolean;
 }
 
-export function ChecklistEditor({ value, onChange, disabled, hideLabel = false }: ChecklistEditorProps) {
+export function ChecklistEditor({
+    value,
+    onChange,
+    disabled,
+    hideLabel = false,
+    dense = false,
+}: ChecklistEditorProps) {
     const [draft, setDraft] = useState('');
 
     const doneCount = value.filter((i) => i.done).length;
     const total = value.length;
     const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
     const atCapacity = total >= CHECKLIST_MAX_ITEMS;
+    const itemClassName = dense ? DENSE_ITEM_CLASS : undefined;
 
     function addItem() {
         const text = draft.trim();
@@ -86,13 +102,13 @@ export function ChecklistEditor({ value, onChange, disabled, hideLabel = false }
                             aria-label={`Toggle "${item.text}"`}
                             className="h-4 w-4"
                         />
-                        <input
+                        <TextInput
                             type="text"
                             value={item.text}
                             maxLength={CHECKLIST_MAX_TEXT}
                             onChange={(e) => editText(item.id, e.target.value)}
                             aria-label={`Edit checklist item "${item.text}"`}
-                            className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+                            className={cn('flex-1 text-sm', itemClassName)}
                         />
                         <button
                             type="button"
@@ -107,7 +123,7 @@ export function ChecklistEditor({ value, onChange, disabled, hideLabel = false }
             </ul>
 
             <div className="flex items-center gap-2">
-                <input
+                <TextInput
                     type="text"
                     value={draft}
                     maxLength={CHECKLIST_MAX_TEXT}
@@ -120,16 +136,17 @@ export function ChecklistEditor({ value, onChange, disabled, hideLabel = false }
                     }}
                     placeholder="Add an item"
                     aria-label="New checklist item"
-                    className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+                    className={cn('flex-1 text-sm', itemClassName)}
                 />
-                <button
+                <Button
                     type="button"
+                    variant="primary"
+                    size="sm"
                     onClick={addItem}
                     disabled={disabled || !draft.trim() || atCapacity}
-                    className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
                     Add
-                </button>
+                </Button>
             </div>
 
             {atCapacity && (

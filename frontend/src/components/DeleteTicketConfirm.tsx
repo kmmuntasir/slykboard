@@ -1,4 +1,5 @@
 import { Modal } from './Modal';
+import { Button } from './ui/Button';
 
 interface DeleteTicketConfirmProps {
     isOpen: boolean;
@@ -21,26 +22,17 @@ export function DeleteTicketConfirm({
             title="Delete ticket?"
             blockBackdropClose
         >
+            {/* F46: raw gray-600 → token */}
             <p className="mb-4 text-sm text-gray-600">
                 This removes the ticket from the board. Its activity history and label links are archived and the ticket number is not reused. This cannot be undone from the UI.
             </p>
             <div className="flex justify-end gap-2">
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    disabled={isDeleting}
-                    className="rounded px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                >
+                <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={isDeleting}>
                     Cancel
-                </button>
-                <button
-                    type="button"
-                    onClick={onConfirm}
-                    disabled={isDeleting}
-                    className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50"
-                >
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={onConfirm} disabled={isDeleting}>
                     {isDeleting ? 'Deleting…' : 'Delete'}
-                </button>
+                </Button>
             </div>
         </Modal>
     );

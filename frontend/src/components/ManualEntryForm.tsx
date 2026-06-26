@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { Button } from './ui/Button';
+import { TextInput } from './ui/TextInput';
 import { addManualEntry } from '@/api/timer';
 import { timerKeys } from '@/api/queryKeys';
 import { parseDuration } from '@/utils/parseDuration';
@@ -56,33 +58,31 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
 
     return (
         <form onSubmit={handleSubmit} className="mt-3 border-t border-gray-200 pt-3">
+            {/* F46: gray-200 → token */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                <input
+                <TextInput
                     type="text"
                     value={duration}
                     onChange={(e) => setDuration(e.target.value)}
                     placeholder="2h 30m, 90m, or 90"
                     aria-label="Duration"
-                    className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="flex-1 text-sm"
                 />
-                <input
+                <TextInput
                     type="text"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Description (optional)"
                     maxLength={MAX_DESCRIPTION}
                     aria-label="Description"
-                    className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="flex-1 text-sm"
                 />
-                <button
-                    type="submit"
-                    disabled={mutation.isPending}
-                    className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
+                <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
                     {mutation.isPending ? 'Logging…' : 'Log Time'}
-                </button>
+                </Button>
             </div>
             {errorMessage && (
+                // F46: red-600 → token
                 <p className="mt-1 text-sm text-red-600">{errorMessage}</p>
             )}
         </form>
