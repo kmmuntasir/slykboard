@@ -91,9 +91,9 @@
 
 > **Out of F40 scope (explicitly deferred):** `useTheme` / ThemeProvider internals — **F34 (done)**. Dropdown/Tooltip primitives — **F36 (done)**. Navbar right-cluster layout / theme slot shell — **F37 (done)** (F40 fills the slot's contents only). Profile Dropdown shell — **F39 (done)** (F40 adds menu items inside it). Avatar primitive — **F35 (done)**. CSS tokens — **F32 (closed)**. `index.html` no-flash — **F33 (closed)**. Auth flow — **untouched (§10)**. HealthBadge — **F41**. Nav scoping — **F42**. New deps — none (lucide `Sun`/`Monitor`/`Moon`/`Check` via F31; `Dropdown` parts via F36).
 
-> **Owner sign-off needed:**
-> - **D4 → add `<ThemeToggle />` to `LoginPage`** (vs. a separate minimal pre-auth toggle). Default chosen: reuse the same component on `LoginPage`. Surface for sign-off: confirms the login page chrome should host the full segmented control.
-> - **D5 → include the profile-menu mirror** (vs. omit, navbar-only). Default chosen: include (PRD §3.2 "mirrored"). Surface for sign-off: confirms the F39 profile menu grows three theme items.
+> **Owner sign-off (resolved 2026-06-27 — all defaults confirmed):**
+> - **D4 → mount `<ThemeToggle />` on LoginPage** (same component, pre-auth; ThemeProvider covers it). Separate-minimal-toggle alternative rejected.
+> - **D5 → include the profile-menu mirror** (3 DropdownItems: Sun/Monitor/Moon + Check on active; both instances read single useTheme Context). Navbar-only alternative rejected.
 > No further sign-off blocking F40.
 
 ---
