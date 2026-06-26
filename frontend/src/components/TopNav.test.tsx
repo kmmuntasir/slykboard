@@ -13,8 +13,14 @@ const { logoutMock, navigateMock, broadcastLogoutMock } = vi.hoisted(() => ({
 
 vi.mock('@/api/auth', () => ({ logout: logoutMock }));
 vi.mock('@/hooks/useCrossTabLogout', () => ({ broadcastLogout: broadcastLogoutMock }));
+// F37 — return one project so ProjectPicker renders its <select aria-label="Select project">;
+// an empty list renders the "No projects" placeholder span instead, which would break the
+// picker-left assertion. None of the existing assertions query the picker, so this is safe.
 vi.mock('@/hooks/useProjects', () => ({
-    useProjects: () => ({ data: [], isLoading: false }),
+    useProjects: () => ({
+        data: [{ id: 'p1', slug: 'demo', name: 'Demo' }],
+        isLoading: false,
+    }),
 }));
 
 vi.mock('react-router', async (importOriginal) => {
@@ -38,6 +44,11 @@ function renderTopNav() {
             <TopNav />
         </MemoryRouter>,
     );
+}
+
+// lucide icons render as <svg>; assert presence by querying the brand container.
+function brandContainer() {
+    return screen.getByText('Slykboard').parentElement as HTMLElement;
 }
 
 describe('TopNav', () => {
@@ -135,5 +146,99 @@ describe('TopNav', () => {
         expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href');
         expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href');
         expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+    });
+
+    it('renders the Layers brand mark before "Slykboard" (leftmost left cluster)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const brand = brandContainer();
+        // The Layers svg is the first child (icon before the text span).
+        const svg = brand.querySelector('svg');
+        expect(svg).toBeInTheDocument();
+        expect(svg?.getAttribute('aria-hidden')).toBe('true');
+        expect(brand.firstChild).toBe(svg);
+        expect(screen.getByText('Slykboard')).toBeInTheDocument();
+    });
+
+    it('renders a single primary navigation landmark', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    });
+
+    it('renders Board/Reports NavLinks with icons', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const board = screen.getByRole('link', { name: /Board/ });
+        const reports = screen.getByRole('link', { name: /Reports/ });
+        expect(board.querySelector('svg')).toBeInTheDocument();
+        expect(reports.querySelector('svg')).toBeInTheDocument();
+    });
+
+    it('does NOT apply max-w-5xl to the nav (full-width gutter)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const nav = screen.getByRole('navigation', { name: 'Primary' });
+        expect(nav.className).not.toContain('max-w-5xl');
+        expect(nav.className).not.toContain('mx-auto');
+    });
+
+    it('ProjectPicker is in the left cluster (next to brand)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const picker = screen.getByLabelText('Select project');
+        // The picker shares a parent (left cluster) with the brand container.
+        const leftCluster = picker.parentElement;
+        expect(leftCluster?.contains(brandContainer())).toBe(true);
+    });
+
+    it('mobile slide-down panel is hidden by default', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const panel = document.getElementById('mobile-nav-panel');
+        expect(panel).not.toBeNull();
+        expect(panel?.className).toContain('hidden');
+    });
+
+    it('mobile toggle opens the slide-down panel (aria-expanded)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const toggle = screen.getByRole('button', { name: 'Toggle navigation' });
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        const panel = document.getElementById('mobile-nav-panel');
+        // Check class tokens exactly — open panel keeps the md:hidden modifier
+        // (hide-on-desktop), which contains the substring "hidden" but is not the
+        // base `hidden` class. The base `hidden` token must be absent when open.
+        const classes = panel?.className.split(/\s+/) ?? [];
+        expect(classes).toContain('block');
+        expect(classes).not.toContain('hidden');
+    });
+
+    it('mobile panel closes on Escape and restores focus to the toggle', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const toggle = screen.getByRole('button', { name: 'Toggle navigation' });
+        toggle.focus();
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        const panel = document.getElementById('mobile-nav-panel');
+        expect(panel?.className).toContain('hidden');
+        // Focus restored to the toggle.
+        expect(document.activeElement).toBe(toggle);
+    });
+
+    it('mobile panel closes on outside pointerdown', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const toggle = screen.getByRole('button', { name: 'Toggle navigation' });
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        // pointerdown on the header (outside panel + outside toggle) closes.
+        fireEvent.pointerDown(document.body);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
     });
 });
