@@ -47,7 +47,7 @@
 
 **Phase 1 — Chrome (navbar, picker, profile, health, nav scoping)**
 - [x] **F37** Full-width navbar gutter + brand mark + cluster layout — ✨ Feature · _deps: F35_
-- [ ] **F38** Project picker rebuild (Radix Dropdown, controlled, distinct states) — ✨ Feature · _deps: F36, F37_
+- [x] **F38** Project picker rebuild (Radix Dropdown, controlled, distinct states) — ✨ Feature · _deps: F36, F37_
 - [ ] **F39** Avatar → profile Dropdown menu with Sign out — ✨ Feature · _deps: F36, F37_
 - [ ] **F40** Theme toggle UI (3-way segmented control in navbar + profile menu) — ✨ Feature · _deps: F34, F36, F37_
 - [ ] **F41** Fold HealthBadge into navbar (Activity icon + dot, delete standalone bar) — ⬆ Enhancement · _deps: F37_
