@@ -63,7 +63,7 @@
 
 **Phase 4 — Backend: project-scoped Reports (unblocks F49)**
 - [x] **F47** Build project-membership middleware (scope correction — does not exist) — 🔧 Infrastructure · _deps: —_
-- [ ] **F48** Project-scoped report endpoints + membership authz + deprecate old routes — ✨ Feature · _deps: F47_
+- [x] **F48** Project-scoped report endpoints + membership authz + deprecate old routes — ✨ Feature · _deps: F47_
 
 **Phase 5 — Frontend: project-scoped Reports**
 - [ ] **F49** Move Reports route + API client + hook to `/projects/:slug/reports`, add 403/loading/empty surfaces — ✨ Feature · _deps: F48, F42_
