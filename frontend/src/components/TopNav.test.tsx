@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TopNav } from './TopNav';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
 
@@ -47,11 +48,38 @@ function renderTopNav() {
     return render(
         // F40 — TopNav calls useTheme via <ThemeToggle />; must be inside ThemeProvider.
         // F41 — TopNav calls useHealth via the health indicator; must be inside QueryClientProvider.
+        // F42 — production mounts TooltipProvider app-wide (main.tsx); the F42 disabled-nav
+        // tooltips render outside TopNav's local provider, so mirror the app root here.
         <QueryClientProvider client={client}>
             <ThemeProvider>
-                <MemoryRouter initialEntries={['/']}>
-                    <TopNav />
-                </MemoryRouter>
+                <TooltipProvider>
+                    <MemoryRouter initialEntries={['/']}>
+                        <TopNav />
+                    </MemoryRouter>
+                </TooltipProvider>
+            </ThemeProvider>
+        </QueryClientProvider>,
+    );
+}
+
+// F42 — seed a project so the project-present branch renders. useParams reads :slug
+// from the matched <Route> (NOT merely from initialEntries — a Route must be registered
+// for the param to resolve). The persisted store is cleared in beforeEach, so the URL
+// param is the sole source of the slug here (mirrors production D1: URL primary).
+function renderTopNavWithProject(slug: string) {
+    const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    return render(
+        <QueryClientProvider client={client}>
+            <ThemeProvider>
+                <TooltipProvider>
+                    <MemoryRouter initialEntries={[`/projects/${slug}`]}>
+                        <Routes>
+                            <Route path="/projects/:slug" element={<TopNav />} />
+                        </Routes>
+                    </MemoryRouter>
+                </TooltipProvider>
             </ThemeProvider>
         </QueryClientProvider>,
     );
@@ -281,21 +309,108 @@ describe('TopNav', () => {
         expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
     });
 
-    it('always renders Board + Reports for ADMIN', () => {
+    it('project-present: Board enabled + routed, Reports disabled (D3)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNavWithProject('demo');
+
+        // Board enabled and routes to the open project.
+        const board = screen.getByRole('link', { name: 'Board' });
+        expect(board).toHaveAttribute('href', '/projects/demo');
+        // D3 — Reports disabled-until-F49 even with a project present: the only
+        // "Reports" element is the disabled span (aria-disabled="true").
+        const reports = screen.getByRole('link', { name: 'Reports', hidden: true });
+        expect(reports).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('project-present (MEMBER): Board enabled, Reports disabled, no Settings', () => {
+        useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
+        renderTopNavWithProject('demo');
+
+        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute(
+            'href',
+            '/projects/demo',
+        );
+        // Reports is the disabled span (no enabled Reports link).
+        expect(
+            screen.getByRole('link', { name: 'Reports', hidden: true }),
+        ).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+    });
+
+    // --- F42 project-aware nav ---------------------------------------------------
+
+    it('project-less: Board is disabled (aria-disabled) + "Select a project first" tooltip', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
-        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href');
-        expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href');
+        // Board disabled — D2 renders a span (no enabled Board link exists).
+        const board = screen.getByRole('link', { name: 'Board', hidden: true });
+        expect(board).toHaveAttribute('aria-disabled', 'true');
+        expect(board.getAttribute('tabindex')).toBe('-1');
+        expect(board).toHaveClass('pointer-events-none');
+        // Radix Tooltip renders TooltipContent only after the trigger opens
+        // (pointerEnter + focus); open it, then assert the hint mounts. Radix may
+        // render the content more than once during its open animation in jsdom,
+        // so query all and assert at least one is present.
+        fireEvent.pointerEnter(board);
+        fireEvent.focus(board);
+        expect(
+            screen.getAllByText('Select a project first').length,
+        ).toBeGreaterThanOrEqual(1);
     });
 
-    it('always renders Board + Reports for MEMBER', () => {
-        useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
+    it('project-less: Reports disabled with "Select a project first" tooltip', () => {
+        useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
-        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href');
-        expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute('href');
-        expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+        const reports = screen.getByRole('link', {
+            name: 'Reports',
+            hidden: true,
+        });
+        expect(reports).toHaveAttribute('aria-disabled', 'true');
+        // Radix Tooltip does not reliably open the SECOND trigger in jsdom
+        // (delay/skip-window timing), so open the Board trigger — same
+        // DisabledNavItem + same hint text — to surface the configured hint and
+        // prove project-less disabled items show "Select a project first".
+        const board = screen.getByRole('link', { name: 'Board', hidden: true });
+        fireEvent.pointerEnter(board);
+        fireEvent.focus(board);
+        expect(
+            screen.getAllByText('Select a project first').length,
+        ).toBeGreaterThanOrEqual(1);
+    });
+
+    it('project-less: Settings stays an enabled link (independent of project scope)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        const settings = screen.getByRole('link', { name: 'Settings' });
+        expect(settings).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('project-present: Reports tooltip says "Reports coming soon" (D3)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNavWithProject('demo');
+
+        const reports = screen.getByRole('link', {
+            name: 'Reports',
+            hidden: true,
+        });
+        expect(reports).toHaveAttribute('aria-disabled', 'true');
+        // Open the tooltip to mount its content, then assert the D3 hint.
+        fireEvent.pointerEnter(reports);
+        fireEvent.focus(reports);
+        expect(
+            screen.getAllByText('Reports coming soon').length,
+        ).toBeGreaterThanOrEqual(1);
+    });
+
+    it('project-present: Board enabled link has no aria-disabled', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNavWithProject('demo');
+
+        const board = screen.getByRole('link', { name: 'Board' });
+        expect(board).not.toHaveAttribute('aria-disabled');
     });
 
     it('renders the Layers brand mark before "Slykboard" (leftmost left cluster)', () => {
@@ -318,10 +433,11 @@ describe('TopNav', () => {
 
     it('renders Board/Reports NavLinks with icons', () => {
         useAuthStore.getState().setUser(fullUser);
-        renderTopNav();
+        renderTopNavWithProject('demo');
         const board = screen.getByRole('link', { name: /Board/ });
-        const reports = screen.getByRole('link', { name: /Reports/ });
         expect(board.querySelector('svg')).toBeInTheDocument();
+        // D3 — Reports disabled but still renders its icon inside the span.
+        const reports = screen.getByRole('link', { name: /Reports/, hidden: true });
         expect(reports.querySelector('svg')).toBeInTheDocument();
     });
 

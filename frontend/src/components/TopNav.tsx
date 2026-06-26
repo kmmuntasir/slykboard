@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router';
+import { NavLink, useNavigate, useParams } from 'react-router';
 import {
     Activity,
     Layers,
@@ -13,6 +13,7 @@ import {
     Check,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useProjectStore } from '@/stores/useProjectStore';
 import { logout } from '@/api/auth';
 import { useRequireRole } from '@/hooks/useRequireRole';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
@@ -65,12 +66,52 @@ const ADMIN_NAV_LINKS: readonly NavLinkItem[] = [
 const TABBABLE =
     'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// F42 — D2/D5: disabled nav renders as <span role="link" aria-disabled> (NOT a native
+// <button disabled>, which Radix Tooltip cannot wrap focus onto). The span is focusable
+// via the Radix asChild wrapper, so the tooltip fires on focus + hover; pointer-events-none
+// blocks click navigation.
+function DisabledNavItem({
+    label,
+    icon: Icon,
+    hint,
+}: {
+    label: string;
+    icon: typeof LayoutGrid;
+    hint: string;
+}) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span
+                    role="link"
+                    aria-disabled="true"
+                    tabIndex={-1}
+                    className={cn(
+                        'flex cursor-not-allowed items-center gap-1.5 text-sm',
+                        'text-muted-foreground/60 pointer-events-none',
+                    )}
+                >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    <span>{label}</span>
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>{hint}</TooltipContent>
+        </Tooltip>
+    );
+}
+
 export function TopNav() {
     const [open, setOpen] = useState(false);
     const user = useAuthStore((s) => s.user);
     const clear = useAuthStore((s) => s.clear);
     const isAdmin = useRequireRole('ADMIN');
     const navigate = useNavigate();
+    // F42 — D1: URL param is primary, persisted store is the fallback.
+    // Non-null slug ⇒ a project is selected ⇒ Board routes to its board.
+    const params = useParams<{ slug: string }>();
+    const lastSelectedSlug = useProjectStore((s) => s.lastSelectedSlug);
+    const projectSlug = params.slug ?? lastSelectedSlug;
+    const hasProject = projectSlug != null;
     // F40 — single source of truth for theme. Both the navbar segmented control
     // and the profile-menu mirror read this same Context (D3/D5: no local state).
     const { theme, setTheme } = useTheme();
@@ -174,17 +215,30 @@ export function TopNav() {
         <ul className="flex flex-col gap-2 md:flex-row md:items-center md:gap-6">
             {PUBLIC_NAV_LINKS.map((link) => {
                 const Icon = link.icon;
+                const isReports = link.label === 'Reports';
+                const disabled = isReports || !hasProject;
+                const hint = isReports
+                    ? 'Reports coming soon'
+                    : 'Select a project first';
                 return (
                     <li key={link.to}>
-                        <NavLink
-                            to={link.to}
-                            end={link.end}
-                            onClick={() => setOpen(false)}
-                            className={navLinkClass}
-                        >
-                            <Icon className="h-4 w-4" aria-hidden="true" />
-                            <span>{link.label}</span>
-                        </NavLink>
+                        {disabled ? (
+                            <DisabledNavItem
+                                label={link.label}
+                                icon={Icon}
+                                hint={hint}
+                            />
+                        ) : (
+                            <NavLink
+                                to={`/projects/${projectSlug}`}
+                                end={link.end}
+                                onClick={() => setOpen(false)}
+                                className={navLinkClass}
+                            >
+                                <Icon className="h-4 w-4" aria-hidden="true" />
+                                <span>{link.label}</span>
+                            </NavLink>
+                        )}
                     </li>
                 );
             })}

@@ -8,6 +8,7 @@ import { BoardPage } from '@/pages/BoardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 
 vi.mock('@react-oauth/google', () => ({
     useGoogleLogin: vi.fn(() => () => {}),
@@ -37,6 +38,7 @@ function renderShell(initialEntry = '/') {
     render(
         <QueryClientProvider client={client}>
             <ThemeProvider>
+            <TooltipProvider>
             <MemoryRouter initialEntries={[initialEntry]}>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
@@ -48,6 +50,7 @@ function renderShell(initialEntry = '/') {
                     </Route>
                 </Routes>
             </MemoryRouter>
+            </TooltipProvider>
             </ThemeProvider>
         </QueryClientProvider>,
     );

@@ -1,3 +1,4 @@
+import { FolderOpen } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useProjects, useCreateProject } from '@/hooks/useProjects';
@@ -56,10 +57,16 @@ export function ProjectsPage() {
 
     return (
         <div className="mx-auto max-w-2xl space-y-6 p-4">
-            <h1 className="text-2xl font-semibold">Projects</h1>
+            <h1 className="text-2xl font-semibold">Select a project</h1>
 
             {projects && projects.length === 0 ? (
                 <EmptyState
+                    icon={
+                        <FolderOpen
+                            className="h-8 w-8 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                    }
                     title="No projects yet"
                     description="Create your first project to get started."
                     action={
