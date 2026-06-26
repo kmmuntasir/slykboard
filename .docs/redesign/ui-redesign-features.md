@@ -55,7 +55,7 @@
 
 **Phase 2 — Ticket modal & forms**
 - [x] **F43** Modal size prop + themeable panel + X icon (keep useModalA11y) — ⬆ Enhancement · _deps: F35_
-- [ ] **F44** Two-column TicketAttributeForm (grid + meta sidebar) — ✨ Feature · _deps: F43_
+- [x] **F44** Two-column TicketAttributeForm (grid + meta sidebar) — ✨ Feature · _deps: F43_
 - [ ] **F45** Field/input consistency sweep (Field/TextInput/SelectInput migration, focus rings, button sizes) — ⬆ Enhancement · _deps: F35, F44_
 
 **Phase 3 — Token migration sweep (correctness + polish)**
