@@ -1,3 +1,4 @@
+import { type CSSProperties } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import type { Ticket } from '@/types/ticket';
 import { AssigneeAvatar } from './AssigneeAvatar';
@@ -26,7 +27,7 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                     ref={provided.innerRef}
                     {...provided.draggableProps}
                     {...provided.dragHandleProps}
-                    style={provided.draggableProps.style}
+                    style={provided.draggableProps.style as CSSProperties | undefined}
                     onClick={() => onEdit?.(formatTicketId(projectSlug, ticket.ticketNumber))}
                     className="cursor-pointer space-y-2 rounded border bg-card p-2 text-sm shadow-sm"
                     aria-label={`Ticket ${ticketId}: ${ticket.title}`}

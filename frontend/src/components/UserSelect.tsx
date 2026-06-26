@@ -17,7 +17,7 @@ export function UserSelect({ value, onChange, hideLabel = false }: UserSelectPro
             aria-label="Assignee"
             value={value ?? ''}
             onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-            className="w-full rounded border border-gray-300 p-2"
+            className="w-full rounded border border-border p-2"
             disabled={isLoading}
         >
             <option value="">Unassigned</option>

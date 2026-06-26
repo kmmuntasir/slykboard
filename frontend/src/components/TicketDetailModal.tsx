@@ -108,7 +108,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     } else if (!ticket) {
         modalBody = (
             <div className="flex flex-col items-center gap-4 p-8 text-center">
-                <p className="text-base font-semibold text-gray-900">Ticket not found</p>
+                <p className="text-base font-semibold text-foreground">Ticket not found</p>
                 <p className="text-sm text-muted">
                     This ticket may have been deleted or no longer exists.
                 </p>
@@ -126,18 +126,18 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             <>
                 {/* F17: deleted-ticket banner — shown when the ticket is soft-deleted. */}
                 {ticket.deletedAt && (
-                    <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 px-3 py-2">
-                        <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+                    <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2">
+                        <span className="inline-flex items-center rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-destructive-foreground">
                             Deleted
                         </span>
-                        <span className="text-sm text-red-700">
+                        <span className="text-sm text-destructive">
                             This ticket was removed from the board. Its data is archived.
                         </span>
                     </div>
                 )}
 
                 {/* VIEW HEADER — display ID is the modal title; creator + timestamps read-only */}
-                <dl className="mb-4 space-y-1 text-sm text-gray-600">
+                <dl className="mb-4 space-y-1 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                         {ticket.creator && (
                             <>
@@ -189,11 +189,11 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
 
                 {/* F17 T4: admin-only delete entry point. Hidden for members + soft-deleted tickets. */}
                 {isAdmin && !ticket.deletedAt && (
-                    <div className="mt-4 border-t border-gray-200 pt-4">
+                    <div className="mt-4 border-t border-border pt-4">
                         <button
                             type="button"
                             onClick={() => setDeleteConfirmOpen(true)}
-                            className="text-sm text-red-600 hover:underline"
+                            className="text-sm text-destructive hover:underline"
                         >
                             Delete ticket
                         </button>

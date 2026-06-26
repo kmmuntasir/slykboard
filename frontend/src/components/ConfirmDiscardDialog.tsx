@@ -20,7 +20,7 @@ export function ConfirmDiscardDialog({ isOpen, onDiscard, onCancel }: ConfirmDis
             title="Discard changes?"
             blockBackdropClose
         >
-            <p className="mb-4 text-sm text-gray-600">{/* F46: raw gray-600 → token */}
+            <p className="mb-4 text-sm text-muted-foreground">
                 You have unsaved changes. Discard them and close?
             </p>
             <div className="flex justify-end gap-2">

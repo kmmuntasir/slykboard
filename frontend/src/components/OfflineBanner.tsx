@@ -25,7 +25,7 @@ export function OfflineBanner(): JSX.Element | null {
         <div
             role="alert"
             aria-live="assertive"
-            className="sticky top-0 z-50 bg-red-600 px-4 py-2 text-center text-sm text-white"
+            className="sticky top-0 z-50 bg-destructive px-4 py-2 text-center text-sm text-destructive-foreground"
         >
             You're offline — changes will sync when you reconnect.
         </div>

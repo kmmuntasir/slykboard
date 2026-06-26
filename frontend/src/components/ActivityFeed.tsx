@@ -25,15 +25,15 @@ export function ActivityFeed({ ticketId }: ActivityFeedProps) {
     const hiddenCount = entries.length - INITIAL_FEED_VISIBLE;
 
     return (
-        <div className="mt-4 border-t border-gray-200 pt-4">
-            <h3 className="mb-2 text-sm font-semibold text-gray-700">Activity</h3>
-            {isLoading && <p className="text-sm text-gray-500">Loading activity…</p>}
-            {isError && <p className="text-sm text-red-600">Failed to load activity.</p>}
+        <div className="mt-4 border-t border-border pt-4">
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Activity</h3>
+            {isLoading && <p className="text-sm text-muted-foreground">Loading activity…</p>}
+            {isError && <p className="text-sm text-destructive">Failed to load activity.</p>}
             {!isLoading && !isError && entries.length === 0 && (
-                <p className="text-sm text-gray-500">No activity yet.</p>
+                <p className="text-sm text-muted-foreground">No activity yet.</p>
             )}
             {entries.length > 0 && (
-                <ul className="divide-y divide-gray-100">
+                <ul className="divide-y divide-border">
                     {visible.map((entry) => (
                         <ActivityItem key={entry.id} entry={entry} />
                     ))}
@@ -43,7 +43,7 @@ export function ActivityFeed({ ticketId }: ActivityFeedProps) {
                 <button
                     type="button"
                     onClick={() => setExpanded(true)}
-                    className="mt-2 text-sm text-blue-600 hover:underline"
+                    className="mt-2 text-sm text-primary hover:underline"
                 >
                     Show {hiddenCount} more
                 </button>

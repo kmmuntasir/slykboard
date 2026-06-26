@@ -55,17 +55,17 @@ export function SettingsPage() {
         <div className="p-8">
             <h1 className="text-2xl font-semibold">User Management</h1>
 
-            {isLoading && <p className="mt-4 text-sm text-gray-500">Loading…</p>}
+            {isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
             {isError && (
-                <p className="mt-4 text-sm text-red-600">Failed to load users.</p>
+                <p className="mt-4 text-sm text-destructive">Failed to load users.</p>
             )}
             {!isLoading && !isError && roster.length === 0 && (
-                <p className="mt-4 text-sm text-gray-500">No users found.</p>
+                <p className="mt-4 text-sm text-muted-foreground">No users found.</p>
             )}
             {!isLoading && !isError && roster.length > 0 && (
-                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                <div className="mt-4 overflow-hidden rounded-lg border border-border">
                     <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <thead className="bg-muted text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th scope="col" className="px-4 py-2.5">
                                     User
@@ -81,7 +81,7 @@ export function SettingsPage() {
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-border">
                             {roster.map((user) => (
                                 <UserRow
                                     key={user.id}
@@ -118,13 +118,13 @@ export function SettingsPage() {
                     titleId="confirm-action-title"
                     title={confirmTitle(confirmTarget)}
                 >
-                    <p className="text-sm text-gray-600">{confirmBody(confirmTarget)}</p>
+                    <p className="text-sm text-muted-foreground">{confirmBody(confirmTarget)}</p>
                     <div className="mt-6 flex justify-end gap-2">
                         <button
                             type="button"
                             onClick={() => setConfirmTarget(null)}
                             disabled={roleMutation.isPending || blockMutation.isPending}
-                            className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             Cancel
                         </button>
@@ -171,7 +171,7 @@ function UserRow({
     const roleDisabled = rowBusy || (isSelf && isOnlyAdmin) || isBlocked;
 
     return (
-        <tr className="hover:bg-gray-50">
+        <tr className="hover:bg-muted">
             <td className="px-4 py-2.5">
                 <div className="flex items-center gap-2">
                     <AssigneeAvatar
@@ -182,13 +182,13 @@ function UserRow({
                         }}
                     />
                     <div className="flex flex-col">
-                        <span className="text-gray-800">
+                        <span className="text-foreground">
                             {user.fullName}
                             {isSelf && (
-                                <span className="ml-1 text-xs text-gray-400">(you)</span>
+                                <span className="ml-1 text-xs text-muted-foreground">(you)</span>
                             )}
                         </span>
-                        <span className="text-xs text-gray-500">{user.email}</span>
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
                     </div>
                 </div>
             </td>
@@ -209,7 +209,7 @@ function UserRow({
                                 ? 'You are the only admin — promote another member first.'
                                 : undefined
                         }
-                        className="rounded-md border border-gray-200 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+                        className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                         {isAdmin ? 'Demote to Member' : 'Promote to Admin'}
                     </button>
@@ -219,8 +219,8 @@ function UserRow({
                         disabled={rowBusy}
                         className={
                             isBlocked
-                                ? 'rounded-md border border-green-200 px-2.5 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40'
-                                : 'rounded-md border border-red-200 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40'
+                                ? 'rounded-md border border-success/50 px-2.5 py-1 text-xs text-success hover:bg-success/10 disabled:opacity-40'
+                                : 'rounded-md border border-destructive/50 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40'
                         }
                     >
                         {isBlocked ? 'Reactivate' : 'Deactivate'}
@@ -272,26 +272,26 @@ function confirmButtonLabel(action: ConfirmAction): string {
 
 function confirmButtonClass(action: ConfirmAction): string {
     const base =
-        'rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40';
+        'rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40';
     switch (action) {
         case 'promote':
-            return `${base} bg-blue-600 hover:bg-blue-700`;
+            return `${base} bg-primary text-primary-foreground hover:bg-primary/90`;
         case 'demote':
-            return `${base} bg-gray-600 hover:bg-gray-700`;
+            return `${base} bg-secondary text-secondary-foreground hover:bg-secondary/80`;
         case 'deactivate':
-            return `${base} bg-red-600 hover:bg-red-700`;
+            return `${base} bg-destructive text-destructive-foreground hover:bg-destructive/90`;
         case 'reactivate':
-            return `${base} bg-green-600 hover:bg-green-700`;
+            return `${base} bg-success text-success-foreground hover:bg-success/90`;
     }
 }
 
 function RoleBadge({ role }: { role: 'ADMIN' | 'MEMBER' }) {
     return role === 'ADMIN' ? (
-        <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+        <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
             Admin
         </span>
     ) : (
-        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
             Member
         </span>
     );
@@ -299,11 +299,11 @@ function RoleBadge({ role }: { role: 'ADMIN' | 'MEMBER' }) {
 
 function StatusBadge({ blocked }: { blocked: boolean }) {
     return blocked ? (
-        <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+        <span className="inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
             Deactivated
         </span>
     ) : (
-        <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+        <span className="inline-flex items-center rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
             Active
         </span>
     );

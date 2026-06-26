@@ -120,7 +120,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
                         <button
                             type="button"
                             onClick={() => setConfirmDeleteId(col.id)}
-                            className="text-sm text-red-600"
+                            className="text-sm text-destructive"
                         >
                             Delete
                         </button>
@@ -146,7 +146,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
                 </button>
             </div>
 
-            {errMsg && <p className="text-sm text-red-600">{errMsg}</p>}
+            {errMsg && <p className="text-sm text-destructive">{errMsg}</p>}
 
             <Modal
                 isOpen={confirmDeleteId !== null}
@@ -168,7 +168,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
                     <button
                         type="button"
                         onClick={handleConfirmDelete}
-                        className="rounded bg-red-600 px-3 py-1 text-white"
+                        className="rounded bg-destructive px-3 py-1 text-destructive-foreground"
                     >
                         Confirm
                     </button>

@@ -22,8 +22,7 @@ export function DeleteTicketConfirm({
             title="Delete ticket?"
             blockBackdropClose
         >
-            {/* F46: raw gray-600 → token */}
-            <p className="mb-4 text-sm text-gray-600">
+            <p className="mb-4 text-sm text-muted-foreground">
                 This removes the ticket from the board. Its activity history and label links are archived and the ticket number is not reused. This cannot be undone from the UI.
             </p>
             <div className="flex justify-end gap-2">

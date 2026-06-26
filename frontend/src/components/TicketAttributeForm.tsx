@@ -95,7 +95,7 @@ export function TicketAttributeForm({
                             type="text"
                             aria-label="Title"
                             {...register('title')}
-                            className="w-full rounded border border-gray-300 p-2"
+                            className="w-full rounded border border-border p-2"
                         />
                     </Field>
 
@@ -109,7 +109,7 @@ export function TicketAttributeForm({
                         {readOnly ? (
                             // F17: read-only view of the archived (sanitized) description.
                             <div
-                                className="max-w-none rounded border border-gray-200 bg-gray-50 p-2 text-sm"
+                                className="max-w-none rounded border border-border bg-muted p-2 text-sm"
                                 dangerouslySetInnerHTML={{ __html: watch('description') ?? '' }}
                             />
                         ) : (

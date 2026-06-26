@@ -59,7 +59,7 @@ export function LoginPage() {
             </div>
             <h1 className="text-2xl font-semibold text-foreground">Sign in to Slykboard</h1>
             {error && (
-                <p role="alert" className="text-sm text-red-600">
+                <p role="alert" className="text-destructive text-sm">
                     {error}
                 </p>
             )}

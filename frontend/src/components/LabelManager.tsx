@@ -63,7 +63,7 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
             <div className="flex items-center gap-2">
                 <span
                     aria-hidden="true"
-                    className="inline-block h-6 w-6 rounded border border-gray-300"
+                    className="inline-block h-6 w-6 rounded border border-border"
                     style={{ backgroundColor: newColor }}
                 />
                 <input
@@ -72,19 +72,19 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder="New label name"
                     aria-label="New label name"
-                    className="rounded border border-gray-300 p-1"
+                    className="rounded border border-border p-1"
                 />
                 <HexColorInput
                     aria-label="New label color"
                     color={newColor}
                     onChange={setNewColor}
-                    className="w-20 rounded border border-gray-300 p-1"
+                    className="w-20 rounded border border-border p-1"
                 />
                 <button
                     type="button"
                     onClick={handleCreate}
                     disabled={!newName.trim() || createMut.isPending}
-                    className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+                    className="rounded bg-primary px-3 py-1 text-primary-foreground disabled:opacity-50"
                 >
                     Add
                 </button>
@@ -98,7 +98,7 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                             <>
                                 <span
                                     aria-hidden="true"
-                                    className="inline-block h-6 w-6 rounded border border-gray-300"
+                                    className="inline-block h-6 w-6 rounded border border-border"
                                     style={{ backgroundColor: editColor }}
                                 />
                                 <HexColorPicker
@@ -110,19 +110,19 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                                     aria-label="Edit label color"
                                     color={editColor}
                                     onChange={setEditColor}
-                                    className="w-20 rounded border border-gray-300 p-1"
+                                    className="w-20 rounded border border-border p-1"
                                 />
                                 <input
                                     type="text"
                                     value={editName}
                                     onChange={(e) => setEditName(e.target.value)}
                                     aria-label="Edit label name"
-                                    className="rounded border border-gray-300 p-1"
+                                    className="rounded border border-border p-1"
                                 />
                                 <button
                                     type="button"
                                     onClick={saveEdit}
-                                    className="rounded bg-green-600 px-2 py-1 text-white"
+                                    className="rounded bg-success px-2 py-1 text-success-foreground"
                                 >
                                     Save
                                 </button>
@@ -143,7 +143,7 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                                 <button
                                     type="button"
                                     onClick={() => handleConfirmDelete(l.id)}
-                                    className="rounded bg-red-600 px-2 py-1 text-white"
+                                    className="rounded bg-destructive px-2 py-1 text-destructive-foreground"
                                 >
                                     Confirm
                                 </button>
@@ -161,14 +161,14 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                                 <button
                                     type="button"
                                     onClick={() => startEdit(l.id, l.name, l.color)}
-                                    className="text-sm text-blue-600"
+                                    className="text-sm text-primary"
                                 >
                                     Edit
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setConfirmDeleteId(l.id)}
-                                    className="text-sm text-red-600"
+                                    className="text-sm text-destructive"
                                 >
                                     Delete
                                 </button>

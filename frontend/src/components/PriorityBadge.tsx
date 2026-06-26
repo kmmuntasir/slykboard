@@ -2,11 +2,11 @@ import type { Priority } from '@/types/ticket';
 import { PRIORITY_DISPLAY } from '@/types/ticket';
 
 const PRIORITY_TONE: Readonly<Record<Priority, string>> = Object.freeze({
-    LOW: 'bg-slate-100 text-slate-700',
-    MEDIUM: 'bg-blue-100 text-blue-700',
-    HIGH: 'bg-amber-100 text-amber-700',
-    URGENT: 'bg-orange-100 text-orange-700',
-    CRITICAL: 'bg-red-100 text-red-700',
+    LOW: 'bg-secondary text-secondary-foreground',
+    MEDIUM: 'bg-primary/10 text-primary',
+    HIGH: 'bg-warning/15 text-warning',
+    URGENT: 'bg-warning text-warning-foreground',
+    CRITICAL: 'bg-destructive text-destructive-foreground',
 });
 
 interface PriorityBadgeProps {

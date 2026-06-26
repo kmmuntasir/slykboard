@@ -57,8 +57,7 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
         (mutation.error instanceof Error ? mutation.error.message : null);
 
     return (
-        <form onSubmit={handleSubmit} className="mt-3 border-t border-gray-200 pt-3">
-            {/* F46: gray-200 → token */}
+        <form onSubmit={handleSubmit} className="mt-3 border-t border-border pt-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                 <TextInput
                     type="text"
@@ -82,8 +81,7 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
                 </Button>
             </div>
             {errorMessage && (
-                // F46: red-600 → token
-                <p className="mt-1 text-sm text-red-600">{errorMessage}</p>
+                <p className="mt-1 text-sm text-destructive">{errorMessage}</p>
             )}
         </form>
     );

@@ -2,7 +2,7 @@ import { Skeleton, SkeletonBlock, SkeletonLine } from './Skeleton';
 
 export function TicketModalSkeleton() {
     return (
-        <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl" aria-hidden="true">
+        <div className="w-full max-w-lg rounded-lg bg-card p-6 shadow-xl" aria-hidden="true">
             <div className="mb-4 flex items-center justify-between">
                 <SkeletonLine className="h-6 w-32" />
             </div>

@@ -32,7 +32,7 @@ export function ReportsPage() {
 
             {/* Controls: period toggle + window navigation */}
             <div className="mt-4 flex flex-wrap items-center gap-3">
-                <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+                <div className="inline-flex overflow-hidden rounded-md border border-border">
                     <PeriodButton
                         label="Weekly"
                         active={period === 'weekly'}
@@ -49,7 +49,7 @@ export function ReportsPage() {
                     <button
                         type="button"
                         onClick={() => setOffset((o) => o - 1)}
-                        className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                        className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
                     >
                         ← Prev
                     </button>
@@ -57,7 +57,7 @@ export function ReportsPage() {
                         type="button"
                         onClick={() => setOffset((o) => o + 1)}
                         disabled={offset >= 0}
-                        className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+                        className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                         Next →
                     </button>
@@ -66,23 +66,23 @@ export function ReportsPage() {
 
             {/* Window label */}
             {data?.window?.label && (
-                <p className="mt-4 text-lg font-medium text-gray-800">
+                <p className="mt-4 text-lg font-medium text-foreground">
                     {data.window.label}
                 </p>
             )}
 
             {/* Body */}
-            {isLoading && <p className="mt-4 text-sm text-gray-500">Loading…</p>}
+            {isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
             {isError && (
-                <p className="mt-4 text-sm text-red-600">Failed to load report.</p>
+                <p className="mt-4 text-sm text-destructive">Failed to load report.</p>
             )}
             {!isLoading && !isError && users.length === 0 && (
-                <p className="mt-4 text-sm text-gray-500">No time tracked in this period.</p>
+                <p className="mt-4 text-sm text-muted-foreground">No time tracked in this period.</p>
             )}
             {!isLoading && !isError && users.length > 0 && (
-                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                <div className="mt-4 overflow-hidden rounded-lg border border-border">
                     <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <thead className="bg-muted text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th scope="col" className="px-4 py-2.5">
                                     User
@@ -95,9 +95,9 @@ export function ReportsPage() {
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-border">
                             {users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50">
+                                <tr key={user.id} className="hover:bg-muted">
                                     <td className="px-4 py-2.5">
                                         <div className="flex items-center gap-2">
                                             <AssigneeAvatar
@@ -107,13 +107,13 @@ export function ReportsPage() {
                                                     avatarUrl: user.avatarUrl,
                                                 }}
                                             />
-                                            <span className="text-gray-800">
+                                            <span className="text-foreground">
                                                 {user.fullName}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {formatDuration(user.totalMs)}
                                         </span>
                                     </td>
@@ -131,28 +131,28 @@ export function ReportsPage() {
             </h2>
 
             {ticketSummary.data?.window?.label && (
-                <p className="mt-4 text-lg font-medium text-gray-800">
+                <p className="mt-4 text-lg font-medium text-foreground">
                     {ticketSummary.data.window.label}
                 </p>
             )}
 
             {ticketSummary.isLoading && (
-                <p className="mt-4 text-sm text-gray-500">Loading…</p>
+                <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
             )}
             {ticketSummary.isError && (
-                <p className="mt-4 text-sm text-red-600">
+                <p className="mt-4 text-sm text-destructive">
                     Failed to load report.
                 </p>
             )}
             {!ticketSummary.isLoading && !ticketSummary.isError && summaryUsers.length === 0 && (
-                <p className="mt-4 text-sm text-gray-500">
+                <p className="mt-4 text-sm text-muted-foreground">
                     No resolved tickets in this period.
                 </p>
             )}
             {!ticketSummary.isLoading && !ticketSummary.isError && summaryUsers.length > 0 && (
-                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                <div className="mt-4 overflow-hidden rounded-lg border border-border">
                     <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <thead className="bg-muted text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th scope="col" className="px-4 py-2.5">
                                     Assignee
@@ -177,9 +177,9 @@ export function ReportsPage() {
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-border">
                             {summaryUsers.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50">
+                                <tr key={user.id} className="hover:bg-muted">
                                     <td className="px-4 py-2.5">
                                         <div className="flex items-center gap-2">
                                             <AssigneeAvatar
@@ -189,38 +189,38 @@ export function ReportsPage() {
                                                     avatarUrl: user.avatarUrl,
                                                 }}
                                             />
-                                            <span className="text-gray-800">
+                                            <span className="text-foreground">
                                                 {user.fullName}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {user.counts.LOW}
                                         </span>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {user.counts.MEDIUM}
                                         </span>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {user.counts.HIGH}
                                         </span>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {user.counts.URGENT}
                                         </span>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {user.counts.CRITICAL}
                                         </span>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-gray-700">
+                                        <span className="font-mono tabular-nums text-sm text-foreground">
                                             {user.counts.total}
                                         </span>
                                     </td>
@@ -248,8 +248,8 @@ function PeriodButton({ label, active, onClick }: PeriodButtonProps) {
             aria-pressed={active}
             className={
                 active
-                    ? 'bg-primary px-3 py-1.5 text-sm text-white'
-                    : 'bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50'
+                    ? 'bg-primary px-3 py-1.5 text-sm text-primary-foreground'
+                    : 'bg-transparent px-3 py-1.5 text-sm text-foreground hover:bg-muted'
             }
         >
             {label}

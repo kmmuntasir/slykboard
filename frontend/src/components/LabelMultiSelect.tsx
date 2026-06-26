@@ -50,9 +50,9 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                 aria-label="Labels"
                 aria-expanded={open}
                 disabled={isLoading}
-                className="flex min-h-[40px] w-full flex-wrap items-center gap-1 rounded border border-gray-300 p-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-[40px] w-full flex-wrap items-center gap-1 rounded border border-border p-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
             >
-                {selected.length === 0 && <span className="text-gray-400">No labels</span>}
+                {selected.length === 0 && <span className="text-muted-foreground">No labels</span>}
                 {selected.map((l: Label) => (
                     <LabelChip key={l.id} label={l} />
                 ))}
@@ -61,15 +61,15 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                 <div
                     role="listbox"
                     aria-label="Available labels"
-                    className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded border border-gray-300 bg-white shadow-lg"
+                    className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded border border-border bg-card shadow-lg"
                 >
                     {labels.length === 0 && (
-                        <div className="p-2 text-sm text-gray-500">No labels defined</div>
+                        <div className="p-2 text-sm text-muted-foreground">No labels defined</div>
                     )}
                     {labels.map((l: Label) => (
                         <label
                             key={l.id}
-                            className="flex cursor-pointer items-center gap-2 p-2 hover:bg-gray-100"
+                            className="flex cursor-pointer items-center gap-2 p-2 hover:bg-accent"
                         >
                             <input
                                 type="checkbox"

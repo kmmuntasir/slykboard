@@ -18,7 +18,7 @@ export function PrioritySelect({ value, onChange, hideLabel = false }: PriorityS
             aria-label="Priority"
             value={value}
             onChange={(e) => onChange(e.target.value as Priority)}
-            className="w-full rounded border border-gray-300 p-2"
+            className="w-full rounded border border-border p-2"
         >
             {PRIORITIES.map((p) => (
                 <option key={p} value={p}>

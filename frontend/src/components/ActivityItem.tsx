@@ -19,15 +19,15 @@ export function ActivityItem({ entry }: ActivityItemProps) {
             {entry.actor?.avatarUrl ? (
                 <img src={entry.actor.avatarUrl} alt={name} className="h-7 w-7 rounded-full" />
             ) : (
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-xs text-gray-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
                     {name.charAt(0)}
                 </div>
             )}
             <div className="min-w-0 flex-1">
-                <p className="text-sm text-gray-800">
+                <p className="text-sm text-foreground">
                     <span className="font-medium">{name}</span> {clause}
                 </p>
-                <p className="text-xs text-gray-500" title={absolute}>
+                <p className="text-xs text-muted-foreground" title={absolute}>
                     {formatRelativeTime(entry.createdAt)}
                 </p>
             </div>

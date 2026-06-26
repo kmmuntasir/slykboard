@@ -63,11 +63,11 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
                             void handleStop();
                         }}
                         disabled={isStopping}
-                        className="rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                        className="rounded bg-destructive px-4 py-2 text-sm text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
                     >
                         Stop
                     </button>
-                    <span className="font-mono text-sm tabular-nums text-gray-700">
+                    <span className="font-mono text-sm tabular-nums text-foreground">
                         {formatDuration(elapsedMs)}
                     </span>
                 </>
@@ -84,7 +84,7 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
                         Start
                     </button>
                     {lastDurationMs !== null && (
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-muted-foreground">
                             Last tracked: {formatDuration(lastDurationMs)}
                         </span>
                     )}

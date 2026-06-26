@@ -73,14 +73,14 @@ export function ChecklistEditor({
         <div className="space-y-2">
             <div className="flex items-center justify-between">
                 {!hideLabel && <span className="text-sm font-medium">Checklist</span>}
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted-foreground">
                     {doneCount}/{total}
                 </span>
             </div>
 
             {total > 0 && (
                 <div
-                    className="h-1.5 w-full overflow-hidden rounded bg-gray-200"
+                    className="h-1.5 w-full overflow-hidden rounded bg-muted"
                     role="progressbar"
                     aria-valuenow={doneCount}
                     aria-valuemin={0}
@@ -88,7 +88,7 @@ export function ChecklistEditor({
                     aria-label={`Checklist progress: ${doneCount} of ${total} done`}
                 >
                     {/* Dynamic percentage width — only legitimate use of an inline style. */}
-                    <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+                    <div className="h-full bg-success" style={{ width: `${pct}%` }} />
                 </div>
             )}
 
@@ -114,7 +114,7 @@ export function ChecklistEditor({
                             type="button"
                             onClick={() => removeItem(item.id)}
                             aria-label={`Delete checklist item "${item.text}"`}
-                            className="text-sm text-red-600 hover:underline"
+                            className="text-sm text-destructive hover:underline"
                         >
                             Delete
                         </button>
@@ -150,7 +150,7 @@ export function ChecklistEditor({
             </div>
 
             {atCapacity && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                     Maximum {CHECKLIST_MAX_ITEMS} items reached.
                 </p>
             )}

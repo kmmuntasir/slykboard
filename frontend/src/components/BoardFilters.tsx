@@ -68,14 +68,14 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
                 onChange={(e) => setLocalSearch(e.target.value)}
                 placeholder="Search tickets…"
                 aria-label="Search tickets"
-                className="min-w-[14rem] flex-1 rounded border border-gray-300 p-2 text-sm"
+                className="min-w-[14rem] flex-1 rounded border border-border p-2 text-sm"
             />
 
             <select
                 value={assigneeFilter ?? ''}
                 onChange={(e) => setAssigneeFilter(e.target.value || null)}
                 aria-label="Filter by assignee"
-                className="rounded border border-gray-300 p-2 text-sm"
+                className="rounded border border-border p-2 text-sm"
             >
                 <option value="">All assignees</option>
                 {users.map((user) => (
@@ -89,7 +89,7 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
                 value={priorityFilter ?? ''}
                 onChange={(e) => setPriorityFilter(e.target.value || null)}
                 aria-label="Filter by priority"
-                className="rounded border border-gray-300 p-2 text-sm"
+                className="rounded border border-border p-2 text-sm"
             >
                 <option value="">All priorities</option>
                 {PRIORITY_OPTIONS.map((priority) => (
@@ -103,7 +103,7 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
                 value={labelFilter ?? ''}
                 onChange={(e) => setLabelFilter(e.target.value || null)}
                 aria-label="Filter by label"
-                className="rounded border border-gray-300 p-2 text-sm"
+                className="rounded border border-border p-2 text-sm"
             >
                 <option value="">All labels</option>
                 {labels.map((label) => (
