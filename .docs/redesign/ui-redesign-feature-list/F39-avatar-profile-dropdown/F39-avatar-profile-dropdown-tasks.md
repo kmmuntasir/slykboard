@@ -101,10 +101,11 @@
 
 > **Out of F39 scope (explicitly deferred):** Theme toggle — **F40** (F39 omits per D2; the `useTheme` seam at `hooks/useTheme.ts` is F40's to wire). Dropdown/Tooltip primitives — **F36 (done)**. Avatar primitive — **F35 (done)**. Navbar layout/right-cluster slot — **F37 (done)**. CSS tokens — **F32 (closed)**. `index.html` no-flash — **F33 (closed)**. HealthBadge — **F41**. Nav scoping — **F42**. Auth flow / `handleSignOut` internals — **untouched (§10)**; F39 only re-points the call site. New deps — none (Radix via F36; lucide `LogOut` via F31; `Avatar` via F35).
 
-> **Owner sign-off needed (defaults chosen, surface in chat):**
-> - **D1 → email-as-name fallback** (preserves prior email-local-part initials intent via Avatar's per-word algo). Alternative = drop the fallback (nameless users get the `User` icon). Default = preserve behavior.
-> - **D2 → omit theme toggle from menu** (F40 owns; PRD §4.4 permits). Alternative = include a non-wired placeholder. Default = omit (avoid dead UI).
-> - **D3 → destructive variant** (red Sign out, no confirmation modal). Alternative = `default` variant. Default = destructive (matches "leaving" intent).
+> **Owner sign-off (resolved 2026-06-27 — all defaults confirmed):**
+> - **D1 → email-as-name fallback** (`user.name || user.email` → Avatar). Preserves email-local-part initials for nameless users. Drop-fallback alternative rejected.
+> - **D2 → omit theme toggle from menu** (deferred to F40; PRD §4.4 permits). Include-placeholder alternative rejected.
+> - **D3 → destructive variant** (red Sign out; no confirmation modal — session end, not data destruction). Default-variant alternative rejected.
+> No further sign-off blocking F39.
 
 ---
 
