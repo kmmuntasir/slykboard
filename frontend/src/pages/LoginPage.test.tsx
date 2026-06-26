@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { useGoogleLogin } from '@react-oauth/google';
 import { LoginPage } from './LoginPage';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ApiClientError } from '@/api/client';
 import type { AuthResponse } from '@/api/auth';
@@ -47,13 +48,17 @@ function readGoogleLoginOpts(): GoogleLoginOpts {
 
 function renderLogin(initialEntries: Parameters<typeof MemoryRouter>[0]['initialEntries']) {
     return render(
-        <MemoryRouter initialEntries={initialEntries}>
-            <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/" element={<div>home</div>} />
-                <Route path="/reports" element={<div>reports</div>} />
-            </Routes>
-        </MemoryRouter>,
+        // F40 — LoginPage now mounts <ThemeToggle /> (calls useTheme); must be inside
+        // <ThemeProvider> or every test throws "must be used within ThemeProvider".
+        <ThemeProvider>
+            <MemoryRouter initialEntries={initialEntries}>
+                <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/" element={<div>home</div>} />
+                    <Route path="/reports" element={<div>reports</div>} />
+                </Routes>
+            </MemoryRouter>
+        </ThemeProvider>,
     );
 }
 

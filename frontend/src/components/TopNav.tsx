@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router';
-import { Layers, LayoutGrid, BarChart3, Settings, LogOut } from 'lucide-react';
+import {
+    Layers,
+    LayoutGrid,
+    BarChart3,
+    Settings,
+    LogOut,
+    Sun,
+    Monitor,
+    Moon,
+    Check,
+} from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { logout } from '@/api/auth';
 import { useRequireRole } from '@/hooks/useRequireRole';
@@ -16,6 +26,8 @@ import {
     DropdownItem,
 } from '@/components/ui/Dropdown';
 import { ProjectPicker } from './ProjectPicker';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { useTheme } from '@/hooks/useTheme';
 
 // F37 — Full-width navbar: shared px-4 md:px-6 gutter, Layers brand mark,
 // left/center/right clusters, lucide nav icons, ProjectPicker moved left,
@@ -51,6 +63,9 @@ export function TopNav() {
     const clear = useAuthStore((s) => s.clear);
     const isAdmin = useRequireRole('ADMIN');
     const navigate = useNavigate();
+    // F40 — single source of truth for theme. Both the navbar segmented control
+    // and the profile-menu mirror read this same Context (D3/D5: no local state).
+    const { theme, setTheme } = useTheme();
 
     // D11 — slide-down panel refs + trap state.
     const panelRef = useRef<HTMLDivElement>(null);
@@ -215,6 +230,31 @@ export function TopNav() {
                     </div>
                 </DropdownLabel>
                 <DropdownSeparator />
+                {/* F40 (D5) — profile-menu mirror. Same useTheme Context as the navbar
+                    segmented control (no divergent state). Check icon marks the active theme. */}
+                <DropdownLabel>Theme</DropdownLabel>
+                <DropdownItem onSelect={() => setTheme('light')}>
+                    <Sun className="h-4 w-4" aria-hidden="true" />
+                    <span>Light</span>
+                    {theme === 'light' && (
+                        <Check className="ml-auto h-4 w-4" aria-hidden="true" />
+                    )}
+                </DropdownItem>
+                <DropdownItem onSelect={() => setTheme('system')}>
+                    <Monitor className="h-4 w-4" aria-hidden="true" />
+                    <span>System</span>
+                    {theme === 'system' && (
+                        <Check className="ml-auto h-4 w-4" aria-hidden="true" />
+                    )}
+                </DropdownItem>
+                <DropdownItem onSelect={() => setTheme('dark')}>
+                    <Moon className="h-4 w-4" aria-hidden="true" />
+                    <span>Dark</span>
+                    {theme === 'dark' && (
+                        <Check className="ml-auto h-4 w-4" aria-hidden="true" />
+                    )}
+                </DropdownItem>
+                <DropdownSeparator />
                 <DropdownItem variant="destructive" onSelect={handleSignOut}>
                     <LogOut className="h-4 w-4" aria-hidden="true" />
                     <span>Sign out</span>
@@ -240,9 +280,10 @@ export function TopNav() {
                     {/* Center cluster: primary nav (desktop). */}
                     <div className="hidden md:flex">{navItems}</div>
 
-                    {/* Right cluster: theme slot (F40 placeholder) + avatar (F39 swaps). */}
+                    {/* Right cluster: theme slot (F40) + avatar (F39 swaps). */}
                     <div className="flex items-center gap-3">
-                        <div data-slot="theme" aria-hidden="true" />
+                        {/* F40 — fill the F37 theme slot with the reusable segmented control. */}
+                        <ThemeToggle />
                         {avatarBlock}
                         <button
                             ref={toggleRef}

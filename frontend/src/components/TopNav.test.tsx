@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { TopNav } from './TopNav';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
 
@@ -40,9 +41,13 @@ const fullUser: AuthUser = {
 
 function renderTopNav() {
     return render(
-        <MemoryRouter initialEntries={['/']}>
-            <TopNav />
-        </MemoryRouter>,
+        // F40 — TopNav now calls useTheme via <ThemeToggle />; must be inside
+        // <ThemeProvider> or every test throws "must be used within ThemeProvider".
+        <ThemeProvider>
+            <MemoryRouter initialEntries={['/']}>
+                <TopNav />
+            </MemoryRouter>
+        </ThemeProvider>,
     );
 }
 
@@ -54,6 +59,9 @@ function brandContainer() {
 describe('TopNav', () => {
     beforeEach(() => {
         localStorage.clear();
+        // F40 — reset .dark on <html> so F40 toggle tests don't leak theme state
+        // into the F37/F39 DOM assertions (localStorage.clear() alone won't clear it).
+        document.documentElement.classList.remove('dark');
         useAuthStore.getState().clear();
         logoutMock.mockReset();
         navigateMock.mockReset();
@@ -194,6 +202,56 @@ describe('TopNav', () => {
         // Menu is closed → the only "Sign out" affordance is inside the closed menu
         // (not queryable as a button). The old flat <button> is gone.
         expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    });
+
+    // --- F40 theme-toggle coverage (navbar segmented control + profile mirror) ----
+
+    it('renders the theme segmented control (role="group" labelled "Theme")', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        expect(screen.getByRole('group', { name: 'Theme' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Light' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Dark' })).toBeInTheDocument();
+    });
+
+    it('clicking the Dark segment adds .dark to <html>', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+        expect(document.documentElement.classList.contains('dark')).toBe(true);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+        expect(document.documentElement.classList.contains('dark')).toBe(false);
+    });
+
+    it('profile-menu mirror: Theme items appear and invoke setTheme', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+
+        // Three theme menuitems appear (D5 mirror).
+        fireEvent.click(screen.getByRole('menuitem', { name: /Dark/ }));
+        expect(document.documentElement.classList.contains('dark')).toBe(true);
+    });
+
+    it('profile-menu mirror marks the active theme with a Check', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        // Set dark via the navbar segment, open the menu, assert the Dark item is checked.
+        fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+
+        const darkItem = screen.getByRole('menuitem', { name: /Dark/ });
+        expect(darkItem.querySelector('[aria-hidden="true"]')).toBeInTheDocument(); // Check icon
     });
 
     it('avatar trigger has aria-label="Account menu" (a11y + test contract)', () => {

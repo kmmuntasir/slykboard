@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { loginWithGoogle } from '@/api/auth';
 import type { AuthResponse } from '@/api/auth';
 import { ApiClientError } from '@/api/client';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export function LoginPage() {
     const setUser = useAuthStore((s) => s.setUser);
@@ -50,6 +51,12 @@ export function LoginPage() {
 
     return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-8">
+            {/* F40 (D4) — pre-auth theme control. LoginPage is inside <ThemeProvider>
+                (main.tsx:24 wraps RouterProvider) so useTheme works here even though
+                there's no TopNav. Same component as the navbar; same Context. */}
+            <div className="fixed right-4 top-4 z-50">
+                <ThemeToggle />
+            </div>
             <h1 className="text-2xl font-semibold text-foreground">Sign in to Slykboard</h1>
             {error && (
                 <p role="alert" className="text-sm text-red-600">

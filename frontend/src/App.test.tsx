@@ -7,6 +7,7 @@ import { RequireAuth } from '@/components/RequireAuth';
 import { BoardPage } from '@/pages/BoardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 vi.mock('@react-oauth/google', () => ({
     useGoogleLogin: vi.fn(() => () => {}),
@@ -35,6 +36,7 @@ function renderShell(initialEntry = '/') {
     });
     render(
         <QueryClientProvider client={client}>
+            <ThemeProvider>
             <MemoryRouter initialEntries={[initialEntry]}>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
@@ -46,6 +48,7 @@ function renderShell(initialEntry = '/') {
                     </Route>
                 </Routes>
             </MemoryRouter>
+            </ThemeProvider>
         </QueryClientProvider>,
     );
 }
