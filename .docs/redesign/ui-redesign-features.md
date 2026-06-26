@@ -62,7 +62,7 @@
 - [x] **F46** Raw-color → semantic-token sweep (gray-*/bg-white/hex) — ⬆ Enhancement · _deps: F32, F35_
 
 **Phase 4 — Backend: project-scoped Reports (unblocks F49)**
-- [ ] **F47** Build project-membership middleware (scope correction — does not exist) — 🔧 Infrastructure · _deps: —_
+- [x] **F47** Build project-membership middleware (scope correction — does not exist) — 🔧 Infrastructure · _deps: —_
 - [ ] **F48** Project-scoped report endpoints + membership authz + deprecate old routes — ✨ Feature · _deps: F47_
 
 **Phase 5 — Frontend: project-scoped Reports**
