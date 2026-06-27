@@ -69,7 +69,7 @@
 - [x] **F49** Move Reports route + API client + hook to `/projects/:slug/reports`, add 403/loading/empty surfaces — ✨ Feature · _deps: F48, F42_
 
 **Phase 6 — Gates, testing & release**
-- [ ] **F50** Test-update cascade + merge gate (tsc/vite build/lint/prettier green per phase) — 🔧 Infrastructure · _deps: F31–F49_
+- [x] **F50** Test-update cascade + merge gate (tsc/vite build/lint/prettier green per phase) — 🔧 Infrastructure · _deps: F31–F49_
 - [ ] **F51** Light/dark visual QA across all routes + ship redesign release — 🚀 Deployment · _deps: F50_
 
 ---
