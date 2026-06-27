@@ -70,7 +70,7 @@
 
 **Phase 6 — Gates, testing & release**
 - [x] **F50** Test-update cascade + merge gate (tsc/vite build/lint/prettier green per phase) — 🔧 Infrastructure · _deps: F31–F49_
-- [ ] **F51** Light/dark visual QA across all routes + ship redesign release — 🚀 Deployment · _deps: F50_
+- [x] **F51** Light/dark visual QA across all routes + ship redesign release — 🚀 Deployment · _deps: F50_
 
 ---
 
