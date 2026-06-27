@@ -38,19 +38,19 @@ function renderShell(initialEntry = '/') {
     render(
         <QueryClientProvider client={client}>
             <ThemeProvider>
-            <TooltipProvider>
-            <MemoryRouter initialEntries={[initialEntry]}>
-                <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route element={<RequireAuth />}>
-                        <Route element={<AppLayout />}>
-                            <Route path="/" element={<BoardPage />} />
-                            <Route path="/projects/:slug" element={<BoardPage />} />
-                        </Route>
-                    </Route>
-                </Routes>
-            </MemoryRouter>
-            </TooltipProvider>
+                <TooltipProvider>
+                    <MemoryRouter initialEntries={[initialEntry]}>
+                        <Routes>
+                            <Route path="/login" element={<LoginPage />} />
+                            <Route element={<RequireAuth />}>
+                                <Route element={<AppLayout />}>
+                                    <Route path="/" element={<BoardPage />} />
+                                    <Route path="/projects/:slug" element={<BoardPage />} />
+                                </Route>
+                            </Route>
+                        </Routes>
+                    </MemoryRouter>
+                </TooltipProvider>
             </ThemeProvider>
         </QueryClientProvider>,
     );

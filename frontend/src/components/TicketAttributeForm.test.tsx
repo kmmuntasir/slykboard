@@ -93,9 +93,7 @@ describe('TicketAttributeForm', () => {
         expect(screen.getByLabelText('Priority')).toBeInTheDocument();
         expect(screen.getByLabelText('Assignee')).toBeInTheDocument();
         expect(screen.getByTestId('label-value')).toBeInTheDocument();
-        expect(
-            screen.getByRole('button', { name: 'Create ticket' }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create ticket' })).toBeInTheDocument();
     });
 
     it('edit mode renders Save changes button + prefilled defaults', () => {
@@ -116,12 +114,8 @@ describe('TicketAttributeForm', () => {
                 onCancel={vi.fn()}
             />,
         );
-        expect(
-            screen.getByRole('button', { name: 'Save changes' }),
-        ).toBeInTheDocument();
-        expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe(
-            'Existing ticket',
-        );
+        expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+        expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Existing ticket');
         expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
             '<p>prefilled</p>',
         );
@@ -187,9 +181,7 @@ describe('TicketAttributeForm', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
         await waitFor(() => {
-            expect(
-                screen.getByText('Description must be 5000 chars or fewer'),
-            ).toBeInTheDocument();
+            expect(screen.getByText('Description must be 5000 chars or fewer')).toBeInTheDocument();
         });
         expect(onSubmit).not.toHaveBeenCalled();
     });
@@ -325,7 +317,9 @@ describe('TicketAttributeForm', () => {
                 defaultValues={{
                     ...baseDefaults,
                     title: 'Existing',
-                    checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false }],
+                    checklist: [
+                        { id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false },
+                    ],
                 }}
                 onSubmit={onSubmit}
                 onCancel={vi.fn()}
@@ -339,7 +333,9 @@ describe('TicketAttributeForm', () => {
         });
         expect(onSubmit).toHaveBeenCalledWith(
             expect.objectContaining({
-                checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: true }],
+                checklist: [
+                    { id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: true },
+                ],
             }),
         );
     });

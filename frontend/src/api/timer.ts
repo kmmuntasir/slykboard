@@ -1,10 +1,10 @@
 import { apiFetch } from './client';
 import type {
-    StartTimerResponse,
-    StopTimerResponse,
-    ActiveTimerResponse,
-    TimeEntriesResponse,
-    TimeEntryWithDuration,
+  StartTimerResponse,
+  StopTimerResponse,
+  ActiveTimerResponse,
+  TimeEntriesResponse,
+  TimeEntryWithDuration,
 } from '../types/timer';
 
 // F20 T4: server-authoritative timer HTTP client.

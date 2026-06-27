@@ -7,20 +7,12 @@ function createWrapper() {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
     });
-    // eslint-disable-next-line react/display-name
     return function Wrapper({ children }: { children: React.ReactNode }) {
-        return (
-            <QueryClientProvider client={queryClient}>
-                {children}
-            </QueryClientProvider>
-        );
+        return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
     };
 }
 
-function mockHealthResponse(
-    body: unknown,
-    init: { ok?: boolean; status?: number } = {},
-) {
+function mockHealthResponse(body: unknown, init: { ok?: boolean; status?: number } = {}) {
     const ok = init.ok ?? true;
     return vi.fn(() =>
         Promise.resolve({
@@ -107,9 +99,7 @@ describe('useHealth', () => {
             defaultOptions: { queries: { retry: false } },
         });
         const wrapper = ({ children }: { children: React.ReactNode }) => (
-            <QueryClientProvider client={queryClient}>
-                {children}
-            </QueryClientProvider>
+            <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
         );
 
         renderHook(() => useHealth(), { wrapper });
@@ -123,8 +113,6 @@ describe('useHealth', () => {
         const initialCallCount = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls.length;
         renderHook(() => useHealth(), { wrapper });
         await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-        expect((fetchSpy as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
-            initialCallCount,
-        );
+        expect((fetchSpy as ReturnType<typeof vi.fn>).mock.calls.length).toBe(initialCallCount);
     });
 });

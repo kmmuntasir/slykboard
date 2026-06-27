@@ -8,9 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import {
-    ReportsPage,
-} from './ReportsPage';
+import { ReportsPage } from './ReportsPage';
 import { ApiClientError } from '@/api/client';
 
 // Per-render hook state. Tests mutate before render.
@@ -22,8 +20,18 @@ type ReportState = {
 };
 
 const { timeState, ticketState } = vi.hoisted(() => ({
-    timeState: { data: undefined, isLoading: false, error: undefined, refetch: () => {} } as ReportState,
-    ticketState: { data: undefined, isLoading: false, error: undefined, refetch: () => {} } as ReportState,
+    timeState: {
+        data: undefined,
+        isLoading: false,
+        error: undefined,
+        refetch: () => {},
+    } as ReportState,
+    ticketState: {
+        data: undefined,
+        isLoading: false,
+        error: undefined,
+        refetch: () => {},
+    } as ReportState,
 }));
 
 vi.mock('@/hooks/useReport', () => ({
@@ -77,9 +85,7 @@ describe('ReportsPage', () => {
 
     it('renders the ticket-summary empty state when there are no resolved tickets', () => {
         renderAt('/projects/SLYK/reports');
-        expect(
-            screen.getByText('No resolved tickets in this period.'),
-        ).toBeInTheDocument();
+        expect(screen.getByText('No resolved tickets in this period.')).toBeInTheDocument();
     });
 
     it('renders a loading surface while reports load', () => {

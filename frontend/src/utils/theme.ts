@@ -22,10 +22,7 @@ export type ResolvedTheme = 'light' | 'dark';
  *   - 'system' | null | invalid → follow OS (prefersDark ? 'dark' : 'light')
  * Default = system (PRD §1.6, D8).
  */
-export function resolveInitialTheme(
-  stored: string | null,
-  prefersDark: boolean,
-): ResolvedTheme {
+export function resolveInitialTheme(stored: string | null, prefersDark: boolean): ResolvedTheme {
   if (stored === 'dark') return 'dark';
   if (stored === 'light') return 'light';
   // 'system', null, or any invalid value → follow the OS hint.

@@ -12,8 +12,7 @@ import { useBoardUiStore } from '@/stores/useBoardUiStore';
 // F26: reactive filter state drives the queryKey + queryFn so changing any
 // filter refires the board query with a fresh server-side query string.
 export function useBoard(slug: string | undefined) {
-  const { searchQuery, assigneeFilter, priorityFilter, labelFilter } =
-    useBoardUiStore();
+  const { searchQuery, assigneeFilter, priorityFilter, labelFilter } = useBoardUiStore();
 
   const params = new URLSearchParams();
   if (searchQuery) params.set('search', searchQuery);
@@ -26,8 +25,7 @@ export function useBoard(slug: string | undefined) {
     queryKey: [...boardKeys.detail(slug ?? ''), queryString],
     queryFn: () => fetchBoard(slug!, queryString),
     enabled: !!slug,
-    refetchInterval: () =>
-      useBoardUiStore.getState().dragInProgress ? false : POLL_INTERVAL_MS,
+    refetchInterval: () => (useBoardUiStore.getState().dragInProgress ? false : POLL_INTERVAL_MS),
     refetchIntervalInBackground: false,
   });
 }

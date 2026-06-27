@@ -68,11 +68,7 @@ export async function updateLabel(args: {
   if (args.patch.name !== undefined) set.name = args.patch.name;
   if (args.patch.color !== undefined) set.color = args.patch.color;
   try {
-    const updated = await db
-      .update(labels)
-      .set(set)
-      .where(eq(labels.id, args.labelId))
-      .returning();
+    const updated = await db.update(labels).set(set).where(eq(labels.id, args.labelId)).returning();
     if (!updated[0]) throw new AppError(ErrorCode.INTERNAL_ERROR, 'Update returned no row');
     return { old: oldRows[0], new: updated[0] };
   } catch (err: unknown) {
@@ -117,10 +113,13 @@ export async function hydrateLabelsForTickets(
   return map;
 }
 
-export async function replaceTicketLabels(args: {
-  ticketId: string;
-  labelIds: string[];
-}, tx: Tx = db): Promise<void> {
+export async function replaceTicketLabels(
+  args: {
+    ticketId: string;
+    labelIds: string[];
+  },
+  tx: Tx = db,
+): Promise<void> {
   const ticket = await tx.select().from(tickets).where(eq(tickets.id, args.ticketId)).limit(1);
   if (!ticket[0]) throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
 
@@ -139,9 +138,9 @@ export async function replaceTicketLabels(args: {
 
   await tx.delete(ticketLabels).where(eq(ticketLabels.ticketId, args.ticketId));
   if (args.labelIds.length > 0) {
-    await tx.insert(ticketLabels).values(
-      args.labelIds.map((labelId) => ({ ticketId: args.ticketId, labelId })),
-    );
+    await tx
+      .insert(ticketLabels)
+      .values(args.labelIds.map((labelId) => ({ ticketId: args.ticketId, labelId })));
   }
 }
 

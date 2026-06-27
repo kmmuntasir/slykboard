@@ -98,7 +98,10 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
       extraConditions.push(
         inArray(
           tickets.id,
-          db.select({ id: ticketLabels.ticketId }).from(ticketLabels).where(eq(ticketLabels.labelId, label)),
+          db
+            .select({ id: ticketLabels.ticketId })
+            .from(ticketLabels)
+            .where(eq(ticketLabels.labelId, label)),
         ),
       );
     }

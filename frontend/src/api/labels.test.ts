@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { listLabels, createLabel, updateLabel, deleteLabel } from './labels';
-import type {
-  Label,
-  CreateLabelDto,
-  UpdateLabelDto,
-} from '../types/label';
+import type { Label, CreateLabelDto, UpdateLabelDto } from '../types/label';
 
 // F14 T5: assert each label API fn hits the right URL/method/body and unwraps
 // the { data } envelope. Mocks globalThis.fetch — matches tickets.test.ts style.
@@ -20,9 +16,9 @@ describe('listLabels', () => {
 
   it('GETs /projects/:slug/labels and unwraps the envelope', async () => {
     const returned: Label[] = [sampleLabel];
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: returned }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: returned }), { status: 200 }));
 
     const result = await listLabels('slyk');
 
@@ -36,10 +32,9 @@ describe('listLabels', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'nope', code: 'INTERNAL_ERROR' } }),
-        { status: 500 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'nope', code: 'INTERNAL_ERROR' } }), {
+        status: 500,
+      }),
     );
 
     await expect(listLabels('slyk')).rejects.toThrow('nope');
@@ -52,9 +47,9 @@ describe('createLabel', () => {
   const dto: CreateLabelDto = { name: 'Bug', color: '#FF0000' };
 
   it('POSTs /projects/:slug/labels with the dto body and unwraps the envelope', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: sampleLabel }), { status: 201 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: sampleLabel }), { status: 201 }));
 
     const result = await createLabel('slyk', dto);
 
@@ -92,9 +87,9 @@ describe('updateLabel', () => {
 
   cases.forEach(({ name, dto }) => {
     it(`PATCHes /labels/:id with ${name}`, async () => {
-      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ data: sampleLabel }), { status: 200 }),
-      );
+      const spy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(JSON.stringify({ data: sampleLabel }), { status: 200 }));
 
       const result = await updateLabel('l1', dto);
 
@@ -110,10 +105,9 @@ describe('updateLabel', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'not found', code: 'NOT_FOUND' } }),
-        { status: 404 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'not found', code: 'NOT_FOUND' } }), {
+        status: 404,
+      }),
     );
 
     await expect(updateLabel('l1', { name: 'x' })).rejects.toThrow('not found');
@@ -124,9 +118,9 @@ describe('deleteLabel', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('DELETEs /labels/:id and unwraps { id }', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: { id: 'l1' } }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: { id: 'l1' } }), { status: 200 }));
 
     const result = await deleteLabel('l1');
 
@@ -141,10 +135,9 @@ describe('deleteLabel', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'not found', code: 'NOT_FOUND' } }),
-        { status: 404 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'not found', code: 'NOT_FOUND' } }), {
+        status: 404,
+      }),
     );
 
     await expect(deleteLabel('l1')).rejects.toThrow('not found');

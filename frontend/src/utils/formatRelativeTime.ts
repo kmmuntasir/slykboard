@@ -14,13 +14,13 @@ const WEEK = 7 * DAY;
 // "3 hours ago"/"2 days ago"/"1 week ago" for the given ISO timestamp vs `now`.
 // `now` is injectable so tests are deterministic.
 export function formatRelativeTime(iso: string, now: Date = new Date()): string {
-    const then = new Date(iso).getTime();
-    const diffMs = then - now.getTime(); // negative = past
-    const absMs = Math.abs(diffMs);
+  const then = new Date(iso).getTime();
+  const diffMs = then - now.getTime(); // negative = past
+  const absMs = Math.abs(diffMs);
 
-    if (absMs < MINUTE) return 'now';
-    if (absMs < HOUR) return rtf.format(Math.round(diffMs / MINUTE), 'minute');
-    if (absMs < DAY) return rtf.format(Math.round(diffMs / HOUR), 'hour');
-    if (absMs < WEEK) return rtf.format(Math.round(diffMs / DAY), 'day');
-    return rtf.format(Math.round(diffMs / WEEK), 'week');
+  if (absMs < MINUTE) return 'now';
+  if (absMs < HOUR) return rtf.format(Math.round(diffMs / MINUTE), 'minute');
+  if (absMs < DAY) return rtf.format(Math.round(diffMs / HOUR), 'hour');
+  if (absMs < WEEK) return rtf.format(Math.round(diffMs / DAY), 'day');
+  return rtf.format(Math.round(diffMs / WEEK), 'week');
 }

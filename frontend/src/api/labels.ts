@@ -11,20 +11,14 @@ export async function listLabels(projectSlug: string): Promise<Label[]> {
   return apiFetch<Label[]>(`/projects/${projectSlug}/labels`);
 }
 
-export async function createLabel(
-  projectSlug: string,
-  dto: CreateLabelDto,
-): Promise<Label> {
+export async function createLabel(projectSlug: string, dto: CreateLabelDto): Promise<Label> {
   return apiFetch<Label>(`/projects/${projectSlug}/labels`, {
     method: 'POST',
     body: JSON.stringify(dto),
   });
 }
 
-export async function updateLabel(
-  labelId: string,
-  dto: UpdateLabelDto,
-): Promise<Label> {
+export async function updateLabel(labelId: string, dto: UpdateLabelDto): Promise<Label> {
   return apiFetch<Label>(`/labels/${labelId}`, {
     method: 'PATCH',
     body: JSON.stringify(dto),

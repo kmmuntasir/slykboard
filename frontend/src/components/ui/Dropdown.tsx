@@ -3,30 +3,27 @@
 // Portal-dark: renders via Radix Portal to document.body; resolves bg-popover because
 // .dark lives on <html> (F33/F34 invariant). If anyone moves .dark to a wrapper div,
 // portals break silently — flagged for F51 visual QA.
-import {
-    forwardRef,
-    type ComponentPropsWithoutRef,
-    type ElementRef,
-} from 'react'
-import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { cn } from './cn'
+import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from 'react';
+import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { cn } from './cn';
 
 // --- Root -------------------------------------------------------------------
-export const Dropdown = DropdownMenuPrimitive.Root
+export const Dropdown = DropdownMenuPrimitive.Root;
 
 // --- Trigger ----------------------------------------------------------------
 export const DropdownTrigger = forwardRef<
     ElementRef<typeof DropdownMenuPrimitive.Trigger>,
     ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
 >(function DropdownTrigger({ ...rest }, ref) {
-    return <DropdownMenuPrimitive.Trigger ref={ref} {...rest} />
-})
+    return <DropdownMenuPrimitive.Trigger ref={ref} {...rest} />;
+});
 
 // --- Content (wraps Portal + Content internally) ----------------------------
-export interface DropdownContentProps
-    extends ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> {
+export interface DropdownContentProps extends ComponentPropsWithoutRef<
+    typeof DropdownMenuPrimitive.Content
+> {
     /** Side offset in px (Radix default 0; F36 default 4 for a small gap). */
-    sideOffset?: number
+    sideOffset?: number;
 }
 
 export const DropdownContent = forwardRef<
@@ -49,22 +46,23 @@ export const DropdownContent = forwardRef<
                 {...rest}
             />
         </DropdownMenuPrimitive.Portal>
-    )
-})
+    );
+});
 
 // --- Item -------------------------------------------------------------------
-export type DropdownItemVariant = 'default' | 'destructive'
+export type DropdownItemVariant = 'default' | 'destructive';
 
-export interface DropdownItemProps
-    extends ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> {
-    variant?: DropdownItemVariant
+export interface DropdownItemProps extends ComponentPropsWithoutRef<
+    typeof DropdownMenuPrimitive.Item
+> {
+    variant?: DropdownItemVariant;
 }
 
 const ITEM_VARIANT_CLASSES: Record<DropdownItemVariant, string> = {
     default: 'focus:bg-accent focus:text-accent-foreground',
     destructive:
         'text-destructive focus:bg-accent focus:text-accent-foreground data-[disabled]:opacity-50',
-}
+};
 
 export const DropdownItem = forwardRef<
     ElementRef<typeof DropdownMenuPrimitive.Item>,
@@ -82,8 +80,8 @@ export const DropdownItem = forwardRef<
             )}
             {...rest}
         />
-    )
-})
+    );
+});
 
 // --- Separator --------------------------------------------------------------
 export const DropdownSeparator = forwardRef<
@@ -96,8 +94,8 @@ export const DropdownSeparator = forwardRef<
             className={cn('-mx-1 my-1 h-px bg-border', className)}
             {...rest}
         />
-    )
-})
+    );
+});
 
 // --- Label ------------------------------------------------------------------
 export const DropdownLabel = forwardRef<
@@ -107,14 +105,11 @@ export const DropdownLabel = forwardRef<
     return (
         <DropdownMenuPrimitive.Label
             ref={ref}
-            className={cn(
-                'px-2 py-1.5 text-sm font-semibold text-muted-foreground',
-                className,
-            )}
+            className={cn('px-2 py-1.5 text-sm font-semibold text-muted-foreground', className)}
             {...rest}
         />
-    )
-})
+    );
+});
 
 // --- Group ------------------------------------------------------------------
-export const DropdownGroup = DropdownMenuPrimitive.Group
+export const DropdownGroup = DropdownMenuPrimitive.Group;

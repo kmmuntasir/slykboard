@@ -61,7 +61,8 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     googleCallbackUrl: envSource.GOOGLE_CALLBACK_URL,
     allowedDomain: envSource.ALLOWED_DOMAIN || undefined,
     directDatabaseUrl: envSource.DIRECT_DATABASE_URL?.trim() || envSource.DATABASE_URL,
-    runMigrationsOnStart: parseBooleanFlag(envSource.RUN_MIGRATIONS_ON_START) ?? nodeEnv === 'production',
+    runMigrationsOnStart:
+      parseBooleanFlag(envSource.RUN_MIGRATIONS_ON_START) ?? nodeEnv === 'production',
   };
 }
 

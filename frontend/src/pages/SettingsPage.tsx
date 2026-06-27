@@ -20,7 +20,11 @@ interface ConfirmTarget {
 // demote hint is client-side courtesy; the server enforces the real guard.
 export function SettingsPage() {
     const currentUser = useAuthStore((s) => s.user);
-    const { data: users, isLoading, isError } = useQuery({
+    const {
+        data: users,
+        isLoading,
+        isError,
+    } = useQuery({
         queryKey: ['users'],
         queryFn: fetchUsers,
     });
@@ -56,9 +60,7 @@ export function SettingsPage() {
             <h1 className="text-2xl font-semibold">User Management</h1>
 
             {isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
-            {isError && (
-                <p className="mt-4 text-sm text-destructive">Failed to load users.</p>
-            )}
+            {isError && <p className="mt-4 text-sm text-destructive">Failed to load users.</p>}
             {!isLoading && !isError && roster.length === 0 && (
                 <p className="mt-4 text-sm text-muted-foreground">No users found.</p>
             )}

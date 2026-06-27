@@ -68,9 +68,7 @@ describe('useLabels', () => {
   });
 
   it('surfaces error state when listLabels rejects', async () => {
-    vi.mocked(listLabels).mockRejectedValue(
-      new ApiClientError('boom', 500, 'INTERNAL_ERROR'),
-    );
+    vi.mocked(listLabels).mockRejectedValue(new ApiClientError('boom', 500, 'INTERNAL_ERROR'));
 
     const queryClient = newQueryClient();
     const { result } = renderHook(() => useLabels(SLUG), {

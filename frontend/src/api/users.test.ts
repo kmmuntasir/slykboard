@@ -10,9 +10,9 @@ describe('listUsers', () => {
   ];
 
   it('GETs /users and returns the unwrapped data array', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: users }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: users }), { status: 200 }));
 
     const result = await listUsers();
 
@@ -26,10 +26,9 @@ describe('listUsers', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'forbidden', code: 'FORBIDDEN' } }),
-        { status: 403 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'forbidden', code: 'FORBIDDEN' } }), {
+        status: 403,
+      }),
     );
 
     await expect(listUsers()).rejects.toThrow('forbidden');

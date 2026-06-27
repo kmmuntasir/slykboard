@@ -59,9 +59,7 @@ export function ChecklistEditor({
 
     function editText(id: string, text: string) {
         onChange(
-            value.map((i) =>
-                i.id === id ? { ...i, text: text.slice(0, CHECKLIST_MAX_TEXT) } : i,
-            ),
+            value.map((i) => (i.id === id ? { ...i, text: text.slice(0, CHECKLIST_MAX_TEXT) } : i)),
         );
     }
 

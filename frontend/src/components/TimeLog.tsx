@@ -41,7 +41,11 @@ export function TimeLog({ ticketId }: TimeLogProps) {
                         <li key={entry.id} className="py-2">
                             <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                                 {entry.user?.avatarUrl && (
-                                    <img src={entry.user.avatarUrl} alt="" className="h-4 w-4 rounded-full" />
+                                    <img
+                                        src={entry.user.avatarUrl}
+                                        alt=""
+                                        className="h-4 w-4 rounded-full"
+                                    />
                                 )}
                                 {entry.user?.fullName ?? 'Unknown user'}
                             </div>
@@ -69,9 +73,7 @@ export function TimeLog({ ticketId }: TimeLogProps) {
                                         </span>
                                         <span className="text-foreground">
                                             <span className="text-muted-foreground">End: </span>
-                                            {entry.endTime
-                                                ? formatDate(entry.endTime)
-                                                : 'Running'}
+                                            {entry.endTime ? formatDate(entry.endTime) : 'Running'}
                                         </span>
                                     </div>
                                     <span className="font-mono tabular-nums text-sm text-foreground">

@@ -72,10 +72,9 @@ describe('BoardFilters', () => {
         });
 
         // Debounced: wait for the store to update after 300ms.
-        await waitFor(
-            () => expect(useBoardUiStore.getState().searchQuery).toBe('ci'),
-            { timeout: 1000 },
-        );
+        await waitFor(() => expect(useBoardUiStore.getState().searchQuery).toBe('ci'), {
+            timeout: 1000,
+        });
     });
 
     it('selecting an assignee writes the user id (or null for All)', async () => {

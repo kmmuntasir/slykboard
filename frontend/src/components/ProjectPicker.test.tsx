@@ -110,9 +110,7 @@ describe('ProjectPicker — distinct states', () => {
             setup: () => setProjects({ data: [] }),
             expects: (open: () => void) => {
                 open();
-                expect(
-                    screen.getByText('No projects yet — create one'),
-                ).toBeInTheDocument();
+                expect(screen.getByText('No projects yet — create one')).toBeInTheDocument();
             },
         },
         {

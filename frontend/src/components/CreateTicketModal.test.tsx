@@ -82,9 +82,7 @@ describe('CreateTicketModal', () => {
     it('submit calls mutateAsync with full DTO + statusColumn then onClose', async () => {
         const onClose = vi.fn();
         mutateAsync.mockResolvedValueOnce({});
-        render(
-            <CreateTicketModal open={true} onClose={onClose} slug="SLYK" columnId="TODO" />,
-        );
+        render(<CreateTicketModal open={true} onClose={onClose} slug="SLYK" columnId="TODO" />);
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My ticket' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
         await waitFor(() => {

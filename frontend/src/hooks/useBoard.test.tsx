@@ -280,8 +280,6 @@ describe('useBoard polling', () => {
         await vi.waitFor(() => expect(result.current.data).toBeDefined());
 
         await vi.advanceTimersByTimeAsync(30_000);
-        await vi.waitFor(() =>
-            expect(result.current.data?.columns[1]?.tickets[0]?.id).toBe('tA'),
-        );
+        await vi.waitFor(() => expect(result.current.data?.columns[1]?.tickets[0]?.id).toBe('tA'));
     });
 });

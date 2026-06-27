@@ -11,17 +11,12 @@
 //
 // Provider is MANDATORY (Radix v1.2.10): wrap the app root once. F36 EXPORTS
 // TooltipProvider; mounting it in main.tsx is F37's job (F36 ships primitive only).
-import {
-    forwardRef,
-    type ComponentPropsWithoutRef,
-    type ElementRef,
-} from 'react'
-import * as TooltipPrimitive from '@radix-ui/react-tooltip'
-import { cn } from './cn'
+import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from 'react';
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+import { cn } from './cn';
 
 // --- Provider (MANDATORY app-root mount — F37 wires it) ----------------------
-export interface TooltipProviderProps
-    extends ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider> {}
+export type TooltipProviderProps = ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>;
 
 export function TooltipProvider({
     delayDuration = 300,
@@ -36,27 +31,28 @@ export function TooltipProvider({
             skipDelayDuration={skipDelayDuration}
             {...rest}
         />
-    )
+    );
 }
 
 // --- Root -------------------------------------------------------------------
-export type TooltipProps = ComponentPropsWithoutRef<typeof TooltipPrimitive.Root>
+export type TooltipProps = ComponentPropsWithoutRef<typeof TooltipPrimitive.Root>;
 
-export const Tooltip = TooltipPrimitive.Root
+export const Tooltip = TooltipPrimitive.Root;
 
 // --- Trigger ----------------------------------------------------------------
 export const TooltipTrigger = forwardRef<
     ElementRef<typeof TooltipPrimitive.Trigger>,
     ComponentPropsWithoutRef<typeof TooltipPrimitive.Trigger>
 >(function TooltipTrigger({ ...rest }, ref) {
-    return <TooltipPrimitive.Trigger ref={ref} {...rest} />
-})
+    return <TooltipPrimitive.Trigger ref={ref} {...rest} />;
+});
 
 // --- Content (wraps Portal + Content + Arrow internally) --------------------
-export interface TooltipContentProps
-    extends ComponentPropsWithoutRef<typeof TooltipPrimitive.Content> {
+export interface TooltipContentProps extends ComponentPropsWithoutRef<
+    typeof TooltipPrimitive.Content
+> {
     /** Side offset in px (Tooltip default 0 — sits flush to the trigger). */
-    sideOffset?: number
+    sideOffset?: number;
 }
 
 export const TooltipContent = forwardRef<
@@ -87,5 +83,5 @@ export const TooltipContent = forwardRef<
                 <TooltipPrimitive.Arrow className="bg-primary fill-primary" offset={5} />
             </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
-    )
-})
+    );
+});

@@ -2,28 +2,28 @@ import { useQuery } from '@tanstack/react-query';
 import { env } from '@/config/env';
 
 interface HealthResponse {
-    status: string;
-    service: string;
+  status: string;
+  service: string;
 }
 
 export interface UseHealthResult {
-    /** `true` when status==='ok' && !isError; `false` when unhealthy; `undefined` while loading. */
-    ok: boolean | undefined;
-    isLoading: boolean;
-    isError: boolean;
-    /** Human-readable detail for the tooltip — the `service` field, or a fallback per state. */
-    detail: string;
+  /** `true` when status==='ok' && !isError; `false` when unhealthy; `undefined` while loading. */
+  ok: boolean | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  /** Human-readable detail for the tooltip — the `service` field, or a fallback per state. */
+  detail: string;
 }
 
 async function fetchHealth(signal: AbortSignal): Promise<HealthResponse> {
-    const response = await fetch(`${env.apiBaseUrl}/health`, {
-        headers: { 'Content-Type': 'application/json' },
-        signal,
-    });
-    if (!response.ok) {
-        throw new Error(`Health check failed: ${response.status}`);
-    }
-    return response.json() as Promise<HealthResponse>;
+  const response = await fetch(`${env.apiBaseUrl}/health`, {
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`Health check failed: ${response.status}`);
+  }
+  return response.json() as Promise<HealthResponse>;
 }
 
 /**
@@ -37,27 +37,24 @@ async function fetchHealth(signal: AbortSignal): Promise<HealthResponse> {
  * mandate live polling).
  */
 export function useHealth(): UseHealthResult {
-    const query = useQuery<HealthResponse>({
-        queryKey: ['health'],
-        queryFn: ({ signal }) => fetchHealth(signal),
-        staleTime: 30_000,
-    });
+  const query = useQuery<HealthResponse>({
+    queryKey: ['health'],
+    queryFn: ({ signal }) => fetchHealth(signal),
+    staleTime: 30_000,
+  });
 
-    const ok =
-        query.isLoading
-            ? undefined
-            : query.data?.status === 'ok' && !query.isError;
+  const ok = query.isLoading ? undefined : query.data?.status === 'ok' && !query.isError;
 
-    const detail = query.isLoading
-        ? 'Checking…'
-        : query.isError || query.data?.status !== 'ok'
-            ? query.data?.service ?? 'Service unavailable'
-            : query.data?.service ?? 'All systems operational';
+  const detail = query.isLoading
+    ? 'Checking…'
+    : query.isError || query.data?.status !== 'ok'
+      ? (query.data?.service ?? 'Service unavailable')
+      : (query.data?.service ?? 'All systems operational');
 
-    return {
-        ok,
-        isLoading: query.isLoading,
-        isError: query.isError,
-        detail,
-    };
+  return {
+    ok,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    detail,
+  };
 }

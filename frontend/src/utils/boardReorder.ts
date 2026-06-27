@@ -20,10 +20,7 @@ export interface MoveDescriptor {
 // Index into the destination column EXCLUDING the moved ticket, then apply the
 // D1 rules: prepend = first - GAP; append = last + GAP; mid = midpoint of the
 // two neighbours; into-empty column = 0.
-export function computeDestinationPosition(
-  board: BoardPayload,
-  move: MoveDescriptor,
-): number {
+export function computeDestinationPosition(board: BoardPayload, move: MoveDescriptor): number {
   const dstColumn = board.columns.find((column) => column.id === move.dstColumnId);
   if (!dstColumn) {
     return 0;
@@ -51,10 +48,7 @@ export function computeDestinationPosition(
 // Immutable: returns a NEW BoardPayload. The moved ticket is spliced out of its
 // source column and inserted into the destination column at dstIndex with its
 // position set via computeDestinationPosition. The input board is never mutated.
-export function applyMoveToBoard(
-  board: BoardPayload,
-  move: MoveDescriptor,
-): BoardPayload {
+export function applyMoveToBoard(board: BoardPayload, move: MoveDescriptor): BoardPayload {
   const srcColumn = board.columns.find((column) => column.id === move.srcColumnId);
   const movedTicket = srcColumn?.tickets.find((ticket) => ticket.id === move.ticketId);
   if (!movedTicket) {

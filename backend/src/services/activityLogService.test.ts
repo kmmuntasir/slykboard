@@ -52,7 +52,9 @@ describe('diffTicketChanges', () => {
       name: 'labels added + removed',
       next: base,
       labelDiff: { added: ['Bug'], removed: ['API'] },
-      expected: [{ action: 'LABELS_CHANGED', oldValue: null, newValue: 'added: Bug; removed: API' }],
+      expected: [
+        { action: 'LABELS_CHANGED', oldValue: null, newValue: 'added: Bug; removed: API' },
+      ],
     },
     {
       name: 'labels empty diff -> no row',

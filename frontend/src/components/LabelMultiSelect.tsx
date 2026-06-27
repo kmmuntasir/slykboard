@@ -75,7 +75,9 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                                 type="checkbox"
                                 checked={value.includes(l.id)}
                                 onChange={() => toggle(l.id)}
-                                onClick={(e: ReactMouseEvent<HTMLInputElement>) => e.stopPropagation()}
+                                onClick={(e: ReactMouseEvent<HTMLInputElement>) =>
+                                    e.stopPropagation()
+                                }
                                 aria-label={l.name}
                                 className="h-4 w-4"
                             />

@@ -137,9 +137,7 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                         ) : confirmDeleteId === l.id ? (
                             <>
                                 <LabelChip label={l} />
-                                <span className="text-sm">
-                                    Delete? Removes from all tickets.
-                                </span>
+                                <span className="text-sm">Delete? Removes from all tickets.</span>
                                 <button
                                     type="button"
                                     onClick={() => handleConfirmDelete(l.id)}

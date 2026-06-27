@@ -150,8 +150,7 @@ describe('useUpdateTicket', () => {
 
     // onError restored both caches to the pre-mutation references.
     const boardRestore = setSpy.mock.calls.find(
-      ([key, value]) =>
-        JSON.stringify(key) === JSON.stringify(BOARD_KEY) && value === board,
+      ([key, value]) => JSON.stringify(key) === JSON.stringify(BOARD_KEY) && value === board,
     );
     const ticketRestore = setSpy.mock.calls.find(
       ([key, value]) =>

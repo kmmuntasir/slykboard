@@ -356,9 +356,7 @@ describe('TopNav', () => {
         // so query all and assert at least one is present.
         fireEvent.pointerEnter(board);
         fireEvent.focus(board);
-        expect(
-            screen.getAllByText('Select a project first').length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Select a project first').length).toBeGreaterThanOrEqual(1);
     });
 
     it('project-less: Reports disabled with "Select a project first" tooltip', () => {
@@ -377,9 +375,7 @@ describe('TopNav', () => {
         const board = screen.getByRole('link', { name: 'Board', hidden: true });
         fireEvent.pointerEnter(board);
         fireEvent.focus(board);
-        expect(
-            screen.getAllByText('Select a project first').length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('Select a project first').length).toBeGreaterThanOrEqual(1);
     });
 
     it('project-less: Settings stays an enabled link (independent of project scope)', () => {

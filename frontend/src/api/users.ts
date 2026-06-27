@@ -28,7 +28,10 @@ export async function fetchUsers(): Promise<WorkspaceUser[]> {
 }
 
 // F25: PATCH /users/:userId/role — admin-only. Server guards the last-admin demote.
-export async function updateUserRole(userId: string, role: 'ADMIN' | 'MEMBER'): Promise<WorkspaceUser> {
+export async function updateUserRole(
+  userId: string,
+  role: 'ADMIN' | 'MEMBER',
+): Promise<WorkspaceUser> {
   return apiFetch<WorkspaceUser>(`/users/${userId}/role`, {
     method: 'PATCH',
     body: JSON.stringify({ role }),

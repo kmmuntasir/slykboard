@@ -155,14 +155,17 @@ describe('POST /api/projects/:slug/labels', () => {
 
   it('normalizes 3-char hex #abc to #AABBCC (echoed by mock)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedCreate.mockImplementation(async (args) => ({
-      id: VALID_LABEL_ID,
-      projectId: 'p1',
-      name: args.name,
-      color: args.color,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }) as unknown as Awaited<ReturnType<typeof labelService.createLabel>>);
+    mockedCreate.mockImplementation(
+      async (args) =>
+        ({
+          id: VALID_LABEL_ID,
+          projectId: 'p1',
+          name: args.name,
+          color: args.color,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }) as unknown as Awaited<ReturnType<typeof labelService.createLabel>>,
+    );
     const res = await request(app)
       .post(`/api/projects/${SLUG}/labels`)
       .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)

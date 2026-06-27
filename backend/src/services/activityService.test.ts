@@ -200,11 +200,7 @@ describe('enrichActivityRows', () => {
   });
 
   it('actor fallback: actorFullName null → "Unknown user"', () => {
-    const entry = enrichOne(
-      { actorFullName: null, actorAvatarUrl: null },
-      columnMap,
-      assigneeMap,
-    );
+    const entry = enrichOne({ actorFullName: null, actorAvatarUrl: null }, columnMap, assigneeMap);
     expect(entry.actor).toEqual({
       id: 'u-1',
       fullName: 'Unknown user',

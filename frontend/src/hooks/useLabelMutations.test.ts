@@ -2,11 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import {
-  useCreateLabel,
-  useUpdateLabel,
-  useDeleteLabel,
-} from '@/hooks/useLabelMutations';
+import { useCreateLabel, useUpdateLabel, useDeleteLabel } from '@/hooks/useLabelMutations';
 import { createLabel, updateLabel, deleteLabel } from '@/api/labels';
 import { ApiClientError } from '@/api/client';
 import { labelKeys, boardKeys } from '@/api/queryKeys';
@@ -134,9 +130,7 @@ describe('useUpdateLabel', () => {
 
   it('rolls back the cache on error', async () => {
     const prev = seedLabels();
-    vi.mocked(updateLabel).mockRejectedValue(
-      new ApiClientError('conflict', 409, 'CONFLICT'),
-    );
+    vi.mocked(updateLabel).mockRejectedValue(new ApiClientError('conflict', 409, 'CONFLICT'));
 
     const queryClient = newQueryClient();
     queryClient.setQueryData(LABEL_KEY, prev);
@@ -158,8 +152,7 @@ describe('useUpdateLabel', () => {
 
     // onError restored the label list to the pre-mutation snapshot.
     const restoreCall = setSpy.mock.calls.find(
-      ([key, value]) =>
-        JSON.stringify(key) === JSON.stringify(LABEL_KEY) && value === prev,
+      ([key, value]) => JSON.stringify(key) === JSON.stringify(LABEL_KEY) && value === prev,
     );
     expect(restoreCall).toBeDefined();
   });
@@ -221,9 +214,7 @@ describe('useDeleteLabel', () => {
 
   it('rolls back the cache on error', async () => {
     const prev = seedLabels();
-    vi.mocked(deleteLabel).mockRejectedValue(
-      new ApiClientError('boom', 500, 'INTERNAL_ERROR'),
-    );
+    vi.mocked(deleteLabel).mockRejectedValue(new ApiClientError('boom', 500, 'INTERNAL_ERROR'));
 
     const queryClient = newQueryClient();
     queryClient.setQueryData(LABEL_KEY, prev);
@@ -244,8 +235,7 @@ describe('useDeleteLabel', () => {
 
     // onError restored the label list to the pre-mutation snapshot.
     const restoreCall = setSpy.mock.calls.find(
-      ([key, value]) =>
-        JSON.stringify(key) === JSON.stringify(LABEL_KEY) && value === prev,
+      ([key, value]) => JSON.stringify(key) === JSON.stringify(LABEL_KEY) && value === prev,
     );
     expect(restoreCall).toBeDefined();
   });

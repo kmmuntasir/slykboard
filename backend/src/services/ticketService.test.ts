@@ -33,9 +33,8 @@ const bag = vi.hoisted(() => ({
 }));
 
 vi.mock('../db/client', async () => {
-  const { labels, tickets, projects, projectSequences, activityLogs } = await import(
-    '../db/schema'
-  );
+  const { labels, tickets, projects, projectSequences, activityLogs } =
+    await import('../db/schema');
   // buildTxSelectChain branches on (table, projection):
   //  - projectSequences -> { where: () => ({ for: () => bag.seqRow }) }
   //  - tickets + maxPos projection -> terminal { where: () => bag.maxRow } (createTicket aggregate)
@@ -240,15 +239,17 @@ function makeProject(over: Partial<Record<string, unknown>> = {}) {
 
 // F16: getTicket now returns a joined row ({ticket, creatorId, creatorFullName,
 // creatorAvatarUrl, assigneeId, ...}). Mirror that shape for the getTicket tests.
-function makeJoinedTicket(over: {
-  ticket?: Partial<Record<string, unknown>>;
-  creatorId?: string | null;
-  creatorFullName?: string | null;
-  creatorAvatarUrl?: string | null;
-  assigneeId?: string | null;
-  assigneeFullName?: string | null;
-  assigneeAvatarUrl?: string | null;
-} = {}) {
+function makeJoinedTicket(
+  over: {
+    ticket?: Partial<Record<string, unknown>>;
+    creatorId?: string | null;
+    creatorFullName?: string | null;
+    creatorAvatarUrl?: string | null;
+    assigneeId?: string | null;
+    assigneeFullName?: string | null;
+    assigneeAvatarUrl?: string | null;
+  } = {},
+) {
   return {
     ticket: makeTicket(over.ticket ?? {}),
     creatorId: over.creatorId ?? null,
@@ -595,7 +596,11 @@ describe('ticketService getTicket (F13 T6)', () => {
     expect(result).not.toBeNull();
     expect(result!.id).toBe(TICKET_ID);
     expect(result!.description).toBe('<p>hi</p>');
-    expect(result!.creator).toEqual({ id: 'u1', fullName: 'Muntasir', avatarUrl: 'http://x/a.png' });
+    expect(result!.creator).toEqual({
+      id: 'u1',
+      fullName: 'Muntasir',
+      avatarUrl: 'http://x/a.png',
+    });
     expect(result!.assignee).toEqual({ id: 'u2', fullName: 'Ada', avatarUrl: null });
   });
 
@@ -915,9 +920,7 @@ describe('ticketService createTicket label linking (F14)', () => {
     bag.seqRow = [{ nextNumber: 1 }];
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
-    const checklist = [
-      { id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false },
-    ];
+    const checklist = [{ id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false }];
 
     await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New', checklist });
 
@@ -1202,9 +1205,7 @@ describe('ticketService updateTicket activity capture (F18)', () => {
     await updateTicket({
       ticketId: TICKET_ID,
       patch: {
-        checklist: [
-          { id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false },
-        ],
+        checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false }],
       },
       actingUserId: 'u-actor',
     });

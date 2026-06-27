@@ -7,6 +7,6 @@ export const timerRouter = Router();
 
 // F20 — current user's global open timer (null if none).
 timerRouter.get('/active', authenticate, async (req, res) => {
-    const activeTimer = await timerService.getActiveTimer(req.user!.id);
-    res.json(success({ activeTimer }));
+  const activeTimer = await timerService.getActiveTimer(req.user!.id);
+  res.json(success({ activeTimer }));
 });

@@ -8,7 +8,11 @@ export const hexColorSchema = z
   .transform((h) => {
     const clean = h.slice(1).toUpperCase();
     return clean.length === 3
-      ? '#' + clean.split('').map((c) => c + c).join('')
+      ? '#' +
+          clean
+            .split('')
+            .map((c) => c + c)
+            .join('')
       : '#' + clean;
   });
 

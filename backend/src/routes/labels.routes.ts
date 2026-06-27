@@ -4,12 +4,7 @@ import { requireRole } from '../middleware/requireRole';
 import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
 import { slugParam, labelIdParam, createLabelBody, updateLabelBody } from './labels.schema';
-import {
-  listLabels,
-  createLabel,
-  updateLabel,
-  deleteLabel,
-} from '../services/labelService';
+import { listLabels, createLabel, updateLabel, deleteLabel } from '../services/labelService';
 
 // Nested under /api/projects/:slug — list + create. Routes defined with full
 // /:slug/labels path so we can bare-mount via projectsRouter.use(projectLabelsRouter).

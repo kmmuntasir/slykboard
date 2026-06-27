@@ -23,13 +23,26 @@ export function DeleteTicketConfirm({
             blockBackdropClose
         >
             <p className="mb-4 text-sm text-muted-foreground">
-                This removes the ticket from the board. Its activity history and label links are archived and the ticket number is not reused. This cannot be undone from the UI.
+                This removes the ticket from the board. Its activity history and label links are
+                archived and the ticket number is not reused. This cannot be undone from the UI.
             </p>
             <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={isDeleting}>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onCancel}
+                    disabled={isDeleting}
+                >
                     Cancel
                 </Button>
-                <Button type="button" variant="destructive" size="sm" onClick={onConfirm} disabled={isDeleting}>
+                <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={onConfirm}
+                    disabled={isDeleting}
+                >
                     {isDeleting ? 'Deleting…' : 'Delete'}
                 </Button>
             </div>

@@ -116,9 +116,7 @@ describe('RichTextEditor', () => {
     });
 
     it('renders the placeholder when value is empty', () => {
-        render(
-            <RichTextEditor value="" onChange={vi.fn()} placeholder="Describe the ticket" />,
-        );
+        render(<RichTextEditor value="" onChange={vi.fn()} placeholder="Describe the ticket" />);
         expect(screen.getByText('Describe the ticket')).toBeInTheDocument();
     });
 

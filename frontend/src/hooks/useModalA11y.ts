@@ -56,9 +56,7 @@ export function useModalA11y({ isOpen, onClose, onEsc }: UseModalA11yOptions) {
         return;
       }
       if (e.key !== 'Tab') return;
-      const tabbables = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(TABBABLE),
-      );
+      const tabbables = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(TABBABLE));
       if (tabbables.length === 0) return;
       const first = tabbables[0]!;
       const last = tabbables[tabbables.length - 1]!;

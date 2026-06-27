@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { sanitizeDescription } from './sanitizeHtml';
 
 describe('sanitizeDescription', () => {
-  const cases: Array<{ name: string; input: string | null | undefined; check: (out: string) => boolean; expected?: string }> = [
+  const cases: Array<{
+    name: string;
+    input: string | null | undefined;
+    check: (out: string) => boolean;
+    expected?: string;
+  }> = [
     { name: 'empty string -> empty', input: '', check: (o) => o === '', expected: '' },
     { name: 'null -> empty', input: null, check: (o) => o === '', expected: '' },
     { name: 'undefined -> empty', input: undefined, check: (o) => o === '', expected: '' },

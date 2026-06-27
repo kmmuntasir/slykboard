@@ -54,9 +54,7 @@ export function ProjectPicker() {
 
     // D2 — controlled value: route primary, store fallback, "" placeholder.
     const selectedSlug = params.slug ?? lastSelectedSlug ?? '';
-    const selected =
-        projects?.find((p) => p.slug === selectedSlug) ??
-        null;
+    const selected = projects?.find((p) => p.slug === selectedSlug) ?? null;
 
     const handleSelect = (slug: string) => {
         setLastSelectedSlug(slug);
@@ -65,9 +63,7 @@ export function ProjectPicker() {
 
     // D4 — trigger label per state. Loaded-with-selection shows the project name;
     // listing (no slug) or no-selection shows the D3 placeholder.
-    const triggerLabel = selected
-        ? selected.name
-        : LISTING_PLACEHOLDER;
+    const triggerLabel = selected ? selected.name : LISTING_PLACEHOLDER;
 
     // D3 — state-shaped trigger content. Each non-loaded state still renders an
     // accessible trigger (aria-label preserved) so the control is always present.
@@ -124,9 +120,7 @@ export function ProjectPicker() {
             </DropdownTrigger>
 
             <DropdownContent align="start" className="min-w-[12rem]">
-                {isLoading && (
-                    <div className="px-2 py-1.5" aria-hidden="true" />
-                )}
+                {isLoading && <div className="px-2 py-1.5" aria-hidden="true" />}
 
                 {isError && (
                     <div className="flex flex-col gap-2 px-2 py-1.5">
@@ -160,7 +154,10 @@ export function ProjectPicker() {
                                     className="gap-2"
                                 >
                                     <ColorDot slug={p.slug} />
-                                    <FolderKanban className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                                    <FolderKanban
+                                        className="h-4 w-4 shrink-0 text-muted"
+                                        aria-hidden="true"
+                                    />
                                     <span className={cn('truncate', TRIGGER_MAX_W)} title={p.name}>
                                         {p.name}
                                     </span>

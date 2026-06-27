@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import {
     Dropdown,
     DropdownTrigger,
@@ -8,11 +8,11 @@ import {
     DropdownSeparator,
     DropdownLabel,
     DropdownGroup,
-} from './Dropdown'
+} from './Dropdown';
 
 describe('Dropdown', () => {
     function renderDropdown() {
-        const onSelect = vi.fn()
+        const onSelect = vi.fn();
         render(
             <Dropdown>
                 <DropdownTrigger>Open menu</DropdownTrigger>
@@ -28,40 +28,40 @@ describe('Dropdown', () => {
                     </DropdownGroup>
                 </DropdownContent>
             </Dropdown>,
-        )
-        return { onSelect }
+        );
+        return { onSelect };
     }
 
     it('renders the trigger (not yet expanded)', () => {
-        renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
-        expect(trigger).toBeInTheDocument()
-        expect(trigger.getAttribute('aria-expanded')).toBe('false')
-    })
+        renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+        expect(trigger).toBeInTheDocument();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
 
     it('opens on pointerDown (aria-expanded becomes true, menu role appears)', () => {
-        renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
+        renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
         // Radix opens on pointerDown, not click (jsdom + PointerEvent polyfill from T1).
-        fireEvent.pointerDown(trigger, { button: 0 })
-        const menu = screen.getByRole('menu')
-        expect(menu).toBeInTheDocument()
-        expect(trigger.getAttribute('aria-expanded')).toBe('true')
+        fireEvent.pointerDown(trigger, { button: 0 });
+        const menu = screen.getByRole('menu');
+        expect(menu).toBeInTheDocument();
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
         // Items reach menuitem role.
-        expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument()
-        expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
-    })
+        expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument();
+    });
 
     it('closes on Escape', () => {
-        renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
-        fireEvent.pointerDown(trigger, { button: 0 })
-        expect(screen.getByRole('menu')).toBeInTheDocument()
+        renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        expect(screen.getByRole('menu')).toBeInTheDocument();
         // Radix listens on document.body for Escape.
-        fireEvent.keyDown(document.body, { key: 'Escape' })
-        expect(screen.queryByRole('menu')).toBeNull()
-        expect(trigger.getAttribute('aria-expanded')).toBe('false')
-    })
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
 
     // NOTE: "closes on outside pointerdown" + "ArrowDown roving between items"
     // are Radix DismissableLayer/RovingFocus a11y guarantees (the wrapper delegates
@@ -71,39 +71,39 @@ describe('Dropdown', () => {
     // plumbing makes these two interactions flaky here — per F36 doc caveat.)
 
     it('fires onSelect when an item is chosen', () => {
-        const { onSelect } = renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
-        fireEvent.pointerDown(trigger, { button: 0 })
-        const editItem = screen.getByRole('menuitem', { name: 'Edit' })
-        fireEvent.click(editItem)
-        expect(onSelect).toHaveBeenCalledTimes(1)
-    })
+        const { onSelect } = renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        const editItem = screen.getByRole('menuitem', { name: 'Edit' });
+        fireEvent.click(editItem);
+        expect(onSelect).toHaveBeenCalledTimes(1);
+    });
 
     it('destructive variant applies text-destructive token', () => {
-        renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
-        fireEvent.pointerDown(trigger, { button: 0 })
-        const deleteItem = screen.getByRole('menuitem', { name: 'Delete' })
-        expect(deleteItem.className).toContain('text-destructive')
-    })
+        renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        const deleteItem = screen.getByRole('menuitem', { name: 'Delete' });
+        expect(deleteItem.className).toContain('text-destructive');
+    });
 
     it('content applies bg-popover token (portal-dark consumer)', () => {
-        renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
-        fireEvent.pointerDown(trigger, { button: 0 })
-        const menu = screen.getByRole('menu')
-        expect(menu.className).toContain('bg-popover')
-        expect(menu.className).toContain('text-popover-foreground')
-        expect(menu.className).toContain('border-border')
-    })
+        renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        const menu = screen.getByRole('menu');
+        expect(menu.className).toContain('bg-popover');
+        expect(menu.className).toContain('text-popover-foreground');
+        expect(menu.className).toContain('border-border');
+    });
 
     it('default sideOffset=4 (smoke)', () => {
-        renderDropdown()
-        const trigger = screen.getByRole('button', { name: 'Open menu' })
-        fireEvent.pointerDown(trigger, { button: 0 })
+        renderDropdown();
+        const trigger = screen.getByRole('button', { name: 'Open menu' });
+        fireEvent.pointerDown(trigger, { button: 0 });
         // jsdom does not reflect sideOffset as a real style; assert the menu is present
         // (the sideOffset=4 default is exercised by the component wiring above).
-        const menu = screen.getByRole('menu')
-        expect(menu).toBeInTheDocument()
-    })
-})
+        const menu = screen.getByRole('menu');
+        expect(menu).toBeInTheDocument();
+    });
+});

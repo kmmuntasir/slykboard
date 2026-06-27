@@ -10,15 +10,16 @@ vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'test-google-client-id.apps.googleuserconten
 // Polyfill so fireEvent.pointerDown works in Dropdown/Tooltip tests (F36+).
 // Ref: https://github.com/radix-ui/primitives/issues/1220
 if (typeof window !== 'undefined' && typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = class PointerEvent extends window.MouseEvent {} as unknown as typeof PointerEvent
+  window.PointerEvent = class PointerEvent
+    extends window.MouseEvent {} as unknown as typeof PointerEvent;
 }
 
 // jsdom lacks ResizeObserver; Radix Popper (Tooltip/Dropdown Content positioning) needs it.
 // Polyfill with a no-op so positioning code doesn't throw in tests (F36+).
 if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'undefined') {
-    window.ResizeObserver = class ResizeObserver {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-    }
+  window.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
 }

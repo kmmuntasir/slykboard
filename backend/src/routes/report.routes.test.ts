@@ -73,7 +73,11 @@ const projectRow = (creatorId = 'u1') => ({
 
 const timeReportPayload = {
   users: [{ id: 'u1', fullName: 'User One', avatarUrl: null, totalMs: 3_600_000 }],
-  window: { start: '2026-06-23T00:00:00.000Z', end: '2026-06-30T00:00:00.000Z', label: 'Week of Jun 23, 2026' },
+  window: {
+    start: '2026-06-23T00:00:00.000Z',
+    end: '2026-06-30T00:00:00.000Z',
+    label: 'Week of Jun 23, 2026',
+  },
 };
 
 const ticketSummaryPayload = {
@@ -85,7 +89,11 @@ const ticketSummaryPayload = {
       counts: { LOW: 0, MEDIUM: 2, HIGH: 1, URGENT: 0, CRITICAL: 0, total: 3 },
     },
   ],
-  window: { start: '2026-06-23T00:00:00.000Z', end: '2026-06-30T00:00:00.000Z', label: 'Week of Jun 23, 2026' },
+  window: {
+    start: '2026-06-23T00:00:00.000Z',
+    end: '2026-06-30T00:00:00.000Z',
+    label: 'Week of Jun 23, 2026',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -123,9 +131,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
       .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
 
     expect(res.status).toBe(200);
-    expect(mockedGetTimeReport).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: 'p1' }),
-    );
+    expect(mockedGetTimeReport).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1' }));
   });
 
   it('returns 403 FORBIDDEN for a non-member (reportService NOT called)', async () => {
@@ -256,9 +262,7 @@ describe('GET /api/reports/time (deprecated global, backward compat)', () => {
     expect(mockedGetTimeReport).not.toHaveBeenCalledWith(
       expect.objectContaining({ projectId: expect.anything() }),
     );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[DEPRECATED]'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[DEPRECATED]'));
     warnSpy.mockRestore();
   });
 
@@ -288,9 +292,7 @@ describe('GET /api/reports/tickets (deprecated global, backward compat)', () => 
     expect(mockedGetTicketSummary).not.toHaveBeenCalledWith(
       expect.objectContaining({ projectId: expect.anything() }),
     );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[DEPRECATED]'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[DEPRECATED]'));
     warnSpy.mockRestore();
   });
 });

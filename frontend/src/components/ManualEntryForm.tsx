@@ -53,8 +53,7 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
     // Mutation errors surface as a message; validation errors take precedence so
     // the user sees the actionable constraint message first.
     const errorMessage =
-        validationError ??
-        (mutation.error instanceof Error ? mutation.error.message : null);
+        validationError ?? (mutation.error instanceof Error ? mutation.error.message : null);
 
     return (
         <form onSubmit={handleSubmit} className="mt-3 border-t border-border pt-3">
@@ -80,9 +79,7 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
                     {mutation.isPending ? 'Logging…' : 'Log Time'}
                 </Button>
             </div>
-            {errorMessage && (
-                <p className="mt-1 text-sm text-destructive">{errorMessage}</p>
-            )}
+            {errorMessage && <p className="mt-1 text-sm text-destructive">{errorMessage}</p>}
         </form>
     );
 }

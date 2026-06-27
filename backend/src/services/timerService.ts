@@ -172,11 +172,14 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
       durationMs,
       description: r.description,
       type: isManual ? 'manual' : 'timer',
-      user: r.userId === null ? null : {
-        id: r.userId,
-        fullName: r.userFullName ?? 'Unknown user',
-        avatarUrl: r.userAvatarUrl,
-      },
+      user:
+        r.userId === null
+          ? null
+          : {
+              id: r.userId,
+              fullName: r.userFullName ?? 'Unknown user',
+              avatarUrl: r.userAvatarUrl,
+            },
     };
   });
 

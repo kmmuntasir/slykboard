@@ -88,9 +88,7 @@ describe('useDeleteTicket', () => {
   });
 
   it('surfaces a 403 FORBIDDEN ApiClientError on mutation.error', async () => {
-    vi.mocked(deleteTicket).mockRejectedValue(
-      new ApiClientError('forbidden', 403, 'FORBIDDEN'),
-    );
+    vi.mocked(deleteTicket).mockRejectedValue(new ApiClientError('forbidden', 403, 'FORBIDDEN'));
 
     const queryClient = newQueryClient();
     const { result } = renderHook(() => useDeleteTicket(), {

@@ -40,16 +40,12 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
     }, [isRunning]);
 
     const elapsedMs =
-        isRunning && activeTimer
-            ? now + offset - Date.parse(activeTimer.startTime)
-            : 0;
+        isRunning && activeTimer ? now + offset - Date.parse(activeTimer.startTime) : 0;
 
     const handleStop = async () => {
         const { entry } = await stop();
         if (entry.endTime) {
-            setLastDurationMs(
-                Date.parse(entry.endTime) - Date.parse(entry.startTime),
-            );
+            setLastDurationMs(Date.parse(entry.endTime) - Date.parse(entry.startTime));
         }
     };
 

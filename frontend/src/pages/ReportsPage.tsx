@@ -79,11 +79,7 @@ function ReportsBody({ slug }: ReportsBodyProps) {
                 </div>
 
                 <div className="inline-flex items-center gap-1">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setOffset((o) => o - 1)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setOffset((o) => o - 1)}>
                         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                         Prev
                     </Button>
@@ -109,9 +105,7 @@ function ReportsBody({ slug }: ReportsBodyProps) {
 
             {/* F24: Ticket Summary — resolved-ticket counts grouped by priority,
                 same shared period/offset window as the time report. */}
-            <h2 className="mt-8 text-2xl font-semibold">
-                Ticket Summary (Resolved by Priority)
-            </h2>
+            <h2 className="mt-8 text-2xl font-semibold">Ticket Summary (Resolved by Priority)</h2>
 
             <TicketSummarySection
                 label={ticketSummary.data?.window?.label}
@@ -186,9 +180,7 @@ function TimeReportSection({ label, isLoading, error, onRetry, users }: TimeRepo
                                                     avatarUrl: user.avatarUrl,
                                                 }}
                                             />
-                                            <span className="text-foreground">
-                                                {user.fullName}
-                                            </span>
+                                            <span className="text-foreground">{user.fullName}</span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
@@ -274,9 +266,7 @@ function TicketSummarySection({
                                                     avatarUrl: user.avatarUrl,
                                                 }}
                                             />
-                                            <span className="text-foreground">
-                                                {user.fullName}
-                                            </span>
+                                            <span className="text-foreground">{user.fullName}</span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-2.5 text-right">
@@ -330,10 +320,7 @@ interface EmptyStateProps {
 function EmptyState({ icon: Icon, title, message }: EmptyStateProps) {
     return (
         <Card className="mt-4">
-            <div
-                role="status"
-                className="flex flex-col items-center gap-2 px-4 py-10 text-center"
-            >
+            <div role="status" className="flex flex-col items-center gap-2 px-4 py-10 text-center">
                 <Icon className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
                 <p className="text-sm font-medium text-foreground">{title}</p>
                 <p className="text-sm text-muted-foreground">{message}</p>
@@ -375,4 +362,3 @@ function TicketSummarySkeleton() {
 }
 
 // --- Types (re-exported from @/types/report; ReportUser, TicketSummaryUser) -
-

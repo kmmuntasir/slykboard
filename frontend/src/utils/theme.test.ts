@@ -23,17 +23,67 @@ describe('resolveInitialTheme (D4 rule — pure)', () => {
     expected: ResolvedTheme;
   }> = [
     { name: "stored 'dark' → dark", stored: 'dark', prefersDark: false, expected: 'dark' },
-    { name: "stored 'dark' → dark (even if OS is light)", stored: 'dark', prefersDark: true, expected: 'dark' },
+    {
+      name: "stored 'dark' → dark (even if OS is light)",
+      stored: 'dark',
+      prefersDark: true,
+      expected: 'dark',
+    },
     { name: "stored 'light' → light", stored: 'light', prefersDark: true, expected: 'light' },
-    { name: "stored 'light' → light (even if OS is dark)", stored: 'light', prefersDark: false, expected: 'light' },
-    { name: "stored 'system' + OS dark → dark", stored: 'system', prefersDark: true, expected: 'dark' },
-    { name: "stored 'system' + OS light → light", stored: 'system', prefersDark: false, expected: 'light' },
-    { name: 'null (unset) + OS dark → dark (default = system)', stored: null, prefersDark: true, expected: 'dark' },
-    { name: 'null (unset) + OS light → light (default = system)', stored: null, prefersDark: false, expected: 'light' },
-    { name: "invalid 'garbage' + OS dark → dark (falls back to system)", stored: 'garbage', prefersDark: true, expected: 'dark' },
-    { name: "invalid 'garbage' + OS light → light (falls back to system)", stored: 'garbage', prefersDark: false, expected: 'light' },
-    { name: "empty string '' + OS dark → dark (invalid → system)", stored: '', prefersDark: true, expected: 'dark' },
-    { name: "uppercase 'DARK' is invalid → system fallback (case-sensitive)", stored: 'DARK', prefersDark: false, expected: 'light' },
+    {
+      name: "stored 'light' → light (even if OS is dark)",
+      stored: 'light',
+      prefersDark: false,
+      expected: 'light',
+    },
+    {
+      name: "stored 'system' + OS dark → dark",
+      stored: 'system',
+      prefersDark: true,
+      expected: 'dark',
+    },
+    {
+      name: "stored 'system' + OS light → light",
+      stored: 'system',
+      prefersDark: false,
+      expected: 'light',
+    },
+    {
+      name: 'null (unset) + OS dark → dark (default = system)',
+      stored: null,
+      prefersDark: true,
+      expected: 'dark',
+    },
+    {
+      name: 'null (unset) + OS light → light (default = system)',
+      stored: null,
+      prefersDark: false,
+      expected: 'light',
+    },
+    {
+      name: "invalid 'garbage' + OS dark → dark (falls back to system)",
+      stored: 'garbage',
+      prefersDark: true,
+      expected: 'dark',
+    },
+    {
+      name: "invalid 'garbage' + OS light → light (falls back to system)",
+      stored: 'garbage',
+      prefersDark: false,
+      expected: 'light',
+    },
+    {
+      name: "empty string '' + OS dark → dark (invalid → system)",
+      stored: '',
+      prefersDark: true,
+      expected: 'dark',
+    },
+    {
+      name: "uppercase 'DARK' is invalid → system fallback (case-sensitive)",
+      stored: 'DARK',
+      prefersDark: false,
+      expected: 'light',
+    },
   ];
 
   for (const c of cases) {

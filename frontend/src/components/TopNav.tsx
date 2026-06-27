@@ -27,12 +27,7 @@ import {
     DropdownSeparator,
     DropdownItem,
 } from '@/components/ui/Dropdown';
-import {
-    Tooltip,
-    TooltipTrigger,
-    TooltipContent,
-    TooltipProvider,
-} from '@/components/ui/Tooltip';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/Tooltip';
 import { ProjectPicker } from './ProjectPicker';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTheme } from '@/hooks/useTheme';
@@ -125,13 +120,10 @@ export function TopNav() {
     const healthState: HealthState = health.isLoading
         ? 'loading'
         : health.ok === false || health.isError
-            ? 'unhealthy'
-            : 'healthy';
+          ? 'unhealthy'
+          : 'healthy';
 
-    const HEALTH_INDICATOR: Record<
-        HealthState,
-        { dot: string; label: string }
-    > = {
+    const HEALTH_INDICATOR: Record<HealthState, { dot: string; label: string }> = {
         healthy: { dot: 'bg-success', label: 'Healthy' },
         unhealthy: { dot: 'bg-danger', label: `Unhealthy — ${health.detail}` },
         loading: { dot: 'bg-muted-foreground', label: 'Checking…' },
@@ -173,9 +165,7 @@ export function TopNav() {
                 return;
             }
             if (e.key !== 'Tab') return;
-            const tabbables = Array.from(
-                panel.querySelectorAll<HTMLElement>(TABBABLE),
-            );
+            const tabbables = Array.from(panel.querySelectorAll<HTMLElement>(TABBABLE));
             if (tabbables.length === 0) return;
             const first = tabbables[0]!;
             const last = tabbables[tabbables.length - 1]!;
@@ -229,11 +219,7 @@ export function TopNav() {
                 return (
                     <li key={link.label}>
                         {disabled ? (
-                            <DisabledNavItem
-                                label={link.label}
-                                icon={Icon}
-                                hint={hint}
-                            />
+                            <DisabledNavItem label={link.label} icon={Icon} hint={hint} />
                         ) : (
                             <NavLink
                                 to={href}
@@ -289,21 +275,13 @@ export function TopNav() {
                     aria-haspopup="menu"
                     className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                    <Avatar
-                        src={user.avatarUrl}
-                        name={user.name || user.email}
-                        size="md"
-                    />
+                    <Avatar src={user.avatarUrl} name={user.name || user.email} size="md" />
                 </button>
             </DropdownTrigger>
             <DropdownContent align="end" className="min-w-[14rem]">
                 <DropdownLabel>
                     <div className="flex items-center gap-2">
-                        <Avatar
-                            src={user.avatarUrl}
-                            name={user.name || user.email}
-                            size="sm"
-                        />
+                        <Avatar src={user.avatarUrl} name={user.name || user.email} size="sm" />
                         <div className="flex flex-col">
                             <span className="text-xs font-normal text-muted-foreground">
                                 Signed in as
@@ -324,23 +302,17 @@ export function TopNav() {
                 <DropdownItem onSelect={() => setTheme('light')}>
                     <Sun className="h-4 w-4" aria-hidden="true" />
                     <span>Light</span>
-                    {theme === 'light' && (
-                        <Check className="ml-auto h-4 w-4" aria-hidden="true" />
-                    )}
+                    {theme === 'light' && <Check className="ml-auto h-4 w-4" aria-hidden="true" />}
                 </DropdownItem>
                 <DropdownItem onSelect={() => setTheme('system')}>
                     <Monitor className="h-4 w-4" aria-hidden="true" />
                     <span>System</span>
-                    {theme === 'system' && (
-                        <Check className="ml-auto h-4 w-4" aria-hidden="true" />
-                    )}
+                    {theme === 'system' && <Check className="ml-auto h-4 w-4" aria-hidden="true" />}
                 </DropdownItem>
                 <DropdownItem onSelect={() => setTheme('dark')}>
                     <Moon className="h-4 w-4" aria-hidden="true" />
                     <span>Dark</span>
-                    {theme === 'dark' && (
-                        <Check className="ml-auto h-4 w-4" aria-hidden="true" />
-                    )}
+                    {theme === 'dark' && <Check className="ml-auto h-4 w-4" aria-hidden="true" />}
                 </DropdownItem>
                 <DropdownSeparator />
                 <DropdownItem variant="destructive" onSelect={handleSignOut}>
@@ -355,10 +327,7 @@ export function TopNav() {
         <header className="border-b border-border bg-background">
             <div className="px-4 py-3 md:px-6">
                 {/* Desktop: 3 clusters in one row, brand left / nav center / actions right. */}
-                <nav
-                    aria-label="Primary"
-                    className="flex items-center justify-between gap-4"
-                >
+                <nav aria-label="Primary" className="flex items-center justify-between gap-4">
                     {/* Left cluster: brand + ProjectPicker (moved from right per §4.2). */}
                     <div className="flex items-center gap-4">
                         {brand}
@@ -418,10 +387,7 @@ export function TopNav() {
                 <div
                     ref={panelRef}
                     id="mobile-nav-panel"
-                    className={cn(
-                        open ? 'block' : 'hidden',
-                        'md:hidden',
-                    )}
+                    className={cn(open ? 'block' : 'hidden', 'md:hidden')}
                 >
                     {open && navItems}
                 </div>

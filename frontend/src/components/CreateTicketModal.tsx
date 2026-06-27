@@ -28,7 +28,13 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
 
     // F16: ported onto the shared <Modal> primitive (Esc, focus trap, scroll lock).
     return (
-        <Modal isOpen={open} onClose={onClose} titleId="create-ticket-title" title="Create ticket" size="xl">
+        <Modal
+            isOpen={open}
+            onClose={onClose}
+            titleId="create-ticket-title"
+            title="Create ticket"
+            size="xl"
+        >
             <TicketAttributeForm
                 mode="create"
                 projectSlug={slug}

@@ -402,9 +402,7 @@ describe('boardService getBoard', () => {
   describe('F14 label hydration', () => {
     it('renders hydrated labels {id, name, color}[] per ticket', async () => {
       const project = makeProject([{ id: 'c1', name: 'To Do' }]);
-      const rows = [
-        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
-      ];
+      const rows = [makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 })];
       bag.getProjectBySlug.mockResolvedValue(project);
       bag.dbSelectOrderBy.mockResolvedValue(rows);
       bag.hydrateLabels = new Map([
@@ -428,9 +426,7 @@ describe('boardService getBoard', () => {
 
     it('renders labels: [] for a ticket with no label rows', async () => {
       const project = makeProject([{ id: 'c1', name: 'To Do' }]);
-      const rows = [
-        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
-      ];
+      const rows = [makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 })];
       bag.getProjectBySlug.mockResolvedValue(project);
       bag.dbSelectOrderBy.mockResolvedValue(rows);
       // No entry for 't1' in the hydrate map → defaults to [] at the read site.
@@ -449,9 +445,7 @@ describe('boardService getBoard', () => {
       ];
       bag.getProjectBySlug.mockResolvedValue(project);
       bag.dbSelectOrderBy.mockResolvedValue(rows);
-      bag.hydrateLabels = new Map([
-        ['t1', [{ id: 'l1', name: 'bug', color: '#FF0000' }]],
-      ]);
+      bag.hydrateLabels = new Map([['t1', [{ id: 'l1', name: 'bug', color: '#FF0000' }]]]);
 
       const result = await getBoard('SLYK');
 
@@ -481,9 +475,7 @@ describe('boardService getBoard', () => {
 
     it('renders checklist: [] for a ticket with no items', async () => {
       const project = makeProject([{ id: 'c1', name: 'To Do' }]);
-      const rows = [
-        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
-      ];
+      const rows = [makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 })];
       bag.getProjectBySlug.mockResolvedValue(project);
       bag.dbSelectOrderBy.mockResolvedValue(rows);
 

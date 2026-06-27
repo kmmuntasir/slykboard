@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import {
-  moveTicket,
-  fetchTicket,
-  updateTicket,
-  type MoveTicketRequest,
-} from './tickets';
+import { moveTicket, fetchTicket, updateTicket, type MoveTicketRequest } from './tickets';
 import type { Ticket, UpdateTicketDto } from '../types/ticket';
 
 describe('moveTicket', () => {
@@ -30,9 +25,9 @@ describe('moveTicket', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
 
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: returned }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: returned }), { status: 200 }));
 
     const result = await moveTicket('t1', dto);
 
@@ -51,10 +46,9 @@ describe('moveTicket', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'nope', code: 'INTERNAL_ERROR' } }),
-        { status: 500 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'nope', code: 'INTERNAL_ERROR' } }), {
+        status: 500,
+      }),
     );
 
     await expect(moveTicket('t1', dto)).rejects.toThrow('nope');
@@ -82,9 +76,9 @@ describe('fetchTicket', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('GETs /tickets/:id and returns the unwrapped ticket', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: sampleTicket }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: sampleTicket }), { status: 200 }));
 
     const result = await fetchTicket('t1');
 
@@ -98,10 +92,9 @@ describe('fetchTicket', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'not found', code: 'NOT_FOUND' } }),
-        { status: 404 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'not found', code: 'NOT_FOUND' } }), {
+        status: 404,
+      }),
     );
 
     await expect(fetchTicket('t1')).rejects.toThrow('not found');
@@ -123,9 +116,9 @@ describe('updateTicket', () => {
 
   cases.forEach(({ name, dto }) => {
     it(`PATCHes /tickets/:id with ${name}`, async () => {
-      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ data: sampleTicket }), { status: 200 }),
-      );
+      const spy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(JSON.stringify({ data: sampleTicket }), { status: 200 }));
 
       const result = await updateTicket('t1', dto);
 
@@ -141,10 +134,9 @@ describe('updateTicket', () => {
 
   it('throws ApiClientError when the server responds non-ok', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { message: 'conflict', code: 'CONFLICT' } }),
-        { status: 409 },
-      ),
+      new Response(JSON.stringify({ error: { message: 'conflict', code: 'CONFLICT' } }), {
+        status: 409,
+      }),
     );
 
     await expect(updateTicket('t1', { title: 'x' })).rejects.toThrow('conflict');

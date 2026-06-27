@@ -88,14 +88,14 @@ export const router = createBrowserRouter([
                                         element: <ProjectSettingsPage />,
                                     },
                                     // F49: Reports is project-scoped. Non-member
-                                        // denial is handled in-page (D7: redirect
-                                        // to /projects on BE 403).
+                                    // denial is handled in-page (D7: redirect
+                                    // to /projects on BE 403).
                                     {
                                         path: '/projects/:slug/reports',
                                         element: <ReportsPage />,
                                     },
                                     // F49 D6: legacy /reports redirects to the
-                                        // scoped route (or /projects if no slug).
+                                    // scoped route (or /projects if no slug).
                                     { path: '/reports', element: <ReportsRedirect /> },
                                     {
                                         path: '/settings',

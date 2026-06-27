@@ -77,7 +77,9 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
                 </button>
             </div>
             <EditorContent editor={editor} />
-            {placeholder && !value && <p className="text-xs text-muted-foreground">{placeholder}</p>}
+            {placeholder && !value && (
+                <p className="text-xs text-muted-foreground">{placeholder}</p>
+            )}
         </div>
     );
 }

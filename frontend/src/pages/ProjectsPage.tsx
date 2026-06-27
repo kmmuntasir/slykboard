@@ -62,10 +62,7 @@ export function ProjectsPage() {
             {projects && projects.length === 0 ? (
                 <EmptyState
                     icon={
-                        <FolderOpen
-                            className="h-8 w-8 text-muted-foreground"
-                            aria-hidden="true"
-                        />
+                        <FolderOpen className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
                     }
                     title="No projects yet"
                     description="Create your first project to get started."

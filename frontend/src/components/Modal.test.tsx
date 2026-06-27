@@ -83,13 +83,7 @@ describe('Modal', () => {
     it('backdrop mouseDown does NOT close when blockBackdropClose is set', () => {
         const onClose = vi.fn();
         render(
-            <Modal
-                isOpen
-                onClose={onClose}
-                titleId="t"
-                title="T"
-                blockBackdropClose
-            >
+            <Modal isOpen onClose={onClose} titleId="t" title="T" blockBackdropClose>
                 body
             </Modal>,
         );
@@ -121,13 +115,7 @@ describe('Modal', () => {
         sizeCases.forEach(({ size, expected }) => {
             it(`applies ${expected} for size='${size}'`, () => {
                 render(
-                    <Modal
-                        isOpen
-                        onClose={vi.fn()}
-                        titleId="t1"
-                        title="Size test"
-                        size={size}
-                    >
+                    <Modal isOpen onClose={vi.fn()} titleId="t1" title="Size test" size={size}>
                         body
                     </Modal>,
                 );

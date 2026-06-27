@@ -128,9 +128,7 @@ describe('useMoveTicket', () => {
     expect(optimisticCall).toBeDefined();
     const updater = optimisticCall?.[1] as (curr: BoardPayload | undefined) => BoardPayload;
     expect(updater(board)).toEqual(applyMoveToBoard(board, vars));
-    expect(queryClient.getQueryData(boardKeys.detail(SLUG))).toEqual(
-      applyMoveToBoard(board, vars),
-    );
+    expect(queryClient.getQueryData(boardKeys.detail(SLUG))).toEqual(applyMoveToBoard(board, vars));
 
     // (c) moveTicket called with the right (ticketId, { statusColumn, position }).
     expect(moveTicket).toHaveBeenCalledWith(vars.ticketId, {
@@ -144,9 +142,7 @@ describe('useMoveTicket', () => {
 
   it('rolls back the board cache to the previous snapshot on error', async () => {
     const board = seedBoard();
-    vi.mocked(moveTicket).mockRejectedValue(
-      new ApiClientError('boom', 500, 'INTERNAL_ERROR'),
-    );
+    vi.mocked(moveTicket).mockRejectedValue(new ApiClientError('boom', 500, 'INTERNAL_ERROR'));
 
     const queryClient = newQueryClient();
     queryClient.setQueryData(boardKeys.detail(SLUG), board);

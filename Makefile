@@ -7,6 +7,7 @@
         install migrate migrate-push migrate-generate studio seed \
         dev dev-api dev-web build start \
         test test-api test-web lint typecheck format format-check \
+        gate gate-typecheck gate-build gate-lint gate-prettier gate-test \
         health check-node clean
 
 # --- Docker Postgres ----------------------------------------------------------
@@ -85,6 +86,29 @@ format: ## Format the whole repo with Prettier
 
 format-check: ## Check formatting without writing
 	npm run format:check
+
+# --- Merge gate (F50) ---------------------------------------------------------
+# The verifiable "independently shippable" claim for UI-redesign PRs (F31–F51).
+# Every redesign PR must pass `make gate` GREEN before rebase-and-merge.
+# Stages run in order; the first failure stops the gate.
+
+gate: ## Run the full F50 merge gate (typecheck + build + lint + prettier + test)
+	./scripts/merge-gate.sh all
+
+gate-typecheck: ## Gate stage: tsc --noEmit (backend + frontend)
+	./scripts/merge-gate.sh typecheck
+
+gate-build: ## Gate stage: build both workspaces
+	./scripts/merge-gate.sh build
+
+gate-lint: ## Gate stage: eslint --max-warnings=0
+	./scripts/merge-gate.sh lint
+
+gate-prettier: ## Gate stage: prettier --check
+	./scripts/merge-gate.sh prettier
+
+gate-test: ## Gate stage: vitest run (backend + frontend)
+	./scripts/merge-gate.sh test
 
 # --- Misc ---------------------------------------------------------------------
 

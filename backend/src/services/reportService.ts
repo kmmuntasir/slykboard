@@ -98,20 +98,17 @@ export async function getTimeReport(args: {
 
   // Global path (deprecated /api/reports/time) — no project join, no projectId filter.
   const withoutProject = () =>
-    db
-      .select(baseSelect)
-      .from(timeEntries)
-      .leftJoin(users, eq(users.id, timeEntries.userId));
+    db.select(baseSelect).from(timeEntries).leftJoin(users, eq(users.id, timeEntries.userId));
 
   // Scoped path — join tickets to filter on projectId.
-  const withProject = (projectId: string) =>
+  const withProject = () =>
     db
       .select(baseSelect)
       .from(timeEntries)
       .leftJoin(users, eq(users.id, timeEntries.userId))
       .leftJoin(tickets, eq(tickets.id, timeEntries.ticketId));
 
-  const query = args.projectId ? withProject(args.projectId) : withoutProject();
+  const query = args.projectId ? withProject() : withoutProject();
 
   const rows = await query.where(
     and(
@@ -176,7 +173,9 @@ export async function getTicketSummary(args: {
       doneColumnIds.add(cols[cols.length - 1]!.id);
     }
   } else {
-    const projectRows = await db.select({ id: projects.id, columns: projects.columns }).from(projects);
+    const projectRows = await db
+      .select({ id: projects.id, columns: projects.columns })
+      .from(projects);
     for (const p of projectRows) {
       const cols = p.columns;
       if (cols && cols.length > 0) {

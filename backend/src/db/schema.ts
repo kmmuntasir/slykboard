@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -48,7 +48,7 @@ export const users = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => ({
+  () => ({
     // F06 D1 originally had users_one_admin (at most one ADMIN row).
     // F25 D2: DROPPED — multi-admin is F25's goal. The first-admin bootstrap race
     // is guarded at the application level (F06 checks userCount === 0 before promoting).
@@ -184,7 +184,9 @@ export const ticketLabels = pgTable(
     labelId: uuid('label_id')
       .notNull()
       .references(() => labels.id, { onDelete: 'cascade' }),
-    assignedAt: timestamp('assigned_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    assignedAt: timestamp('assigned_at', { withTimezone: true, mode: 'date' })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.ticketId, table.labelId] }),
@@ -217,9 +219,7 @@ export const activityLogs = pgTable(
     actionType: activityActionEnum('action_type').notNull(),
     oldValue: text('old_value'),
     newValue: text('new_value'),
-    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   },
   (table) => ({
     // F19 feed query: WHERE ticket_id = $1 ORDER BY created_at.

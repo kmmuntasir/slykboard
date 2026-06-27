@@ -2,8 +2,8 @@
 // Unifies PriorityBadge + label/status badges. Variant map → F32 semantic tokens.
 // No bg-info/bg-critical (those don't exist); danger aliases destructive (--danger==--destructive).
 // Optional style passthrough for LabelChip's future (F46); LabelChip itself stays separate.
-import { type CSSProperties, type ReactNode } from 'react'
-import { cn } from './cn'
+import { type CSSProperties, type ReactNode } from 'react';
+import { cn } from './cn';
 
 export type BadgeVariant =
     | 'default'
@@ -12,14 +12,14 @@ export type BadgeVariant =
     | 'destructive'
     | 'danger'
     | 'success'
-    | 'warning'
+    | 'warning';
 
 export interface BadgeProps {
-    children: ReactNode
-    variant?: BadgeVariant
+    children: ReactNode;
+    variant?: BadgeVariant;
     /** Optional style passthrough (for LabelChip's runtime-hex future — F46). */
-    style?: CSSProperties
-    className?: string
+    style?: CSSProperties;
+    className?: string;
 }
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
@@ -31,14 +31,14 @@ const VARIANT_CLASSES: Record<BadgeVariant, string> = {
     danger: 'bg-destructive text-destructive-foreground',
     success: 'bg-success text-success-foreground',
     warning: 'bg-warning text-warning-foreground',
-}
+};
 
-const BASE_CLASSES = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium'
+const BASE_CLASSES = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium';
 
 export function Badge({ children, variant = 'default', style, className }: BadgeProps) {
     return (
         <span className={cn(BASE_CLASSES, VARIANT_CLASSES[variant], className)} style={style}>
             {children}
         </span>
-    )
+    );
 }

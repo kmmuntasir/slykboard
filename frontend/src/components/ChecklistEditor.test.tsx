@@ -12,7 +12,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 describe('ChecklistEditor', () => {
     it('renders existing items as checkbox + text input + delete button', () => {
-        render(<ChecklistEditor value={[makeItem({ id: 'i1', text: 'Design', done: true })]} onChange={vi.fn()} />);
+        render(
+            <ChecklistEditor
+                value={[makeItem({ id: 'i1', text: 'Design', done: true })]}
+                onChange={vi.fn()}
+            />,
+        );
         expect(screen.getByRole('checkbox', { name: 'Toggle "Design"' })).toBeChecked();
         expect(screen.getByLabelText('Edit checklist item "Design"')).toHaveValue('Design');
         expect(
@@ -58,9 +63,7 @@ describe('ChecklistEditor', () => {
         render(<ChecklistEditor value={[]} onChange={onChange} />);
         fireEvent.change(screen.getByLabelText('New checklist item'), { target: { value: 'X' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-        expect(onChange).toHaveBeenCalledWith([
-            { id: expect.any(String), text: 'X', done: false },
-        ]);
+        expect(onChange).toHaveBeenCalledWith([{ id: expect.any(String), text: 'X', done: false }]);
     });
 
     it('Add is disabled when the draft is empty or at capacity (50)', () => {
@@ -68,9 +71,7 @@ describe('ChecklistEditor', () => {
         // Empty draft → disabled.
         expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
 
-        const full = Array.from({ length: 50 }, (_, i) =>
-            makeItem({ id: `i${i}`, text: `t${i}` }),
-        );
+        const full = Array.from({ length: 50 }, (_, i) => makeItem({ id: `i${i}`, text: `t${i}` }));
         rerender(<ChecklistEditor value={full} onChange={vi.fn()} />);
         fireEvent.change(screen.getByLabelText('New checklist item'), {
             target: { value: 'overflow' },
@@ -120,7 +121,10 @@ describe('ChecklistEditor', () => {
 
     it('caps text inputs at 200 chars (maxLength attribute)', () => {
         render(<ChecklistEditor value={[makeItem({ id: 'i1', text: 'A' })]} onChange={vi.fn()} />);
-        expect(screen.getByLabelText('Edit checklist item "A"')).toHaveAttribute('maxlength', '200');
+        expect(screen.getByLabelText('Edit checklist item "A"')).toHaveAttribute(
+            'maxlength',
+            '200',
+        );
         expect(screen.getByLabelText('New checklist item')).toHaveAttribute('maxlength', '200');
     });
 
@@ -128,7 +132,11 @@ describe('ChecklistEditor', () => {
     describe('dense variant padding', () => {
         const tests = [
             { name: 'dense=true → compact px-2 py-1', dense: true, expectCompact: true },
-            { name: 'dense=false → primary-field family padding (no px-2 py-1)', dense: false, expectCompact: false },
+            {
+                name: 'dense=false → primary-field family padding (no px-2 py-1)',
+                dense: false,
+                expectCompact: false,
+            },
         ];
 
         tests.forEach(({ name, dense, expectCompact }) => {

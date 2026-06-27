@@ -72,6 +72,12 @@ export function TicketAttributeForm({
 
     const submitLabel = mode === 'create' ? 'Create ticket' : 'Save changes';
 
+    // Hoist the watched description out of JSX so watch() is called once per render.
+    // react-hooks/incompatible-library flags RHF's watch() unconditionally — it is an
+    // accepted RHF ↔ React Compiler limitation, suppressed at the single call site.
+    // eslint-disable-next-line react-hooks/incompatible-library
+    const descriptionValue = watch('description') ?? '';
+
     return (
         <form
             onSubmit={handleSubmit((values) => onSubmit(values as UpdateTicketDto))}
@@ -99,10 +105,7 @@ export function TicketAttributeForm({
                         />
                     </Field>
 
-                    <Field
-                        label="Description"
-                        error={errors.description?.message}
-                    >
+                    <Field label="Description" error={errors.description?.message}>
                         <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                             <AlignLeft size={14} />
                         </span>
@@ -110,11 +113,11 @@ export function TicketAttributeForm({
                             // F17: read-only view of the archived (sanitized) description.
                             <div
                                 className="max-w-none rounded border border-border bg-muted p-2 text-sm"
-                                dangerouslySetInnerHTML={{ __html: watch('description') ?? '' }}
+                                dangerouslySetInnerHTML={{ __html: descriptionValue }}
                             />
                         ) : (
                             <RichTextEditor
-                                value={watch('description') ?? ''}
+                                value={descriptionValue}
                                 onChange={(html) => setValue('description', html)}
                             />
                         )}

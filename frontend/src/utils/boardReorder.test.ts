@@ -102,8 +102,20 @@ describe('computeDestinationPosition', () => {
 describe('applyMoveToBoard', () => {
   it('moves a ticket across columns and sets position via midpoint rules', () => {
     const board = buildBoard([
-      { id: 'c1', tickets: [{ id: 't1', position: 0 }, { id: 't2', position: POSITION_GAP }] },
-      { id: 'c2', tickets: [{ id: 't3', position: 0 }, { id: 't4', position: POSITION_GAP }] },
+      {
+        id: 'c1',
+        tickets: [
+          { id: 't1', position: 0 },
+          { id: 't2', position: POSITION_GAP },
+        ],
+      },
+      {
+        id: 'c2',
+        tickets: [
+          { id: 't3', position: 0 },
+          { id: 't4', position: POSITION_GAP },
+        ],
+      },
     ]);
     const move: MoveDescriptor = {
       ticketId: 't1',

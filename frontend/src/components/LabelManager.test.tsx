@@ -21,7 +21,10 @@ vi.mock('@/hooks/useLabels', () => ({
 }));
 
 vi.mock('@/hooks/useLabelMutations', () => ({
-    useCreateLabel: () => ({ mutate: mockState.createMutate, isPending: mockState.createIsPending }),
+    useCreateLabel: () => ({
+        mutate: mockState.createMutate,
+        isPending: mockState.createIsPending,
+    }),
     useUpdateLabel: () => ({ mutate: mockState.updateMutate }),
     useDeleteLabel: () => ({ mutate: mockState.deleteMutate }),
 }));
@@ -63,7 +66,9 @@ describe('LabelManager', () => {
         render(<LabelManager projectSlug="SLYK" />);
 
         fireEvent.change(screen.getByLabelText('New label name'), { target: { value: 'Urgent' } });
-        fireEvent.change(screen.getByLabelText('New label color'), { target: { value: '#F59E0B' } });
+        fireEvent.change(screen.getByLabelText('New label color'), {
+            target: { value: '#F59E0B' },
+        });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
         expect(mockState.createMutate).toHaveBeenCalledWith({
