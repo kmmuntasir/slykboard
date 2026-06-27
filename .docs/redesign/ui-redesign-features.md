@@ -66,7 +66,7 @@
 - [x] **F48** Project-scoped report endpoints + membership authz + deprecate old routes — ✨ Feature · _deps: F47_
 
 **Phase 5 — Frontend: project-scoped Reports**
-- [ ] **F49** Move Reports route + API client + hook to `/projects/:slug/reports`, add 403/loading/empty surfaces — ✨ Feature · _deps: F48, F42_
+- [x] **F49** Move Reports route + API client + hook to `/projects/:slug/reports`, add 403/loading/empty surfaces — ✨ Feature · _deps: F48, F42_
 
 **Phase 6 — Gates, testing & release**
 - [ ] **F50** Test-update cascade + merge gate (tsc/vite build/lint/prettier green per phase) — 🔧 Infrastructure · _deps: F31–F49_
