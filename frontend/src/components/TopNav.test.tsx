@@ -309,20 +309,21 @@ describe('TopNav', () => {
         expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
     });
 
-    it('project-present: Board enabled + routed, Reports disabled (D3)', () => {
+    it('project-present: Board + Reports enabled + routed (F49 unblocks Reports)', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNavWithProject('demo');
 
         // Board enabled and routes to the open project.
         const board = screen.getByRole('link', { name: 'Board' });
         expect(board).toHaveAttribute('href', '/projects/demo');
-        // D3 — Reports disabled-until-F49 even with a project present: the only
-        // "Reports" element is the disabled span (aria-disabled="true").
-        const reports = screen.getByRole('link', { name: 'Reports', hidden: true });
-        expect(reports).toHaveAttribute('aria-disabled', 'true');
+        // F49 — Reports is now enabled with a project present (was disabled in F42)
+        // and routes to the scoped Reports URL.
+        const reports = screen.getByRole('link', { name: 'Reports' });
+        expect(reports).toHaveAttribute('href', '/projects/demo/reports');
+        expect(reports).not.toHaveAttribute('aria-disabled');
     });
 
-    it('project-present (MEMBER): Board enabled, Reports disabled, no Settings', () => {
+    it('project-present (MEMBER): Board + Reports enabled, no Settings', () => {
         useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
         renderTopNavWithProject('demo');
 
@@ -330,10 +331,11 @@ describe('TopNav', () => {
             'href',
             '/projects/demo',
         );
-        // Reports is the disabled span (no enabled Reports link).
-        expect(
-            screen.getByRole('link', { name: 'Reports', hidden: true }),
-        ).toHaveAttribute('aria-disabled', 'true');
+        // F49 — Reports enabled for MEMBERS too (Reports has no role gate).
+        expect(screen.getByRole('link', { name: 'Reports' })).toHaveAttribute(
+            'href',
+            '/projects/demo/reports',
+        );
         expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
     });
 
@@ -388,21 +390,15 @@ describe('TopNav', () => {
         expect(settings).not.toHaveAttribute('aria-disabled');
     });
 
-    it('project-present: Reports tooltip says "Reports coming soon" (D3)', () => {
+    // F49 — the F42 "Reports coming soon" tooltip is gone; Reports is an enabled
+    // link with a project present. Assert no "coming soon" surface remains.
+    it('project-present: no "Reports coming soon" tooltip (F49 unblocks Reports)', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNavWithProject('demo');
 
-        const reports = screen.getByRole('link', {
-            name: 'Reports',
-            hidden: true,
-        });
-        expect(reports).toHaveAttribute('aria-disabled', 'true');
-        // Open the tooltip to mount its content, then assert the D3 hint.
-        fireEvent.pointerEnter(reports);
-        fireEvent.focus(reports);
-        expect(
-            screen.getAllByText('Reports coming soon').length,
-        ).toBeGreaterThanOrEqual(1);
+        const reports = screen.getByRole('link', { name: 'Reports' });
+        expect(reports).not.toHaveAttribute('aria-disabled');
+        expect(screen.queryByText('Reports coming soon')).toBeNull();
     });
 
     it('project-present: Board enabled link has no aria-disabled', () => {
@@ -436,9 +432,31 @@ describe('TopNav', () => {
         renderTopNavWithProject('demo');
         const board = screen.getByRole('link', { name: /Board/ });
         expect(board.querySelector('svg')).toBeInTheDocument();
-        // D3 — Reports disabled but still renders its icon inside the span.
-        const reports = screen.getByRole('link', { name: /Reports/, hidden: true });
+        // F49 — Reports is enabled when a project is present (was disabled in F42);
+        // a real <a> link now (not the F42 disabled span).
+        const reports = screen.getByRole('link', { name: /Reports/ });
         expect(reports.querySelector('svg')).toBeInTheDocument();
+    });
+
+    // F49 — Reports nav target is project-scoped (/projects/:slug/reports) when a
+    // project is selected. F42 left it disabled ("Reports coming soon"); F49 flips
+    // it to enabled and routes to the scoped Reports route.
+    it('renders an enabled Reports NavLink pointing at the scoped route when a project is selected', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNavWithProject('demo');
+        const reports = screen.getByRole('link', { name: /Reports/ });
+        expect(reports).toHaveAttribute('href', '/projects/demo/reports');
+        expect(reports).not.toHaveAttribute('aria-disabled');
+    });
+
+    // F49 — without a project, Reports stays disabled (the Board link's existing
+    // !hasProject disable now covers Reports too). The disabled affordance is a
+    // span[role="link"][aria-disabled] (F42 D2/D5 pattern), so query with hidden.
+    it('renders Reports as disabled when no project is selected', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+        const reports = screen.getByRole('link', { name: /Reports/, hidden: true });
+        expect(reports).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('does NOT apply max-w-5xl to the nav (full-width gutter)', () => {

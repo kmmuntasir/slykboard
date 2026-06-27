@@ -33,6 +33,19 @@ function IndexRedirect() {
     );
 }
 
+// F49 D6: legacy /reports → scoped Reports. Target is the last-selected
+// project's reports, or /projects if none. period/offset are component state,
+// not URL params, so the redirect carries no query (D6 default: drop).
+function ReportsRedirect() {
+    const lastSelectedSlug = useProjectStore((s) => s.lastSelectedSlug);
+    return (
+        <Navigate
+            to={lastSelectedSlug ? `/projects/${lastSelectedSlug}/reports` : '/projects'}
+            replace
+        />
+    );
+}
+
 export const router = createBrowserRouter([
     {
         element: <RootLayout />,
@@ -74,7 +87,16 @@ export const router = createBrowserRouter([
                                         path: '/projects/:slug/settings',
                                         element: <ProjectSettingsPage />,
                                     },
-                                    { path: '/reports', element: <ReportsPage /> },
+                                    // F49: Reports is project-scoped. Non-member
+                                        // denial is handled in-page (D7: redirect
+                                        // to /projects on BE 403).
+                                    {
+                                        path: '/projects/:slug/reports',
+                                        element: <ReportsPage />,
+                                    },
+                                    // F49 D6: legacy /reports redirects to the
+                                        // scoped route (or /projects if no slug).
+                                    { path: '/reports', element: <ReportsRedirect /> },
                                     {
                                         path: '/settings',
                                         element: <RequireRole role="ADMIN" />,

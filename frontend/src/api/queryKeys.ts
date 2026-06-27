@@ -35,12 +35,12 @@ export const timerKeys = {
   entries: (id: string) => [...timerKeys.all, 'entries', id] as const,
 };
 
-// F23 T3: per-user aggregated time report cache keys (period + offset scoped).
+// F49: project-scoped report cache keys. `slug` is a key segment so cache does
+// not leak across projects on switch (stale-cross-project-data edge case).
 export const reportKeys = {
   all: ['reports'] as const,
-  time: (period: 'weekly' | 'monthly', offset: number) =>
-    [...reportKeys.all, 'time', period, offset] as const,
-  // F24: per-user resolved-ticket summary cache keys (period + offset scoped).
-  tickets: (period: 'weekly' | 'monthly', offset: number) =>
-    [...reportKeys.all, 'tickets', period, offset] as const,
+  time: (period: 'weekly' | 'monthly', offset: number, slug: string) =>
+    [...reportKeys.all, 'time', period, offset, slug] as const,
+  tickets: (period: 'weekly' | 'monthly', offset: number, slug: string) =>
+    [...reportKeys.all, 'tickets', period, offset, slug] as const,
 };

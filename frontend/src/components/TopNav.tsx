@@ -53,7 +53,9 @@ interface NavLinkItem {
 
 const PUBLIC_NAV_LINKS: readonly NavLinkItem[] = [
     { to: '/', label: 'Board', end: true, icon: LayoutGrid },
-    { to: '/reports', label: 'Reports', end: false, icon: BarChart3 },
+    // F49: Reports target is project-scoped; the `to` here is nominal — the
+    // render loop builds the real href from the resolved projectSlug.
+    { to: '/projects/:slug/reports', label: 'Reports', end: false, icon: BarChart3 },
 ] as const;
 
 const ADMIN_NAV_LINKS: readonly NavLinkItem[] = [
@@ -216,12 +218,16 @@ export function TopNav() {
             {PUBLIC_NAV_LINKS.map((link) => {
                 const Icon = link.icon;
                 const isReports = link.label === 'Reports';
-                const disabled = isReports || !hasProject;
-                const hint = isReports
-                    ? 'Reports coming soon'
-                    : 'Select a project first';
+                // F49: Reports is enabled when a project is selected (was
+                // always-disabled in F42). Both Board and Reports require a
+                // project; the scoped href is built from projectSlug.
+                const disabled = !hasProject;
+                const href = isReports
+                    ? `/projects/${projectSlug}/reports`
+                    : `/projects/${projectSlug}`;
+                const hint = 'Select a project first';
                 return (
-                    <li key={link.to}>
+                    <li key={link.label}>
                         {disabled ? (
                             <DisabledNavItem
                                 label={link.label}
@@ -230,7 +236,7 @@ export function TopNav() {
                             />
                         ) : (
                             <NavLink
-                                to={`/projects/${projectSlug}`}
+                                to={href}
                                 end={link.end}
                                 onClick={() => setOpen(false)}
                                 className={navLinkClass}
