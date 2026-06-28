@@ -43,7 +43,7 @@ Analyze current codebase to determine what's implemented vs. what was planned. U
 
 | Subagent | Responsibility |
 |----------|---------------|
-| 1 | Verify backend implementations — controllers, services (+impl), repositories, entities, dtos, mappers, config, Flyway migrations. Backend lives at `backend/mrc`, base package `com.bkash.mrc`. Flyway migrations under `backend/mrc/src/main/resources/db/migration` |
+| 1 | Verify backend implementations — routes, controllers, services, repositories, models/schemas, dtos/types, middleware, config, Drizzle migrations. Backend lives at `backend/src` (Express 5 + Drizzle ORM + PostgreSQL). Drizzle migrations under `backend/src/db/migrations` (managed via `drizzle-kit generate`) |
 | 2 | Verify frontend implementations — components, pages, hooks, API client |
 | 3 | Check shared utilities, types, constants, configs across both |
 
@@ -56,7 +56,7 @@ Each subagent receives:
 
 For each file referenced in tasks:
 1. **Does file exist?** — Check file path
-2. **Is it complete?** — Read content, check for stubbed code (`// TODO`, `throw new UnsupportedOperationException()`, empty method bodies, `return null`, `return Collections.emptyList()`)
+2. **Is it complete?** — Read content, check for stubbed code (`// TODO`, `throw new Error('not implemented')`, `throw new Error('TODO')`, empty handlers, `return null`, `return []`, `pass-through` routes returning mock data)
 3. **Does it match spec?** — Compare against acceptance criteria
 4. **Are tests present?** — Check for test files if required
 
@@ -112,19 +112,19 @@ Write comprehensive report in **same directory as first provided file**. Name: `
 
 | Task ID | Title | Files |
 |---------|-------|-------|
-| T1 | Title | backend/mrc/src/main/java/com/bkash/mrc/controller/OfferController.java |
+| T1 | Title | backend/src/controllers/offerController.ts |
 
 ### ⚠️ Partial Tasks
 
 | Task ID | Title | Missing | Notes |
 |--------|-------|---------|-------|
-| T2 | Title | backend/mrc/src/test/java/com/bkash/mrc/controller/OfferControllerTest.java | Tests not written |
+| T2 | Title | backend/src/controllers/offerController.test.ts | Tests not written |
 
 ### ❌ Missing Tasks
 
 | Task ID | Title | Missing Files/Features |
 |--------|-------|----------------------|
-| T3 | Title | backend/mrc/src/main/java/com/bkash/mrc/controller/SalesController.java |
+| T3 | Title | backend/src/controllers/salesController.ts |
 
 ### 🔄 Modified Tasks
 

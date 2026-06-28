@@ -33,7 +33,7 @@ Resolve the input to an absolute path and read it **completely**. Extract and ho
 - **Named endpoints, entities, roles, domains** (backend / frontend)
 - For bugs: the **steps to reproduce** + expected vs. actual result
 
-State your understanding back before analyzing: "Read ticket MRC-300 (bug) — <one-line summary>. Analyzing codebase..." (swap the type and summary as appropriate).
+State your understanding back before analyzing: "Read ticket SLYK-300 (bug) — <one-line summary>. Analyzing codebase..." (swap the type and summary as appropriate).
 
 ### Step 2: Analyze the codebase
 
@@ -43,19 +43,19 @@ Use up to **3 parallel `analyst` subagents** (via the Agent tool, `subagent_type
 
 | Subagent | Responsibility |
 |----------|---------------|
-| **Repro path** | Trace the reproduction path end-to-end. Locate the endpoints/services named in the ticket, read the exact code path, and confirm where the buggy behavior occurs. Cite `path:line`. |
-| **Root cause** | Pinpoint the defect — the missing guard / wrong branch / bad assumption, *why* it allows the bad behavior, and where the correct check belongs (respect the layered rule: Controller → Service → Repository). |
-| **Prior art & fix surface** | Map patterns to reuse: similar existing guards, the right custom exception(s), error-message conventions, validation utilities, relevant test fixtures, and any frontend impact. |
+| **Repro path** | Trace the reproduction path end-to-end. Locate the routes/controllers/services named in the ticket, read the exact code path, and confirm where the buggy behavior occurs. Cite `path:line`. |
+| **Root cause** | Pinpoint the defect — the missing guard / wrong branch / bad assumption, *why* it allows the bad behavior, and where the correct check belongs (respect the layered rule: Route → Controller → Service → Repository). |
+| **Prior art & fix surface** | Map patterns to reuse: similar existing guards, the right error classes / HTTP error shapes, error-message conventions, Zod validation schemas, relevant test fixtures, and any frontend impact. |
 
 **For a feature / enhancement** — focus on the design surface:
 
 | Subagent | Responsibility |
 |----------|---------------|
-| **Integration points** | Where the new/changed capability plugs in: relevant controllers/services/repositories/entities, the package structure it extends, the next Flyway migration version, and any new API contract. Cite `path:line`. |
-| **Patterns & conventions** | Existing precedents to mirror: analogous features already implemented (entities, DTOs, mappers, RBAC, messaging, scheduling), naming, validation, error handling, config externalization. |
-| **Cross-cutting & frontend** | Shared types/utilities, security/RBAC implications, RabbitMQ/scheduling/Feign touches, and frontend impact (services, components, models, routes, context). |
+| **Integration points** | Where the new/changed capability plugs in: relevant routes/controllers/services/repositories, the Drizzle schema it extends, the next Drizzle migration, and any new API contract. Cite `path:line`. |
+| **Patterns & conventions** | Existing precedents to mirror: analogous features already implemented (Drizzle models/schemas, DTOs/types, RBAC middleware, queues/schedulers, Google OAuth/JWT), naming, Zod validation, centralized error handling, config externalization via env vars. |
+| **Cross-cutting & frontend** | Shared types/utilities, security/RBAC implications, scheduling/job touches, and frontend impact (API client, hooks, components, pages, routes, stores). |
 
-Backend lives at `backend/mrc` (base package `com.bkash.mrc`, Flyway migrations under `backend/mrc/src/main/resources/db/migration`). Frontend lives at `frontend/src`.
+Backend lives at `backend/src` (Express 5 + Drizzle ORM + PostgreSQL; Drizzle migrations generated via `drizzle-kit generate` and committed under `backend/src/db/migrations`). Frontend lives at `frontend/src` (React 19 + Vite + TanStack Query + Zustand + Tailwind).
 
 Each subagent returns a **curated digest** with `path:line` evidence — not raw file dumps. Work from those digests.
 
@@ -66,14 +66,14 @@ If the ticket is clearly single-layer or small, drop to 1–2 subagents. Add mor
 Combine the digests into a single coherent picture:
 
 - **Bug** → state the root cause (what + why) and the minimal, convention-correct fix set
-- **Feature / enhancement** → state the design: new/changed entities, DTOs, mappers, services, endpoints, API contract, migrations, frontend pieces — and a sensible build order (schema/entity → repository → service → controller → DTO/mapper → frontend)
+- **Feature / enhancement** → state the design: new/changed Drizzle schema, DTOs/types, services, routes/controllers, API contract, migrations, frontend pieces — and a sensible build order (schema → repository → service → controller → route → frontend)
 - **Both** → list edge cases & risks (concurrency, RBAC, related paths needing the same change, regressions, migration concerns) and any open questions
 
-Respect project conventions: service owns business logic; controllers exchange DTOs only; Flyway is the only schema path; custom exceptions via `@ControllerAdvice`; never expose entities.
+Respect project conventions: services own business logic; controllers exchange DTOs/types only; Drizzle migrations are the only schema path; errors handled via centralized Express error middleware; never expose raw DB rows from controllers.
 
 ### Step 4: Write the implementation plan
 
-Write the plan to the **same directory as the ticket**, named `{ticket-filename}-plan.md` — e.g. ticket `docs/bugfix/MRC-300.md` → `docs/bugfix/MRC-300-plan.md`. Use the template below; include the **Root Cause** section **only for bugs**.
+Write the plan to the **same directory as the ticket**, named `{ticket-filename}-plan.md` — e.g. ticket `docs/bugfix/SLYK-300.md` → `docs/bugfix/SLYK-300-plan.md`. Use the template below; include the **Root Cause** section **only for bugs**.
 
 ## Plan Template
 
@@ -99,8 +99,11 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 | Layer | File | Why |
 |-------|------|-----|
-| Controller | `backend/.../XxxController.java` | ... |
-| Service | `backend/.../XxxService.java` | ... |
+| Route | `backend/src/routes/xxxRoutes.ts` | ... |
+| Controller | `backend/src/controllers/xxxController.ts` | ... |
+| Service | `backend/src/services/xxxService.ts` | ... |
+| Repository | `backend/src/repositories/xxxRepository.ts` | ... |
+| Schema | `backend/src/db/schema.ts` | ... |
 | ... | ... | ... |
 
 ## Proposed Implementation
@@ -120,11 +123,11 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 ## Testing
 
-*Follow project conventions — JUnit 5 + Mockito + AssertJ; method names `should<Expectation>_when<Condition>`; AAA layout; one behavior per test.*
+*Follow project conventions — Vitest + supertest (backend) and Vitest + Testing Library (frontend); table-driven tests; one behavior per test; co-locate `*.test.ts(x)` next to source.*
 
-- **Unit tests:** {service-level cases}
-- **Slice tests:** {controller/repository, if applicable}
-- **Integration tests:** {critical flows only}
+- **Unit tests:** {service/repository-level cases}
+- **HTTP tests:** {route/controller via supertest, if applicable}
+- **Integration tests:** {critical flows only — exercise the real DB or stub the data-access layer per project rules}
 - **Manual verification:** {re-run the ticket's reproduce steps for bugs / exercise the new capability for features}
 
 ## Acceptance Criteria

@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Orchestrate a SET of implementation tasks by delegating to subagents instead of doing the work yourself. You (the main agent) act as the coordinator — you use the analyst subagent to read and curate the task set, then dispatch each task to the spring-boot-coder or react-coder subagent (sequentially, or in parallel when conflict-free). Use when the user hands you a plan, task-breakdown, or list of tasks and wants the whole set implemented autonomously. Invoke via /orchestrator with the task set or a path to a plan/task file.
+description: Orchestrate a SET of implementation tasks by delegating to subagents instead of doing the work yourself. You (the main agent) act as the coordinator — you use the analyst subagent to read and curate the task set, then dispatch each task to the node-coder or react-coder subagent (sequentially, or in parallel when conflict-free). Use when the user hands you a plan, task-breakdown, or list of tasks and wants the whole set implemented autonomously. Invoke via /orchestrator with the task set or a path to a plan/task file.
 ---
 
 # Orchestrator Skill
@@ -10,7 +10,7 @@ You are now the **orchestrator**. Your job: execute a **set of tasks** autonomou
 ## Your subagents (invoke by `subagent_type`)
 
 - **`analyst`** — read-only investigator/analyzer. Your eyes. Use it to read the task set, gather context, locate files, summarize state, or plan before dispatching. It returns curated digests, not raw dumps.
-- **`spring-boot-coder`** — backend implementation (Spring Boot / Java). One well-scoped task per invocation.
+- **`node-coder`** — backend implementation (Node.js / Express + PostgreSQL + Drizzle). One well-scoped task per invocation.
 - **`react-coder`** — frontend implementation (React / TypeScript). One well-scoped task per invocation.
 - **`committer`** — git commit specialist. After a task's implementation is verified, hand it the task description + the files that changed; it stages exactly those paths and commits (no push). Invoke it once per completed task.
 
