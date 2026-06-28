@@ -43,8 +43,8 @@ Analyze current codebase to determine what's implemented vs. what was planned. U
 
 | Subagent | Responsibility |
 |----------|---------------|
-| 1 | Verify backend implementations — routes, controllers, middleware, services, repositories, migrations, config, auth. Backend lives at `backend/`, entry point `backend/src/index.js`. DB migrations under `backend/src/db/` (Prisma / Drizzle / Knex / raw SQL). |
-| 2 | Verify frontend implementations — components, pages, hooks, API client, stores (Zustand) |
+| 1 | Verify backend implementations — controllers, services (+impl), repositories, entities, dtos, mappers, config, Flyway migrations. Backend lives at `backend/mrc`, base package `com.bkash.mrc`. Flyway migrations under `backend/mrc/src/main/resources/db/migration` |
+| 2 | Verify frontend implementations — components, pages, hooks, API client |
 | 3 | Check shared utilities, types, constants, configs across both |
 
 Each subagent receives:
@@ -56,7 +56,7 @@ Each subagent receives:
 
 For each file referenced in tasks:
 1. **Does file exist?** — Check file path
-2. **Is it complete?** — Read content, check for stubbed code (`// TODO`, `throw new Error('not implemented')`, empty handlers, `return null`, `return []`, `res.sendStatus(501)`)
+2. **Is it complete?** — Read content, check for stubbed code (`// TODO`, `throw new UnsupportedOperationException()`, empty method bodies, `return null`, `return Collections.emptyList()`)
 3. **Does it match spec?** — Compare against acceptance criteria
 4. **Are tests present?** — Check for test files if required
 
@@ -112,19 +112,19 @@ Write comprehensive report in **same directory as first provided file**. Name: `
 
 | Task ID | Title | Files |
 |---------|-------|-------|
-| T1 | Title | backend/src/controllers/ticketController.js |
+| T1 | Title | backend/mrc/src/main/java/com/bkash/mrc/controller/OfferController.java |
 
 ### ⚠️ Partial Tasks
 
 | Task ID | Title | Missing | Notes |
 |--------|-------|---------|-------|
-| T2 | Title | backend/src/controllers/ticketController.test.js | Tests not written |
+| T2 | Title | backend/mrc/src/test/java/com/bkash/mrc/controller/OfferControllerTest.java | Tests not written |
 
 ### ❌ Missing Tasks
 
 | Task ID | Title | Missing Files/Features |
 |--------|-------|----------------------|
-| T3 | Title | backend/src/services/reportService.js |
+| T3 | Title | backend/mrc/src/main/java/com/bkash/mrc/controller/SalesController.java |
 
 ### 🔄 Modified Tasks
 
@@ -166,25 +166,7 @@ T2: ⚠️ Partial (missing tests)
 T3: ❌ Missing (file not created)
 ...
 ```
-
----
-
-### Step 5: Update Feature Index (if applicable)
-
-After writing the verification report, check whether the task plan file references a feature index file (e.g., a features list / roadmap). Look for:
-
-1. **Explicit reference in the task file header** — a path or link to a feature index (e.g., `features.md`, `feature-list.md`).
-2. **Feature ID in the task file** — extract the feature identifier (e.g., `F02` from the title/header) and check for a conventional feature index location (e.g., `.docs/features.md`).
-
-If a feature index file is found:
-
-- **100% implementation (all tasks ✅):** Mark the feature checkbox as done: `- [x] **F##** ...`
-- **Partial implementation (some tasks ⚠️ or ❌):** Mark the checkbox as partially complete: `- [~] **F##** ...`
-- **No change** if the feature was already marked done or if no feature index is found.
-
-Do NOT modify the feature index if verification percentage is below 50% (leave unchecked).
-
-**Commit the feature index update** alongside (or immediately after) the verification report commit.
+```
 
 ---
 
