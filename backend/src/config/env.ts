@@ -13,6 +13,9 @@ export interface Config {
   googleClientSecret: string;
   googleCallbackUrl: string;
   allowedDomain?: string;
+  bootstrapAdminEmail?: string;
+  bootstrapAdminFullName?: string;
+  bootstrapAdminDisplayName?: string;
 }
 
 // Parse 'true'/'1'/'yes' (case-insensitive) → true; 'false'/'0'/'no' → false; otherwise undefined.
@@ -60,6 +63,9 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     googleClientSecret: envSource.GOOGLE_CLIENT_SECRET,
     googleCallbackUrl: envSource.GOOGLE_CALLBACK_URL,
     allowedDomain: envSource.ALLOWED_DOMAIN || undefined,
+    bootstrapAdminEmail: envSource.BOOTSTRAP_ADMIN_EMAIL?.trim() || undefined,
+    bootstrapAdminFullName: envSource.BOOTSTRAP_ADMIN_FULL_NAME?.trim() || undefined,
+    bootstrapAdminDisplayName: envSource.BOOTSTRAP_ADMIN_DISPLAY_NAME?.trim() || undefined,
     directDatabaseUrl: envSource.DIRECT_DATABASE_URL?.trim() || envSource.DATABASE_URL,
     runMigrationsOnStart:
       parseBooleanFlag(envSource.RUN_MIGRATIONS_ON_START) ?? nodeEnv === 'production',
