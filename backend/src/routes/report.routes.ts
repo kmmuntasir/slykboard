@@ -30,7 +30,7 @@ projectReportsRouter.get(
   '/:slug/reports/time',
   authenticate,
   validateRequest({ params: slugParamSchema }),
-  requireProjectMember,
+  requireProjectMember(),
   async (req, res) => {
     const { period, offset } = parseReportQuery(req.query);
     const report = await reportService.getTimeReport({
@@ -46,7 +46,7 @@ projectReportsRouter.get(
   '/:slug/reports/tickets',
   authenticate,
   validateRequest({ params: slugParamSchema }),
-  requireProjectMember,
+  requireProjectMember(),
   async (req, res) => {
     const { period, offset } = parseReportQuery(req.query);
     const report = await reportService.getTicketSummary({

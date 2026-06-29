@@ -18,6 +18,14 @@ type Tx = NodePgDatabase<typeof schema>;
 export type LabelRow = typeof labels.$inferSelect;
 export type HydratedLabel = { id: string; name: string; color: string };
 
+// SLYK-01 Task I — single-row read by id for the slug-less resolver middleware
+// (resolveLabelProject). Returns the raw LabelRow (which carries projectId) or
+// null when absent; the resolver decides NOT_FOUND vs. FORBIDDEN.
+export async function getLabel(labelId: string): Promise<LabelRow | null> {
+  const [row] = await db.select().from(labels).where(eq(labels.id, labelId)).limit(1);
+  return row ?? null;
+}
+
 export async function listLabels(projectSlug: string): Promise<HydratedLabel[]> {
   const rows = await db
     .select({ id: labels.id, name: labels.name, color: labels.color })

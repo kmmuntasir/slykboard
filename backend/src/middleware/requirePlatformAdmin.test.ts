@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
-import { requireRole, requirePlatformAdmin } from './requireRole';
+import { requireRole, requirePlatformAdmin } from './requirePlatformAdmin';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 
