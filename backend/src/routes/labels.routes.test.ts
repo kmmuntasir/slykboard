@@ -49,8 +49,8 @@ afterEach(() => {
   TEST_ENV.allowedDomain = undefined;
 });
 
-function tokenFor(role: 'ADMIN' | 'MEMBER') {
-  return signJwt({ sub: 'u1', email: 'user@example.com', role, ver: 0 });
+function tokenFor(isPlatformAdmin: boolean) {
+  return signJwt({ sub: 'u1', email: 'user@example.com', pa: isPlatformAdmin, ver: 0 });
 }
 
 // RFC 9562 v4 (Zod 4 enforces version+variant digits — all-1s is invalid).
@@ -73,7 +73,7 @@ describe('GET /api/projects/:slug/labels', () => {
     ]);
     const res = await request(app)
       .get(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(2);
     expect(mockedList).toHaveBeenCalledWith(SLUG);
@@ -84,7 +84,7 @@ describe('GET /api/projects/:slug/labels', () => {
     mockedList.mockResolvedValue([]);
     const res = await request(app)
       .get(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
     expect(res.status).toBe(200);
   });
 
@@ -92,7 +92,7 @@ describe('GET /api/projects/:slug/labels', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .get('/api/projects/slyk/labels')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedList).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('POST /api/projects/:slug/labels', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .post(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ name: 'Bug', color: '#FF0000' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
@@ -131,7 +131,7 @@ describe('POST /api/projects/:slug/labels', () => {
     } as unknown as Awaited<ReturnType<typeof labelService.createLabel>>);
     const res = await request(app)
       .post(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'Bug', color: '#FF0000' });
     expect(res.status).toBe(201);
     expect(res.body.data.name).toBe('Bug');
@@ -146,7 +146,7 @@ describe('POST /api/projects/:slug/labels', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .post(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'Bug', color: '#GGGGGG' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -168,7 +168,7 @@ describe('POST /api/projects/:slug/labels', () => {
     );
     const res = await request(app)
       .post(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'Bug', color: '#abc' });
     expect(res.status).toBe(201);
     expect(res.body.data.color).toBe('#AABBCC');
@@ -180,7 +180,7 @@ describe('POST /api/projects/:slug/labels', () => {
     mockedCreate.mockRejectedValue(new AppError(ErrorCode.CONFLICT, 'Label name already exists'));
     const res = await request(app)
       .post(`/api/projects/${SLUG}/labels`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'Bug', color: '#FF0000' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
@@ -198,7 +198,7 @@ describe('PATCH /api/labels/:id', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .patch(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ name: 'New' });
     expect(res.status).toBe(403);
     expect(mockedUpdate).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe('PATCH /api/labels/:id', () => {
     } as unknown as Awaited<ReturnType<typeof labelService.updateLabel>>);
     const res = await request(app)
       .patch(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'New' });
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('New');
@@ -223,7 +223,7 @@ describe('PATCH /api/labels/:id', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .patch('/api/labels/not-a-uuid')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'New' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -234,7 +234,7 @@ describe('PATCH /api/labels/:id', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .patch(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({});
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -246,7 +246,7 @@ describe('PATCH /api/labels/:id', () => {
     mockedUpdate.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'Label not found'));
     const res = await request(app)
       .patch(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'New' });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -264,7 +264,7 @@ describe('DELETE /api/labels/:id', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .delete(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
     expect(res.status).toBe(403);
     expect(mockedDelete).not.toHaveBeenCalled();
   });
@@ -274,7 +274,7 @@ describe('DELETE /api/labels/:id', () => {
     mockedDelete.mockResolvedValue({ id: VALID_LABEL_ID });
     const res = await request(app)
       .delete(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
     expect(res.status).toBe(200);
     expect(res.body.data.id).toBe(VALID_LABEL_ID);
     expect(mockedDelete).toHaveBeenCalledWith(VALID_LABEL_ID);
@@ -285,7 +285,7 @@ describe('DELETE /api/labels/:id', () => {
     mockedDelete.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'Label not found'));
     const res = await request(app)
       .delete(`/api/labels/${VALID_LABEL_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });

@@ -5,7 +5,7 @@ import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
 
 // D12: reads Authorization: Bearer <jwt> (case-insensitive scheme).
-// On success, attaches req.user = { id, email, role }.
+// On success, attaches req.user = { id, email, isPlatformAdmin }.
 export async function authenticate(
   req: Request,
   _res: Response,
@@ -38,6 +38,6 @@ export async function authenticate(
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Token version mismatch');
   }
 
-  req.user = { id: payload.sub, email: payload.email, role: payload.role };
+  req.user = { id: payload.sub, email: payload.email, isPlatformAdmin: payload.pa };
   next();
 }

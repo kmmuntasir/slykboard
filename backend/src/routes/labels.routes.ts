@@ -24,7 +24,7 @@ projectLabelsRouter.get(
 projectLabelsRouter.post(
   '/:slug/labels',
   authenticate,
-  requireRole('ADMIN'),
+  requireRole(),
   validateRequest({ params: slugParam, body: createLabelBody }),
   async (req, res) => {
     const { slug } = req.params as { slug: string };
@@ -40,7 +40,7 @@ export const labelsRouter = Router();
 labelsRouter.patch(
   '/:id',
   authenticate,
-  requireRole('ADMIN'),
+  requireRole(),
   validateRequest({ params: labelIdParam, body: updateLabelBody }),
   async (req, res) => {
     const { id } = req.params as { id: string };
@@ -53,7 +53,7 @@ labelsRouter.patch(
 labelsRouter.delete(
   '/:id',
   authenticate,
-  requireRole('ADMIN'),
+  requireRole(),
   validateRequest({ params: labelIdParam }),
   async (req, res) => {
     const { id } = req.params as { id: string };

@@ -28,21 +28,19 @@ vi.mock('../services/tokenVersion', () => ({
 }));
 vi.mock('../services/userService', () => ({
   listUsers: vi.fn(),
-  updateUserRole: vi.fn(),
   setUserBlocked: vi.fn(),
 }));
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
 import { findUserTokenVersion } from '../services/tokenVersion';
-import { listUsers, updateUserRole, setUserBlocked } from '../services/userService';
+import { listUsers, setUserBlocked } from '../services/userService';
 import type { UserOption } from '../services/userService';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedListUsers = vi.mocked(listUsers);
-const mockedUpdateRole = vi.mocked(updateUserRole);
 const mockedSetBlocked = vi.mocked(setUserBlocked);
 
 beforeEach(() => {
@@ -53,8 +51,8 @@ afterEach(() => {
   TEST_ENV.allowedDomain = undefined;
 });
 
-function tokenFor(role: 'ADMIN' | 'MEMBER') {
-  return signJwt({ sub: 'u1', email: 'user@example.com', role, ver: 0 });
+function tokenFor(isPlatformAdmin: boolean) {
+  return signJwt({ sub: 'u1', email: 'user@example.com', pa: isPlatformAdmin, ver: 0 });
 }
 
 describe('usersRouter — GET /api/users (F13 T5)', () => {
@@ -73,7 +71,8 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
         id: 'u-a',
         email: 'a@x.com',
         fullName: 'Alice',
-        role: 'MEMBER',
+        displayName: null,
+        isPlatformAdmin: false,
         avatarUrl: 'http://a',
         blocked: false,
       },
@@ -81,7 +80,7 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -89,14 +88,15 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
     expect(mockedListUsers).toHaveBeenCalledTimes(1);
   });
 
-  it('exposes the full F25 shape {id, email, fullName, role, avatarUrl, blocked}', async () => {
+  it('exposes the full SLYK-01 shape {id, email, fullName, displayName, isPlatformAdmin, avatarUrl, blocked}', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedListUsers.mockResolvedValue([
       {
         id: 'u-a',
         email: 'a@x.com',
         fullName: 'Alice',
-        role: 'ADMIN',
+        isPlatformAdmin: true,
+        displayName: null,
         avatarUrl: null,
         blocked: false,
       },
@@ -104,7 +104,8 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
         id: 'u-b',
         email: 'b@x.com',
         fullName: 'Bob',
-        role: 'MEMBER',
+        isPlatformAdmin: false,
+        displayName: null,
         avatarUrl: 'http://b',
         blocked: true,
       },
@@ -112,14 +113,14 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     for (const item of res.body.data) {
       expect(item).toHaveProperty('id');
       expect(item).toHaveProperty('email');
       expect(item).toHaveProperty('fullName');
-      expect(item).toHaveProperty('role');
+      expect(item).toHaveProperty('isPlatformAdmin');
       expect(item).toHaveProperty('avatarUrl');
       expect(item).toHaveProperty('blocked');
     }
@@ -131,7 +132,7 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([]);
@@ -144,7 +145,8 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
         id: 'u-a',
         email: 'a@x.com',
         fullName: 'Alice',
-        role: 'MEMBER',
+        displayName: null,
+        isPlatformAdmin: false,
         avatarUrl: null,
         blocked: false,
       },
@@ -152,7 +154,8 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
         id: 'u-b',
         email: 'b@x.com',
         fullName: 'Bob',
-        role: 'MEMBER',
+        displayName: null,
+        isPlatformAdmin: false,
         avatarUrl: null,
         blocked: false,
       },
@@ -160,7 +163,8 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
         id: 'u-c',
         email: 'c@x.com',
         fullName: 'Carol',
-        role: 'MEMBER',
+        displayName: null,
+        isPlatformAdmin: false,
         avatarUrl: null,
         blocked: false,
       },
@@ -169,7 +173,7 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.map((u: { id: string }) => u.id)).toEqual(['u-a', 'u-b', 'u-c']);
@@ -181,130 +185,12 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
   });
 });
 
-describe('usersRouter — PATCH /api/users/:userId/role (F25)', () => {
-  it('returns 200 + updated user for ADMIN', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedUpdateRole.mockResolvedValue({
-      id: 'u-target',
-      googleId: 'g1',
-      email: 't@x.com',
-      fullName: 'Target',
-      avatarUrl: null,
-      role: 'ADMIN',
-      tokenVersion: 1,
-      blocked: false,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof updateUserRole>>);
-
-    const res = await request(app)
-      .patch('/api/users/u-target/role')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ role: 'ADMIN' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.role).toBe('ADMIN');
-    expect(mockedUpdateRole).toHaveBeenCalledWith({
-      targetUserId: 'u-target',
-      newRole: 'ADMIN',
-      actingUserId: 'u1',
-    });
-  });
-
-  it('returns 403 FORBIDDEN for MEMBER (role-gated)', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-
-    const res = await request(app)
-      .patch('/api/users/u-target/role')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
-      .send({ role: 'ADMIN' });
-
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
-    expect(mockedUpdateRole).not.toHaveBeenCalled();
-  });
-
-  it('returns 401 UNAUTHENTICATED without Bearer', async () => {
-    const res = await request(app).patch('/api/users/u-target/role').send({ role: 'ADMIN' });
-
-    expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('UNAUTHENTICATED');
-    expect(mockedUpdateRole).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 VALIDATION_FAILED on invalid role value', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-
-    const res = await request(app)
-      .patch('/api/users/u-target/role')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ role: 'SUPERUSER' });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_FAILED');
-    expect(mockedUpdateRole).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 VALIDATION_FAILED on missing role', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-
-    const res = await request(app)
-      .patch('/api/users/u-target/role')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({});
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_FAILED');
-    expect(mockedUpdateRole).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 VALIDATION_FAILED on empty userId param', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-
-    const res = await request(app)
-      .patch('/api/users//role')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ role: 'ADMIN' });
-
-    // Empty path segment → Express 404 (route does not match), not 400.
-    expect(res.status).toBe(404);
-    expect(mockedUpdateRole).not.toHaveBeenCalled();
-  });
-
-  it('propagates CONFLICT (409) when demoting the last admin', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedUpdateRole.mockRejectedValue(
-      new AppError(ErrorCode.CONFLICT, 'Cannot demote the last admin'),
-    );
-
-    const res = await request(app)
-      .patch('/api/users/u-target/role')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ role: 'MEMBER' });
-
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('CONFLICT');
-  });
-
-  it('propagates NOT_FOUND (404) when target user absent', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedUpdateRole.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'User not found'));
-
-    const res = await request(app)
-      .patch('/api/users/u-ghost/role')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
-      .send({ role: 'ADMIN' });
-
-    expect(res.status).toBe(404);
-    expect(res.body.error.code).toBe('NOT_FOUND');
-  });
-});
 
 describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
   it('returns 200 + updated user for ADMIN (block=true)', async () => {
@@ -315,7 +201,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
       email: 't@x.com',
       fullName: 'Target',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
       tokenVersion: 1,
       blocked: true,
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -324,7 +210,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     const res = await request(app)
       .patch('/api/users/u-target/blocked')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ blocked: true });
 
     expect(res.status).toBe(200);
@@ -343,7 +229,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
       email: 't@x.com',
       fullName: 'Target',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
       tokenVersion: 2,
       blocked: false,
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -352,7 +238,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     const res = await request(app)
       .patch('/api/users/u-target/blocked')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ blocked: false });
 
     expect(res.status).toBe(200);
@@ -368,7 +254,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     const res = await request(app)
       .patch('/api/users/u-target/blocked')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ blocked: true });
 
     expect(res.status).toBe(403);
@@ -389,7 +275,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     const res = await request(app)
       .patch('/api/users/u-target/blocked')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ blocked: 'yes' });
 
     expect(res.status).toBe(400);
@@ -402,7 +288,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     const res = await request(app)
       .patch('/api/users/u-target/blocked')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({});
 
     expect(res.status).toBe(400);
@@ -416,7 +302,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     const res = await request(app)
       .patch('/api/users/u-ghost/blocked')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ blocked: true });
 
     expect(res.status).toBe(404);

@@ -67,8 +67,8 @@ afterEach(() => {
   TEST_ENV.allowedDomain = undefined;
 });
 
-function tokenFor(role: 'ADMIN' | 'MEMBER') {
-  return signJwt({ sub: 'u1', email: 'user@example.com', role, ver: 0 });
+function tokenFor(isPlatformAdmin: boolean) {
+  return signJwt({ sub: 'u1', email: 'user@example.com', pa: isPlatformAdmin, ver: 0 });
 }
 
 describe('projectsRouter (F08)', () => {
@@ -81,7 +81,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .get('/api/projects')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.length).toBe(2);
@@ -104,7 +104,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.slug).toBe('SLYK');
@@ -116,7 +116,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -127,7 +127,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .get('/api/projects/slyk')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -148,7 +148,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .post('/api/projects')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'Slyk', slug: 'slyk' });
 
     expect(res.status).toBe(201);
@@ -163,7 +163,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .post('/api/projects')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ name: 'Slyk', slug: 'slyk' });
 
     expect(res.status).toBe(403);
@@ -183,7 +183,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .post('/api/projects')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: '' });
 
     expect(res.status).toBe(400);
@@ -201,7 +201,7 @@ describe('projectsRouter (F08)', () => {
 
     const res = await request(app)
       .post('/api/projects')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ name: 'Slyk', slug: 'slyk' });
 
     expect(res.status).toBe(409);
@@ -223,7 +223,7 @@ describe('GET /:slug/board (F09)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/board')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.project.slug).toBe('SLYK');
@@ -236,7 +236,7 @@ describe('GET /:slug/board (F09)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/board')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -247,7 +247,7 @@ describe('GET /:slug/board (F09)', () => {
 
     const res = await request(app)
       .get('/api/projects/slyk/board')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -270,7 +270,7 @@ describe('GET /:slug/board (F09)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/board')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
   });
@@ -283,7 +283,7 @@ describe('GET /:slug/board (F09)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/board')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
   });
@@ -306,7 +306,7 @@ describe('POST /:slug/tickets (F12)', () => {
     );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New' });
     expect(res.status).toBe(201);
     expect(res.body.data.ticketNumber).toBe(1);
@@ -320,7 +320,7 @@ describe('POST /:slug/tickets (F12)', () => {
     );
     await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New' });
     expect(mockedCreateTicket).toHaveBeenCalledWith({
       slug: 'SLYK',
@@ -336,7 +336,7 @@ describe('POST /:slug/tickets (F12)', () => {
     );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New' });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -346,7 +346,7 @@ describe('POST /:slug/tickets (F12)', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: '' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -357,7 +357,7 @@ describe('POST /:slug/tickets (F12)', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'X', priority: 'BOGUS' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -367,7 +367,7 @@ describe('POST /:slug/tickets (F12)', () => {
     mockedFindVersion.mockResolvedValue(0);
     const res = await request(app)
       .post('/api/projects/slyk/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -386,7 +386,7 @@ describe('POST /:slug/tickets (F12)', () => {
     );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New' });
     expect(res.status).toBe(201);
   });
@@ -398,7 +398,7 @@ describe('POST /:slug/tickets (F12)', () => {
     );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ title: 'New' });
     expect(res.status).toBe(201);
   });
@@ -410,7 +410,7 @@ describe('POST /:slug/tickets (F12)', () => {
     );
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
@@ -445,7 +445,7 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/tickets/SLYK-4')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.ticketNumber).toBe(4);
@@ -457,7 +457,7 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/tickets/SLYK-abc')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -470,7 +470,7 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/tickets/SLYK-999')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -490,7 +490,7 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/tickets/PX-4')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -507,7 +507,7 @@ describe('GET /:slug/tickets/:displayId (F30)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/tickets/SLYK-004')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(mockedGetTicketByNumber).toHaveBeenCalledWith('SLYK', 4);
@@ -530,7 +530,7 @@ describe('PATCH /api/projects/:slug (F27)', () => {
 
     const res = await request(app)
       .patch('/api/projects/SLYK')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({
         name: 'Slykboard',
         columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
@@ -549,7 +549,7 @@ describe('PATCH /api/projects/:slug (F27)', () => {
 
     const res = await request(app)
       .patch('/api/projects/SLYK')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({
         name: 'Slykboard',
         columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
@@ -586,7 +586,7 @@ describe('PATCH /api/projects/:slug (F27)', () => {
 
       const res = await request(app)
         .patch('/api/projects/SLYK')
-        .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+        .set('Authorization', `Bearer ${await tokenFor(true)}`)
         .send(body);
 
       expect(res.status).toBe(400);
@@ -613,7 +613,7 @@ describe('PATCH /api/projects/:slug (F27)', () => {
 
     const res = await request(app)
       .patch('/api/projects/SLYK')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({
         columns: [
           { id: '11111111-1111-4111-8111-111111111111', name: 'To Do' },
@@ -631,7 +631,7 @@ describe('PATCH /api/projects/:slug (F27)', () => {
 
     const res = await request(app)
       .patch('/api/projects/slyk')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`)
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({
         name: 'Slykboard',
         columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],

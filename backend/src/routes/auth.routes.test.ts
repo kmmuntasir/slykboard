@@ -81,7 +81,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
@@ -96,7 +97,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
     });
     expect(mockedExchange).toHaveBeenCalledWith('valid');
   });
@@ -115,7 +117,8 @@ describe('auth routes', () => {
       email: 'a@allowed.com',
       fullName: 'Admin One',
       avatarUrl: 'https://img/a.png',
-      role: 'ADMIN',
+      isPlatformAdmin: true,
+      displayName: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
@@ -124,7 +127,7 @@ describe('auth routes', () => {
     const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.user.role).toBe('ADMIN');
+    expect(res.body.data.user.isPlatformAdmin).toBe(true);
     expect(mockedUpsert).toHaveBeenCalled();
   });
 
@@ -144,7 +147,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       tokenVersion: 2,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
@@ -188,7 +192,8 @@ describe('auth routes', () => {
       email: 'user@oldomain.com',
       fullName: 'Existing User',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -209,7 +214,8 @@ describe('auth routes', () => {
       email: 'user@oldomain.com',
       fullName: 'Existing User',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
     });
     expect(mockedFindByGoogleId).toHaveBeenCalledWith('existing-google-id');
     expect(mockedUpsert).toHaveBeenCalled();
@@ -229,7 +235,8 @@ describe('auth routes', () => {
       email: 'anyone@anywhere.com',
       fullName: 'Any One',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
@@ -254,7 +261,8 @@ describe('auth routes', () => {
       email: 'blocked@x.com',
       fullName: 'Blocked User',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       blocked: true,
       tokenVersion: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -325,7 +333,7 @@ describe('auth routes', () => {
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
-      role: 'MEMBER',
+      pa: false,
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
@@ -335,7 +343,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     } as unknown as Awaited<ReturnType<typeof findUserById>>);
@@ -350,7 +359,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
     });
   });
 
@@ -361,7 +371,7 @@ describe('auth routes', () => {
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
-      role: 'MEMBER',
+      pa: false,
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
@@ -371,7 +381,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'DB Fresh',
       avatarUrl: 'https://img/db.png',
-      role: 'ADMIN',
+      isPlatformAdmin: true,
+      displayName: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     } as unknown as Awaited<ReturnType<typeof findUserById>>);
@@ -380,7 +391,7 @@ describe('auth routes', () => {
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.user.role).toBe('ADMIN');
+    expect(res.body.data.user.isPlatformAdmin).toBe(true);
     expect(res.body.data.user.fullName).toBe('DB Fresh');
     expect(res.body.data.user.avatarUrl).toBe('https://img/db.png');
     expect(mockedFindById).toHaveBeenCalledWith('u1');
@@ -394,7 +405,7 @@ describe('auth routes', () => {
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
-      role: 'MEMBER',
+      pa: false,
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
@@ -404,7 +415,8 @@ describe('auth routes', () => {
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       tokenVersion: 3,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
@@ -424,7 +436,7 @@ describe('auth routes', () => {
     const realToken = await realSignJwt({
       sub: 'ghost',
       email: 'ghost@example.com',
-      role: 'MEMBER',
+      pa: false,
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
@@ -450,7 +462,7 @@ describe('auth routes', () => {
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
-      role: 'MEMBER',
+      pa: false,
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
@@ -471,7 +483,7 @@ describe('auth routes', () => {
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
-      role: 'MEMBER',
+      pa: false,
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);

@@ -112,7 +112,7 @@ ticketsRouter.patch(
 ticketsRouter.delete(
   '/:ticketId',
   authenticate,
-  requireRole('ADMIN'),
+  requireRole(),
   validateRequest({ params: ticketIdParam }),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
@@ -146,7 +146,7 @@ ticketsRouter.post(
     const entry = await timerService.stopTimer({
       ticketId,
       userId: req.user!.id,
-      isAdmin: req.user!.role === 'ADMIN',
+      isAdmin: req.user!.isPlatformAdmin,
     });
     res.json(success({ entry, serverNow: new Date().toISOString() }));
   },

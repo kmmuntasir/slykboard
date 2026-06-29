@@ -18,7 +18,7 @@ const secretKey = new TextEncoder().encode(env.jwtSecret);
 const validClaims: JwtUserClaims = {
   sub: 'user-uuid-123',
   email: 'test@slykboard.test',
-  role: 'MEMBER',
+  pa: false,
   ver: 1,
 };
 
@@ -29,7 +29,7 @@ function signBadToken(
     expiresIn?: string;
   } = {},
 ): Promise<string> {
-  return new SignJWT({ email: 'x@slykboard.test', role: 'MEMBER' })
+  return new SignJWT({ email: 'x@slykboard.test', pa: false })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject('user-1')
     .setIssuedAt()
@@ -55,7 +55,7 @@ describe('jwt', () => {
 
     expect(payload.sub).toBe(validClaims.sub);
     expect(payload.email).toBe(validClaims.email);
-    expect(payload.role).toBe(validClaims.role);
+    expect(payload.pa).toBe(validClaims.pa);
     expect(payload.iss).toBe('slykboard');
     expect(payload.aud).toBe('slykboard-web');
     expect(payload.iat).toBeTruthy();
@@ -96,7 +96,7 @@ describe('jwt', () => {
   it('throws UNAUTHENTICATED when ver claim is missing', async () => {
     // Mirror signBadToken style: raw SignJWT, correct issuer/audience/exp,
     // but omit `ver` from the payload object entirely.
-    const token = await new SignJWT({ email: 'test@slykboard.test', role: 'MEMBER' })
+    const token = await new SignJWT({ email: 'test@slykboard.test', pa: false })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(validClaims.sub)
       .setIssuedAt()
@@ -114,7 +114,7 @@ describe('jwt', () => {
 
   it('throws UNAUTHENTICATED when ver claim is a string', async () => {
     // ver: "0" must fail closed — typeof string !== number.
-    const token = await new SignJWT({ email: 'test@slykboard.test', role: 'MEMBER', ver: '0' })
+    const token = await new SignJWT({ email: 'test@slykboard.test', pa: false, ver: '0' })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(validClaims.sub)
       .setIssuedAt()
@@ -127,6 +127,24 @@ describe('jwt', () => {
       code: ErrorCode.UNAUTHENTICATED,
       message: 'Token missing numeric ver claim',
     });
+  });
+
+  it('throws UNAUTHENTICATED when pa claim is missing (pre-SLYK-01 token rejected)', async () => {
+    // A pre-SLYK-01 token carries `role` but no `pa` — must fail closed.
+    const token = await new SignJWT({ email: 'test@slykboard.test', role: 'MEMBER', ver: 1 })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(validClaims.sub)
+      .setIssuedAt()
+      .setIssuer('slykboard')
+      .setAudience('slykboard-web')
+      .setExpirationTime('8h')
+      .sign(secretKey);
+
+    await expect(verifyJwt(token)).rejects.toMatchObject({
+      code: ErrorCode.UNAUTHENTICATED,
+      message: 'Token missing required claims',
+    });
+    await expect(verifyJwt(token)).rejects.toBeInstanceOf(AppError);
   });
 
   it('honors env.jwtTtl for the expiration window', async () => {

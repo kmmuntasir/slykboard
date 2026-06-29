@@ -14,12 +14,14 @@ const secretKey = new TextEncoder().encode(env.jwtSecret);
 export interface JwtUserClaims {
   sub: string; // user.id (uuid)
   email: string;
-  role: 'ADMIN' | 'MEMBER';
+  // SLYK-01: platform-admin boolean replaces the global role enum. Project-scoped
+  // roles are NOT in the JWT (per-project, resolved by middleware in Batch 3).
+  pa: boolean;
   ver: number; // F07 D3: token version. Compared to Users.tokenVersion in authenticate.
 }
 
 export function signJwt(claims: JwtUserClaims): Promise<string> {
-  return new SignJWT({ email: claims.email, role: claims.role, ver: claims.ver })
+  return new SignJWT({ email: claims.email, pa: claims.pa, ver: claims.ver })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
     .setIssuedAt()
@@ -44,18 +46,19 @@ export async function verifyJwt(token: string): Promise<JwtUserClaims & JWTPaylo
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Token missing numeric ver claim');
   }
 
-  // Per-field narrowing: JWT payload's open index signature types sub/email/role
-  // as `unknown`. Narrow each to its declared type before returning, so the
-  // JwtUserClaims half of the return type is honest without a whole-object cast.
+  // SLYK-01: per-field narrowing. The JWT payload's open index signature types
+  // custom claims as `unknown`; narrow each to its declared type before returning.
+  // `pa` must be present and boolean — pre-SLYK-01 tokens (carrying `role` only)
+  // fail closed here and are rejected as UNAUTHENTICATED.
   const sub = payload.sub;
   const email = payload.email;
-  const role = payload.role;
+  const pa = payload.pa;
   if (typeof sub !== 'string' || typeof email !== 'string') {
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Token missing required claims');
   }
-  if (role !== 'ADMIN' && role !== 'MEMBER') {
+  if (typeof pa !== 'boolean') {
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Token missing required claims');
   }
 
-  return { ...payload, sub, email, role, ver: payload.ver };
+  return { ...payload, sub, email, pa, ver: payload.ver };
 }

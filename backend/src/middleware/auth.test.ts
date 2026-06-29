@@ -24,9 +24,9 @@ function makeReq(authorization?: string): Request {
 function signExpiredToken(claims: {
   sub: string;
   email: string;
-  role: 'ADMIN' | 'MEMBER';
+  pa: boolean;
 }): Promise<string> {
-  return new SignJWT({ email: claims.email, role: claims.role })
+  return new SignJWT({ email: claims.email, pa: claims.pa })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
     .setIssuedAt()
@@ -39,9 +39,9 @@ function signExpiredToken(claims: {
 function signVerlessToken(claims: {
   sub: string;
   email: string;
-  role: 'ADMIN' | 'MEMBER';
+  pa: boolean;
 }): Promise<string> {
-  return new SignJWT({ email: claims.email, role: claims.role })
+  return new SignJWT({ email: claims.email, pa: claims.pa })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
     .setIssuedAt()
@@ -72,7 +72,7 @@ describe('authenticate middleware', () => {
 
   it('attaches req.user when ver matches', async () => {
     tokenVersionMock.findUserTokenVersion.mockResolvedValueOnce(0);
-    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', role: 'MEMBER', ver: 0 });
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
     const req = makeReq(`Bearer ${token}`);
     const res = {} as Response;
     const next = vi.fn() as unknown as NextFunction;
@@ -82,12 +82,12 @@ describe('authenticate middleware', () => {
     expect(tokenVersionMock.findUserTokenVersion).toHaveBeenCalledWith('user-123');
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith();
-    expect(req.user).toEqual({ id: 'user-123', email: 'a@b.com', role: 'MEMBER' });
+    expect(req.user).toEqual({ id: 'user-123', email: 'a@b.com', isPlatformAdmin: false });
   });
 
   it('throws UNAUTHENTICATED "Token version mismatch" when ver mismatches', async () => {
     tokenVersionMock.findUserTokenVersion.mockResolvedValueOnce(1);
-    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', role: 'MEMBER', ver: 0 });
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
     const req = makeReq(`Bearer ${token}`);
     const res = {} as Response;
     const next = vi.fn() as unknown as NextFunction;
@@ -100,7 +100,7 @@ describe('authenticate middleware', () => {
 
   it('throws UNAUTHENTICATED when user not found', async () => {
     tokenVersionMock.findUserTokenVersion.mockResolvedValueOnce(undefined);
-    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', role: 'MEMBER', ver: 0 });
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
     const req = makeReq(`Bearer ${token}`);
     const res = {} as Response;
     const next = vi.fn() as unknown as NextFunction;
@@ -142,7 +142,7 @@ describe('authenticate middleware', () => {
     const expired = await signExpiredToken({
       sub: 'user-123',
       email: 'a@b.com',
-      role: 'MEMBER',
+      pa: false,
     });
     const req = makeReq(`Bearer ${expired}`);
     const res = {} as Response;
@@ -159,7 +159,7 @@ describe('authenticate middleware', () => {
     const verless = await signVerlessToken({
       sub: 'user-123',
       email: 'a@b.com',
-      role: 'MEMBER',
+      pa: false,
     });
     const req = makeReq(`Bearer ${verless}`);
     const res = {} as Response;
@@ -173,7 +173,7 @@ describe('authenticate middleware', () => {
   });
 
   it('throws UNAUTHENTICATED on tampered token', async () => {
-    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', role: 'MEMBER', ver: 0 });
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
     const tampered = tamperSignature(token);
     const req = makeReq(`Bearer ${tampered}`);
     const res = {} as Response;
@@ -188,7 +188,7 @@ describe('authenticate middleware', () => {
 
   it('accepts lowercase scheme', async () => {
     tokenVersionMock.findUserTokenVersion.mockResolvedValueOnce(0);
-    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', role: 'MEMBER', ver: 0 });
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
     const req = makeReq(`bearer ${token}`);
     const res = {} as Response;
     const next = vi.fn() as unknown as NextFunction;
@@ -197,14 +197,14 @@ describe('authenticate middleware', () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith();
-    expect(req.user).toEqual({ id: 'user-123', email: 'a@b.com', role: 'MEMBER' });
+    expect(req.user).toEqual({ id: 'user-123', email: 'a@b.com', isPlatformAdmin: false });
   });
 
   it('does not leak verifyJwt error in message', async () => {
     const expired = await signExpiredToken({
       sub: 'user-123',
       email: 'a@b.com',
-      role: 'MEMBER',
+      pa: false,
     });
     const req = makeReq(`Bearer ${expired}`);
     const res = {} as Response;

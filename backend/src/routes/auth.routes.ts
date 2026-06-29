@@ -39,7 +39,7 @@ authRouter.post(
     const token = await signJwt({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      pa: user.isPlatformAdmin,
       ver: user.tokenVersion,
     });
     res.json(
@@ -49,8 +49,9 @@ authRouter.post(
           id: user.id,
           email: user.email,
           fullName: user.fullName,
+          displayName: user.displayName,
           avatarUrl: user.avatarUrl,
-          role: user.role,
+          isPlatformAdmin: user.isPlatformAdmin,
         },
       }),
     );
@@ -58,9 +59,10 @@ authRouter.post(
 );
 
 // GET /api/auth/me — requires valid Bearer token. D4: re-fetch the DB row by
-// req.user.id (DB-authoritative role, future-proofs against role changes) and
-// re-sign a fresh 8h JWT. Returns the FULL user row (note b) to preserve F05's
-// AuthResponseUser contract {id, email, fullName, avatarUrl, role}.
+// req.user.id (DB-authoritative isPlatformAdmin, future-proofs against admin
+// changes) and re-sign a fresh 8h JWT. Returns the FULL user row to preserve
+// the AuthResponseUser contract {id, email, fullName, displayName, avatarUrl,
+// isPlatformAdmin}.
 authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
   const user = await findUserById(req.user!.id);
   if (!user) {
@@ -69,7 +71,7 @@ authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
   const token = await signJwt({
     sub: user.id,
     email: user.email,
-    role: user.role,
+    pa: user.isPlatformAdmin,
     ver: user.tokenVersion,
   });
   res.json(
@@ -79,8 +81,9 @@ authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        displayName: user.displayName,
         avatarUrl: user.avatarUrl,
-        role: user.role,
+        isPlatformAdmin: user.isPlatformAdmin,
       },
     }),
   );

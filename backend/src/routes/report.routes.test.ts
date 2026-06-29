@@ -52,8 +52,8 @@ beforeEach(() => {
 });
 
 // sub 'u1' is the JWT subject; used as creatorId for the "member" case.
-function tokenFor(role: 'ADMIN' | 'MEMBER') {
-  return signJwt({ sub: 'u1', email: 'user@example.com', role, ver: 0 });
+function tokenFor(isPlatformAdmin: boolean) {
+  return signJwt({ sub: 'u1', email: 'user@example.com', pa: isPlatformAdmin, ver: 0 });
 }
 
 // A full ProjectRow shape (enough for requireProjectMember to attach). The
@@ -108,7 +108,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.users).toHaveLength(1);
@@ -128,7 +128,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(mockedGetTimeReport).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1' }));
@@ -140,7 +140,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
@@ -153,7 +153,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
@@ -174,7 +174,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/slyk/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -187,7 +187,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time?period=monthly&offset=-1')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(mockedGetTimeReport).toHaveBeenCalledWith({
@@ -206,7 +206,7 @@ describe('GET /api/projects/:slug/reports/tickets (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.users[0].counts.total).toBe(3);
@@ -223,7 +223,7 @@ describe('GET /api/projects/:slug/reports/tickets (F48 scoped)', () => {
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
@@ -253,7 +253,7 @@ describe('GET /api/reports/time (deprecated global, backward compat)', () => {
 
     const res = await request(app)
       .get('/api/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.users).toHaveLength(1);
@@ -284,7 +284,7 @@ describe('GET /api/reports/tickets (deprecated global, backward compat)', () => 
 
     const res = await request(app)
       .get('/api/reports/tickets')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.users[0].counts.total).toBe(3);

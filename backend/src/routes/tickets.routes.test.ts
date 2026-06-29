@@ -58,8 +58,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function tokenFor(role: 'ADMIN' | 'MEMBER') {
-  return signJwt({ sub: 'u1', email: 'user@example.com', role, ver: 0 });
+function tokenFor(isPlatformAdmin: boolean) {
+  return signJwt({ sub: 'u1', email: 'user@example.com', pa: isPlatformAdmin, ver: 0 });
 }
 
 const VALID_TICKET_ID = '11111111-1111-4111-8111-111111111111';
@@ -95,7 +95,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c2', position: 50 });
 
     expect(res.status).toBe(200);
@@ -119,7 +119,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c1', position: 25 });
 
     expect(res.status).toBe(200);
@@ -141,7 +141,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c1', position: 0 });
 
     expect(res.status).toBe(200);
@@ -159,7 +159,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c1', position: 1 });
 
     expect(res.status).toBe(404);
@@ -176,7 +176,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'ghost', position: 1 });
 
     expect(res.status).toBe(400);
@@ -194,7 +194,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: UNSORTED_BUCKET_ID, position: 1 });
 
     expect(res.status).toBe(400);
@@ -206,7 +206,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .set('Content-Type', 'application/json')
       .send('{"statusColumn":"c1","position":1e400}');
 
@@ -220,7 +220,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c1' });
 
     expect(res.status).toBe(400);
@@ -233,7 +233,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ position: 5 });
 
     expect(res.status).toBe(400);
@@ -256,7 +256,7 @@ describe('PATCH /api/tickets/:ticketId (F11)', () => {
 
     const res = await request(app)
       .patch('/api/tickets/not-a-uuid')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c1', position: 1 });
 
     expect(res.status).toBe(400);
@@ -276,7 +276,7 @@ describe('GET /api/tickets/:ticketId (F13)', () => {
 
     const res = await request(app)
       .get(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.id).toBe(VALID_TICKET_ID);
@@ -290,7 +290,7 @@ describe('GET /api/tickets/:ticketId (F13)', () => {
 
     const res = await request(app)
       .get(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -309,7 +309,7 @@ describe('GET /api/tickets/:ticketId (F13)', () => {
 
     const res = await request(app)
       .get('/api/tickets/not-a-uuid')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -327,7 +327,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'Updated Title' });
 
     expect(res.status).toBe(200);
@@ -356,7 +356,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ description: '<script>alert("xss")</script>safe content' });
 
     expect(res.status).toBe(200);
@@ -376,7 +376,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ priority: 'INVALID' });
 
     expect(res.status).toBe(400);
@@ -393,7 +393,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ priority: 'LOW' });
 
     expect(res.status).toBe(200);
@@ -414,7 +414,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ assigneeId: null });
 
     expect(res.status).toBe(200);
@@ -431,7 +431,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ assigneeId: 'not-a-uuid' });
 
     expect(res.status).toBe(400);
@@ -444,7 +444,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({});
 
     expect(res.status).toBe(400);
@@ -463,7 +463,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ statusColumn: 'c2', position: 100 });
 
     expect(res.status).toBe(200);
@@ -484,7 +484,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'X' });
 
     expect(res.status).toBe(404);
@@ -506,7 +506,7 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'Updated', statusColumn: 'c2', position: 50 });
 
     expect(res.status).toBe(200);
@@ -532,7 +532,7 @@ describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({
         labelIds: ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'],
       });
@@ -558,7 +558,7 @@ describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ labelIds: ['not-a-uuid'] });
 
     expect(res.status).toBe(400);
@@ -576,7 +576,7 @@ describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ labelIds: [] });
 
     expect(res.status).toBe(200);
@@ -601,7 +601,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ checklist });
 
     expect(res.status).toBe(200);
@@ -626,7 +626,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ checklist: [{ id: 'not-a-uuid', text: 'x', done: false }] });
 
     expect(res.status).toBe(400);
@@ -639,7 +639,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({
         checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: '', done: false }],
       });
@@ -654,7 +654,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({
         checklist: [
           { id: '11111111-1111-4111-8111-111111111111', text: 'x'.repeat(201), done: false },
@@ -676,7 +676,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ checklist: tooMany });
 
     expect(res.status).toBe(400);
@@ -689,7 +689,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({
         checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'x', done: 'yes' }],
       });
@@ -708,7 +708,7 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ checklist: [] });
 
     expect(res.status).toBe(200);
@@ -725,7 +725,7 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
 
     const res = await request(app)
       .delete(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(204);
     expect(res.body).toEqual({});
@@ -745,7 +745,7 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
 
     const res = await request(app)
       .delete(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
@@ -758,7 +758,7 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
 
     const res = await request(app)
       .delete(`/api/tickets/${VALID_TICKET_ID}`)
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -769,7 +769,7 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
 
     const res = await request(app)
       .delete('/api/tickets/not-a-uuid')
-      .set('Authorization', `Bearer ${await tokenFor('ADMIN')}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
@@ -802,7 +802,7 @@ describe('GET /api/tickets/:ticketId/activity (F19)', () => {
 
     const res = await request(app)
       .get(`/api/tickets/${VALID_TICKET_ID}/activity`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.entries).toEqual([entry]);
@@ -817,7 +817,7 @@ describe('GET /api/tickets/:ticketId/activity (F19)', () => {
 
     const res = await request(app)
       .get(`/api/tickets/${VALID_TICKET_ID}/activity`)
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -828,7 +828,7 @@ describe('GET /api/tickets/:ticketId/activity (F19)', () => {
 
     const res = await request(app)
       .get('/api/tickets/not-a-uuid/activity')
-      .set('Authorization', `Bearer ${await tokenFor('MEMBER')}`);
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');

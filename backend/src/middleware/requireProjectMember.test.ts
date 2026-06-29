@@ -30,7 +30,7 @@ describe('requireProjectMember middleware', () => {
   it('allows the creator and attaches req.project', async () => {
     projectServiceMock.getProjectBySlug.mockResolvedValueOnce(project);
     const req = {
-      user: { id: CREATOR_ID, email: 'creator@example.com', role: 'MEMBER' as const },
+      user: { id: CREATOR_ID, email: 'creator@example.com', isPlatformAdmin: false },
       params: { slug: 'team-board' },
     } as unknown as Request;
     const res = {} as Response;
@@ -47,7 +47,7 @@ describe('requireProjectMember middleware', () => {
   it('throws FORBIDDEN for a non-member', async () => {
     projectServiceMock.getProjectBySlug.mockResolvedValueOnce(project);
     const req = {
-      user: { id: OTHER_ID, email: 'other@example.com', role: 'MEMBER' as const },
+      user: { id: OTHER_ID, email: 'other@example.com', isPlatformAdmin: false },
       params: { slug: 'team-board' },
     } as unknown as Request;
     const res = {} as Response;
@@ -62,7 +62,7 @@ describe('requireProjectMember middleware', () => {
   it('throws FORBIDDEN for an unknown slug (existence hidden)', async () => {
     projectServiceMock.getProjectBySlug.mockResolvedValueOnce(null);
     const req = {
-      user: { id: OTHER_ID, email: 'other@example.com', role: 'MEMBER' as const },
+      user: { id: OTHER_ID, email: 'other@example.com', isPlatformAdmin: false },
       params: { slug: 'does-not-exist' },
     } as unknown as Request;
     const res = {} as Response;
@@ -74,10 +74,10 @@ describe('requireProjectMember middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('allows an ADMIN even when not the creator', async () => {
+  it('allows a Platform Admin even when not the creator', async () => {
     projectServiceMock.getProjectBySlug.mockResolvedValueOnce(project);
     const req = {
-      user: { id: OTHER_ID, email: 'admin@example.com', role: 'ADMIN' as const },
+      user: { id: OTHER_ID, email: 'admin@example.com', isPlatformAdmin: true },
       params: { slug: 'team-board' },
     } as unknown as Request;
     const res = {} as Response;

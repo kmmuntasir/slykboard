@@ -4,7 +4,7 @@ import { ErrorCode } from '../utils/envelope';
 import { getProjectBySlug } from '../services/projectService';
 
 // F47: project-membership gate. Path B (owner-approved, no DB migration):
-// membership = req.user.id === project.creatorId || req.user.role === 'ADMIN'.
+// membership = req.user.id === project.creatorId || req.user.isPlatformAdmin.
 // There is no projectMembers table and no migration; this middleware is the
 // creator-or-admin gate until a proper membership table is introduced.
 //
@@ -34,7 +34,7 @@ export async function requireProjectMember(
     throw new AppError(ErrorCode.FORBIDDEN, 'You do not have access to this project');
   }
 
-  const isMember = req.user.id === project.creatorId || req.user.role === 'ADMIN';
+  const isMember = req.user.id === project.creatorId || req.user.isPlatformAdmin;
   if (!isMember) {
     throw new AppError(ErrorCode.FORBIDDEN, 'You do not have access to this project');
   }

@@ -30,7 +30,7 @@ describe('F02 database integration', () => {
     { name: 'email', type: 'text' },
     { name: 'full_name', type: 'text' },
     { name: 'avatar_url', type: 'text' },
-    { name: 'role', type: 'USER-DEFINED' },
+    { name: 'is_platform_admin', type: 'boolean' },
     { name: 'created_at', type: 'timestamp with time zone' },
     { name: 'updated_at', type: 'timestamp with time zone' },
   ];
@@ -58,14 +58,13 @@ describe('F02 database integration', () => {
         googleId: `test-${Date.now()}`,
         email: `test-${Date.now()}@slykboard.local`,
         fullName: 'Test User',
-        role: 'MEMBER',
       })
       .returning();
 
     expect(created).toBeDefined();
     expect(created?.createdAt).toBeInstanceOf(Date);
     expect(created?.updatedAt).toBeInstanceOf(Date);
-    expect(created?.role).toBe('MEMBER');
+    expect(created?.isPlatformAdmin).toBe(false);
 
     await db.delete(users).where(sql`id = ${created!.id}`);
     await pool.end();
