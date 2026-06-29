@@ -16,9 +16,9 @@ description: Isolated-context delegation primitive. Spawns headless `pi -p` subp
 >
 > The entire purpose of this system is **context isolation**. If you do the work inline, you have **failed** the workflow, no matter how good the output looks. **Do not optimize against the instruction. Do not second-guess the workflow. Spawn the subprocess.** The instruction is an order, not a suggestion.
 
-Pi has **no native subagents**. To get the same context isolation Claude Code gives you with the `Task`/`Agent` tool, you spawn **headless `pi -p` subprocesses** instead. Each subprocess is a fully independent agent: its own context window, its own tool set, its own session. It loads the target role skill via `/skill:<role>`, does the work, and returns only its final text answer to your stdout.
+Pi has **no native subagents**. To get the same context isolation Claude Code gives you with the `Task`/`Agent` tool, you spawn **headless `pi -p` subprocesses** instead. Each subprocess is a fully independent agent: its own context window, its own tool set, its own session. It loads the target skill via `/skill:<role>`, does the work, and returns only its final text answer to your stdout.
 
-This skill is the primitive every other coordinating skill (`orchestrator`, `handle-ticket`, `create-implementation-plan`, `pr-review`, ...) builds on. **When you are coordinating, dispatch via this script — do not do the analysis/coding in your own context.** Keep your context as a clean dispatcher that reads digests and decides sequencing.
+This skill is the primitive every other coordinating skill (`orchestrator`, `handle-ticket`, `create-implementation-plan`, `pr-review`, ...) builds on. **It is also the ONLY sanctioned way for any skill to invoke another skill** — whether that target is a role (`analyst`, a coder, `committer`) or a whole coordinator/workflow skill (`create-implementation-plan`, `orchestrator`, ...). **When you are coordinating, dispatch via this script — do not do the analysis/coding in your own context, and do not invoke other skills by typing `/skill:` or running `pi -p` yourself.** Keep your context as a clean dispatcher that reads digests and decides sequencing.
 
 ## The script: `scripts/delegate.sh`
 
@@ -45,15 +45,23 @@ DELEGATE_TOOLS="read,grep,find,ls" ./.pi/skills/delegate/scripts/delegate.sh <ro
 
 ### Roles & their default toolsets
 
-| Role | Default tools | Notes |
+The first argument to `delegate.sh` is a **skill name** (the role/workflow skill to load in the subprocess). It can be a role skill OR any coordinator/workflow skill:
+
+| Skill name | Default tools | Notes |
 |------|---------------|-------|
 | `analyst` | `read,grep,find,ls` | Read-only investigator (no bash mutation, no writes) |
 | `committer` | `bash,read` | Git stage+commit only |
 | `node-coder` | all built-ins | Backend implementation |
 | `react-coder` | all built-ins | Frontend implementation |
-| *(any other skill name)* | all built-ins | Generic isolated dispatch |
+| **any other skill** (`create-implementation-plan`, `breakdown-plan-into-tasks`, `orchestrator`, `verify-implementation`, `pr-review`, `handle-ticket`, ...) | **all built-ins** | **Coordinator/workflow skill dispatch.** The subprocess loads that skill's full body and follows it — including any *nested* `delegate.sh` calls the skill itself prescribes (e.g. `create-implementation-plan` spawning `analyst` subprocesses). |
 
-Override per-call with `DELEGATE_TOOLS=...`. The subprocess always runs with `--no-session` (ephemeral) and `--approve` (trust inherited cwd), and loads the role via `/skill:<role> <prompt>` so the role's full SKILL.md body applies.
+**This is the ONLY sanctioned way for one skill to invoke another skill.** Skills must never type `/skill:<name>` in an editor, run `pi -p` by hand, or "follow a sub-skill's SKILL.md inline." If a skill needs another skill, it dispatches it through this script.
+
+Override per-call with `DELEGATE_TOOLS=...`. The subprocess always runs with `--no-session` (ephemeral) and `--approve` (trust inherited cwd), and loads the skill via `/skill:<name> <prompt>` so the skill's full SKILL.md body applies.
+
+#### Nested delegation & timeouts
+
+A dispatched coordinator skill will itself call `delegate.sh` (e.g. `orchestrator` -> `node-coder`; `create-implementation-plan` -> `analyst` x3). This is supported and expected — each nested call is just another `pi -p` subprocess. The inner subprocesses inherit the outer `DELEGATE_TIMEOUT`, so set a **generous** timeout on the outer dispatch (e.g. `DELEGATE_TIMEOUT=1800` for a plan/breakdown/verify phase that nests 3 analyst runs; `3600` for an orchestrator that runs many sequential task dispatches). Do not lower the timeout below the sum of the nested work.
 
 ### Environment variables
 
