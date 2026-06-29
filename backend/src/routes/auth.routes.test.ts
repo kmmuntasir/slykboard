@@ -3,10 +3,9 @@ import request from 'supertest';
 import { decodeJwt } from 'jose';
 import type * as JwtModule from '../utils/jwt';
 
-// Hoisted mutable test env. accessControl reads env.allowedDomain at call time;
-// jwt reads env.jwtSecret at module load. Mocking the '../config' barrel with a
-// full Config keeps REAL accessControl + REAL verifyJwt working while each test
-// controls allowedDomain.
+// Hoisted mutable test env. jwt reads env.jwtSecret at module load. Mocking the
+// '../config' barrel with a full Config keeps REAL verifyJwt working while each
+// test controls allowedDomain (kept only to assert login does NOT consult it).
 const { TEST_ENV } = vi.hoisted(() => ({
   TEST_ENV: {
     port: 3000,
@@ -29,9 +28,9 @@ vi.mock('../services/googleOAuth', () => ({
   exchangeCodeForUser: vi.fn(),
 }));
 vi.mock('../services/userService', () => ({
-  upsertByGoogleId: vi.fn(),
+  findUserByEmail: vi.fn(),
   findUserById: vi.fn(),
-  findUserByGoogleId: vi.fn(),
+  linkGoogleId: vi.fn(),
 }));
 vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(),
@@ -45,19 +44,34 @@ vi.mock('../utils/jwt', async (importOriginal) => {
 
 import { app } from '../index';
 import { exchangeCodeForUser } from '../services/googleOAuth';
-import { upsertByGoogleId, findUserById, findUserByGoogleId } from '../services/userService';
+import { findUserByEmail, findUserById, linkGoogleId } from '../services/userService';
 import { bumpTokenVersion, findUserTokenVersion } from '../services/tokenVersion';
 import { signJwt } from '../utils/jwt';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 
 const mockedExchange = vi.mocked(exchangeCodeForUser);
-const mockedUpsert = vi.mocked(upsertByGoogleId);
+const mockedFindByEmail = vi.mocked(findUserByEmail);
 const mockedFindById = vi.mocked(findUserById);
-const mockedFindByGoogleId = vi.mocked(findUserByGoogleId);
+const mockedLinkGoogleId = vi.mocked(linkGoogleId);
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedBump = vi.mocked(bumpTokenVersion);
 const mockedSign = vi.mocked(signJwt);
+
+// A canonical existing-user row fixture (returning user, already linked).
+const linkedUser = {
+  id: 'u1',
+  googleId: 'g1',
+  email: 'user@example.com',
+  fullName: 'User One',
+  avatarUrl: 'https://img/u.png',
+  isPlatformAdmin: false,
+  displayName: 'Uno',
+  blocked: false,
+  tokenVersion: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -67,25 +81,56 @@ afterEach(() => {
   TEST_ENV.allowedDomain = undefined;
 });
 
-describe('auth routes', () => {
-  it('POST /google returns 200 with token + user on valid code', async () => {
+describe('auth routes — POST /google login gate (SLYK-01 Task H)', () => {
+  it('returns 401 UNAUTHENTICATED for an unknown email (no auto-create)', async () => {
     mockedExchange.mockResolvedValue({
-      googleId: 'g1',
+      googleId: 'g-new',
+      email: 'nobody@example.com',
+      fullName: 'Nobody',
+      avatarUrl: null,
+    });
+    mockedFindByEmail.mockResolvedValue(undefined);
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(res.body.error.message).toBe('No account for this email');
+    expect(mockedFindByEmail).toHaveBeenCalledWith('nobody@example.com');
+    expect(mockedLinkGoogleId).not.toHaveBeenCalled();
+    expect(mockedSign).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 FORBIDDEN for a blocked user (deactivation gate)', async () => {
+    mockedExchange.mockResolvedValue({
+      googleId: 'g-blocked',
+      email: 'blocked@example.com',
+      fullName: 'Blocked',
+      avatarUrl: null,
+    });
+    mockedFindByEmail.mockResolvedValue({ ...linkedUser, blocked: true } as never);
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.message).toBe('Account deactivated');
+    // Gate sits BEFORE linkGoogleId + signJwt.
+    expect(mockedLinkGoogleId).not.toHaveBeenCalled();
+    expect(mockedSign).not.toHaveBeenCalled();
+  });
+
+  it('first login (googleId null) links googleId and returns 200', async () => {
+    mockedExchange.mockResolvedValue({
+      googleId: 'g-new',
       email: 'user@example.com',
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
     });
-    mockedUpsert.mockResolvedValue({
-      id: 'u1',
-      googleId: 'g1',
-      email: 'user@example.com',
-      fullName: 'User One',
-      avatarUrl: 'https://img/u.png',
-      isPlatformAdmin: false,
-      displayName: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
+    const unlinked = { ...linkedUser, googleId: null };
+    mockedFindByEmail.mockResolvedValue(unlinked as never);
+    const linked = { ...linkedUser, googleId: 'g-new' };
+    mockedLinkGoogleId.mockResolvedValue(linked as never);
     mockedSign.mockResolvedValue('jwt-xyz');
 
     const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
@@ -96,42 +141,109 @@ describe('auth routes', () => {
       id: 'u1',
       email: 'user@example.com',
       fullName: 'User One',
+      displayName: 'Uno',
       avatarUrl: 'https://img/u.png',
       isPlatformAdmin: false,
-      displayName: null,
     });
-    expect(mockedExchange).toHaveBeenCalledWith('valid');
+    expect(mockedLinkGoogleId).toHaveBeenCalledWith('u1', 'g-new');
+    expect(mockedSign).toHaveBeenCalledWith({
+      sub: 'u1',
+      email: 'user@example.com',
+      pa: false,
+      ver: 0,
+    });
   });
 
-  it('POST /google returns 200 ADMIN for first user when domain allowed', async () => {
-    TEST_ENV.allowedDomain = 'allowed.com';
+  it('stored googleId mismatch surfaces 403 FORBIDDEN from linkGoogleId', async () => {
+    mockedExchange.mockResolvedValue({
+      googleId: 'g-attacker',
+      email: 'user@example.com',
+      fullName: 'User One',
+      avatarUrl: null,
+    });
+    // Account already linked to a DIFFERENT googleId.
+    mockedFindByEmail.mockResolvedValue({ ...linkedUser, googleId: 'g-real' } as never);
+    mockedLinkGoogleId.mockRejectedValue(
+      new AppError(ErrorCode.FORBIDDEN, 'Account identity mismatch'),
+    );
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.message).toBe('Account identity mismatch');
+    expect(mockedLinkGoogleId).toHaveBeenCalledWith('u1', 'g-attacker');
+    expect(mockedSign).not.toHaveBeenCalled();
+  });
+
+  it('returning user (googleId already matches) succeeds without re-linking write', async () => {
     mockedExchange.mockResolvedValue({
       googleId: 'g1',
-      email: 'a@allowed.com',
-      fullName: 'Admin One',
-      avatarUrl: 'https://img/a.png',
+      email: 'user@example.com',
+      fullName: 'User One',
+      avatarUrl: 'https://img/u.png',
     });
-    mockedUpsert.mockResolvedValue({
-      id: 'u1',
+    mockedFindByEmail.mockResolvedValue(linkedUser as never);
+    // linkGoogleId is idempotent: returns the same row when googleId matches.
+    mockedLinkGoogleId.mockResolvedValue(linkedUser as never);
+    mockedSign.mockResolvedValue('jwt-return');
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.token).toBe('jwt-return');
+    expect(res.body.data.user.isPlatformAdmin).toBe(false);
+    expect(res.body.data.user.displayName).toBe('Uno');
+    expect(mockedLinkGoogleId).toHaveBeenCalledWith('u1', 'g1');
+  });
+
+  it('returns isPlatformAdmin=true for a platform-admin account', async () => {
+    mockedExchange.mockResolvedValue({
       googleId: 'g1',
-      email: 'a@allowed.com',
+      email: 'admin@example.com',
       fullName: 'Admin One',
-      avatarUrl: 'https://img/a.png',
-      isPlatformAdmin: true,
-      displayName: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
+      avatarUrl: null,
+    });
+    const admin = { ...linkedUser, id: 'admin1', email: 'admin@example.com', isPlatformAdmin: true };
+    mockedFindByEmail.mockResolvedValue(admin as never);
+    mockedLinkGoogleId.mockResolvedValue(admin as never);
     mockedSign.mockResolvedValue('jwt-admin');
 
     const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
 
     expect(res.status).toBe(200);
     expect(res.body.data.user.isPlatformAdmin).toBe(true);
-    expect(mockedUpsert).toHaveBeenCalled();
+    expect(mockedSign).toHaveBeenCalledWith(
+      expect.objectContaining({ sub: 'admin1', pa: true }),
+    );
   });
 
-  it('POST /google returns token whose decoded JWT ver === user.tokenVersion', async () => {
+  it('does NOT consult ALLOWED_DOMAIN on the login path for existing users', async () => {
+    // Existing user whose email domain differs from the (tightened) allowed
+    // domain must still log in — domain gating is creation-time only.
+    TEST_ENV.allowedDomain = 'newdomain.com';
+    const offdomain = {
+      ...linkedUser,
+      email: 'user@oldomain.com',
+      googleId: 'g-off',
+    };
+    mockedExchange.mockResolvedValue({
+      googleId: 'g-off',
+      email: 'user@oldomain.com',
+      fullName: 'Existing User',
+      avatarUrl: null,
+    });
+    mockedFindByEmail.mockResolvedValue(offdomain as never);
+    mockedLinkGoogleId.mockResolvedValue(offdomain as never);
+    mockedSign.mockResolvedValue('jwt-grandfathered');
+
+    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.token).toBe('jwt-grandfathered');
+  });
+
+  it('returns a token whose decoded JWT ver === user.tokenVersion', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
     mockedSign.mockImplementation((claims) => realSignJwt(claims));
@@ -141,159 +253,33 @@ describe('auth routes', () => {
       fullName: 'User One',
       avatarUrl: 'https://img/u.png',
     });
-    mockedUpsert.mockResolvedValue({
-      id: 'u1',
-      googleId: 'g1',
-      email: 'user@example.com',
-      fullName: 'User One',
-      avatarUrl: 'https://img/u.png',
-      isPlatformAdmin: false,
-      displayName: null,
-      tokenVersion: 2,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
+    const withVer = { ...linkedUser, tokenVersion: 2 };
+    mockedFindByEmail.mockResolvedValue(withVer as never);
+    mockedLinkGoogleId.mockResolvedValue(withVer as never);
 
     const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
 
     expect(res.status).toBe(200);
     const decoded = decodeJwt(res.body.data.token);
     expect(decoded.ver).toBe(2);
+    expect(decoded.pa).toBe(false);
   });
 
-  it('POST /google returns 403 FORBIDDEN on domain mismatch', async () => {
-    TEST_ENV.allowedDomain = 'allowed.com';
-    mockedExchange.mockResolvedValue({
-      googleId: 'g1',
-      email: 'a@blocked.com',
-      fullName: 'Blocked User',
-      avatarUrl: null,
-    });
-
-    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
-
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
-    expect(res.body.error.message).toBe('Your Google account is not in the allowed workspace');
-    expect(mockedUpsert).not.toHaveBeenCalled();
-  });
-
-  it('POST /google returns 200 for existing user with disallowed domain (D1 grandfathering)', async () => {
-    TEST_ENV.allowedDomain = 'newdomain.com';
-    mockedExchange.mockResolvedValue({
-      googleId: 'existing-google-id',
-      email: 'user@oldomain.com',
-      fullName: 'Existing User',
-      avatarUrl: null,
-    });
-    const seededRow = {
-      id: 'u-existing',
-      googleId: 'existing-google-id',
-      email: 'user@oldomain.com',
-      fullName: 'Existing User',
-      avatarUrl: null,
-      isPlatformAdmin: false,
-      displayName: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    mockedFindByGoogleId.mockResolvedValue(
-      seededRow as unknown as Awaited<ReturnType<typeof findUserByGoogleId>>,
-    );
-    mockedUpsert.mockResolvedValue(
-      seededRow as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>,
-    );
-    mockedSign.mockResolvedValue('jwt-grandfathered');
-
-    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.token).toBe('jwt-grandfathered');
-    expect(res.body.data.user).toEqual({
-      id: 'u-existing',
-      email: 'user@oldomain.com',
-      fullName: 'Existing User',
-      avatarUrl: null,
-      isPlatformAdmin: false,
-      displayName: null,
-    });
-    expect(mockedFindByGoogleId).toHaveBeenCalledWith('existing-google-id');
-    expect(mockedUpsert).toHaveBeenCalled();
-  });
-
-  it('POST /google returns 200 when env.allowedDomain unset (allow all)', async () => {
-    TEST_ENV.allowedDomain = undefined;
-    mockedExchange.mockResolvedValue({
-      googleId: 'g1',
-      email: 'anyone@anywhere.com',
-      fullName: 'Any One',
-      avatarUrl: null,
-    });
-    mockedUpsert.mockResolvedValue({
-      id: 'u1',
-      googleId: 'g1',
-      email: 'anyone@anywhere.com',
-      fullName: 'Any One',
-      avatarUrl: null,
-      isPlatformAdmin: false,
-      displayName: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
-    mockedSign.mockResolvedValue('jwt-any');
-
-    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
-
-    expect(res.status).toBe(200);
-    expect(mockedUpsert).toHaveBeenCalled();
-  });
-
-  it('POST /google returns 403 FORBIDDEN when user is blocked (F25 deactivation gate)', async () => {
-    mockedExchange.mockResolvedValue({
-      googleId: 'g-blocked',
-      email: 'blocked@x.com',
-      fullName: 'Blocked User',
-      avatarUrl: null,
-    });
-    mockedUpsert.mockResolvedValue({
-      id: 'u-blocked',
-      googleId: 'g-blocked',
-      email: 'blocked@x.com',
-      fullName: 'Blocked User',
-      avatarUrl: null,
-      isPlatformAdmin: false,
-      displayName: null,
-      blocked: true,
-      tokenVersion: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof upsertByGoogleId>>);
-
-    const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
-
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
-    expect(res.body.error.message).toBe('Account deactivated');
-    // Gate sits AFTER upsert but BEFORE signJwt — no JWT issued for blocked users.
-    expect(mockedSign).not.toHaveBeenCalled();
-  });
-
-  it('POST /google returns 400 VALIDATION_FAILED on missing code', async () => {
+  it('returns 400 VALIDATION_FAILED on missing code', async () => {
     const res = await request(app).post('/api/auth/google').send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
-  it('POST /google returns 400 VALIDATION_FAILED on empty code', async () => {
+  it('returns 400 VALIDATION_FAILED on empty code', async () => {
     const res = await request(app).post('/api/auth/google').send({ code: '' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
-  it('POST /google returns 401 UNAUTHENTICATED on unverified email', async () => {
-    TEST_ENV.allowedDomain = 'allowed.com';
+  it('returns 401 UNAUTHENTICATED on unverified email (exchangeCodeForUser throws)', async () => {
     mockedExchange.mockRejectedValue(
       new AppError(ErrorCode.UNAUTHENTICATED, 'Email not verified by Google'),
     );
@@ -302,11 +288,11 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
-    // exchangeCodeForUser threw before assertDomainAllowed + upsert ran (code order).
-    expect(mockedUpsert).not.toHaveBeenCalled();
+    // Threw before any user lookup ran.
+    expect(mockedFindByEmail).not.toHaveBeenCalled();
   });
 
-  it('POST /google returns 500 INTERNAL_ERROR when exchangeCodeForUser throws', async () => {
+  it('returns 500 INTERNAL_ERROR when exchangeCodeForUser throws', async () => {
     mockedExchange.mockRejectedValue(
       new AppError(ErrorCode.INTERNAL_ERROR, 'Authentication failed'),
     );
@@ -319,15 +305,17 @@ describe('auth routes', () => {
     // rewrites any status >= 500 message to 'Internal server error'.
     expect(res.body.error.message).toBe('Internal server error');
   });
+});
 
-  it('GET /me returns 401 UNAUTHENTICATED without token', async () => {
+describe('auth routes — GET /me', () => {
+  it('returns 401 UNAUTHENTICATED without token', async () => {
     const res = await request(app).get('/api/auth/me');
 
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 
-  it('GET /me returns 200 with fresh token + user on valid token', async () => {
+  it('returns 200 with fresh token + user on valid token', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
     const realToken = await realSignJwt({
@@ -337,17 +325,7 @@ describe('auth routes', () => {
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
-    mockedFindById.mockResolvedValue({
-      id: 'u1',
-      googleId: 'g1',
-      email: 'user@example.com',
-      fullName: 'User One',
-      avatarUrl: 'https://img/u.png',
-      isPlatformAdmin: false,
-      displayName: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof findUserById>>);
+    mockedFindById.mockResolvedValue(linkedUser as never);
     mockedSign.mockResolvedValue('fresh-token');
 
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
@@ -358,16 +336,16 @@ describe('auth routes', () => {
       id: 'u1',
       email: 'user@example.com',
       fullName: 'User One',
+      displayName: 'Uno',
       avatarUrl: 'https://img/u.png',
       isPlatformAdmin: false,
-      displayName: null,
     });
   });
 
-  it('GET /me returns 200 with DB-fresh role (DB-authoritative, not JWT)', async () => {
+  it('returns 200 with DB-fresh isPlatformAdmin (DB-authoritative, not JWT)', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
-    // JWT claim says MEMBER, but the DB row says ADMIN — /me must emit ADMIN.
+    // JWT claim says pa:false, but the DB row says isPlatformAdmin:true.
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
@@ -376,16 +354,11 @@ describe('auth routes', () => {
     });
     mockedFindVersion.mockResolvedValue(0);
     mockedFindById.mockResolvedValue({
-      id: 'u1',
-      googleId: 'g1',
-      email: 'user@example.com',
+      ...linkedUser,
+      isPlatformAdmin: true,
       fullName: 'DB Fresh',
       avatarUrl: 'https://img/db.png',
-      isPlatformAdmin: true,
-      displayName: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof findUserById>>);
+    } as never);
     mockedSign.mockResolvedValue('fresh-token');
 
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
@@ -397,11 +370,10 @@ describe('auth routes', () => {
     expect(mockedFindById).toHaveBeenCalledWith('u1');
   });
 
-  it('GET /me returns token whose decoded JWT ver === DB tokenVersion', async () => {
+  it('returns a token whose decoded JWT ver === DB tokenVersion', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
     mockedSign.mockImplementation((claims) => realSignJwt(claims));
-    // Request JWT carries ver:0; DB-authoritative tokenVersion is 3.
     const realToken = await realSignJwt({
       sub: 'u1',
       email: 'user@example.com',
@@ -409,28 +381,17 @@ describe('auth routes', () => {
       ver: 0,
     });
     mockedFindVersion.mockResolvedValue(0);
-    mockedFindById.mockResolvedValue({
-      id: 'u1',
-      googleId: 'g1',
-      email: 'user@example.com',
-      fullName: 'User One',
-      avatarUrl: 'https://img/u.png',
-      isPlatformAdmin: false,
-      displayName: null,
-      tokenVersion: 3,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    } as unknown as Awaited<ReturnType<typeof findUserById>>);
+    mockedFindById.mockResolvedValue({ ...linkedUser, tokenVersion: 3 } as never);
 
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
 
     expect(res.status).toBe(200);
     const decoded = decodeJwt(res.body.data.token);
-    // /me re-signs from the DB row, so ver follows DB tokenVersion (3), not the request token's 0.
+    // /me re-signs from the DB row, so ver follows DB tokenVersion (3).
     expect(decoded.ver).toBe(3);
   });
 
-  it('GET /me returns 401 UNAUTHENTICATED when user not found in DB', async () => {
+  it('returns 401 UNAUTHENTICATED when user not found in DB', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
     const realToken = await realSignJwt({
@@ -448,15 +409,17 @@ describe('auth routes', () => {
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
     expect(res.body.error.message).toBe('User no longer exists');
   });
+});
 
-  it('POST /logout returns 401 UNAUTHENTICATED without Bearer token', async () => {
+describe('auth routes — POST /logout', () => {
+  it('returns 401 UNAUTHENTICATED without Bearer token', async () => {
     const res = await request(app).post('/api/auth/logout');
 
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 
-  it('POST /logout bumps tokenVersion + returns success:true', async () => {
+  it('bumps tokenVersion + returns success:true', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
     const realToken = await realSignJwt({
@@ -477,7 +440,7 @@ describe('auth routes', () => {
     expect(mockedBump).toHaveBeenCalledWith('u1');
   });
 
-  it('POST /logout returns 500 INTERNAL_ERROR when bumpTokenVersion rejects', async () => {
+  it('returns 500 INTERNAL_ERROR when bumpTokenVersion rejects', async () => {
     const { signJwt: realSignJwt } =
       await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
     const realToken = await realSignJwt({

@@ -5,37 +5,42 @@ import { signJwt } from '../utils/jwt';
 import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
 import { exchangeCodeForUser } from '../services/googleOAuth';
-import { upsertByGoogleId, findUserById, findUserByGoogleId } from '../services/userService';
+import { findUserByEmail, findUserById, linkGoogleId } from '../services/userService';
 import { bumpTokenVersion } from '../services/tokenVersion';
-import { assertDomainAllowed } from '../services/accessControl';
 import { authCodeSchema } from './auth.schema';
 
 export const authRouter = Router();
 
 // POST /api/auth/google — exchange Google auth code for our JWT + user.
+// SLYK-01 Task H: login resolves an EXISTING account by email and links the
+// googleId on first login. No user provisioning happens here — accounts are
+// created by the bootstrap service or Member Management, never via ad-hoc
+// Google login. ALLOWED_DOMAIN is NOT re-checked on the login path (the
+// account already exists; domain gating only applies at creation time).
 authRouter.post(
   '/google',
   validateRequest({ body: authCodeSchema }),
   async (req, res): Promise<void> => {
     const { code } = req.body as { code: string };
     const info = await exchangeCodeForUser(code);
-    // D3 + D1 — workspace gate. Runs ONLY on the insert (signup) path.
-    // Existing users matched by googleId are grandfathered in so tightening
-    // ALLOWED_DOMAIN never locks out current members. assertDomainAllowed
-    // no-ops when env.allowedDomain is unset (D13). Runs AFTER Google
-    // verifies the email (D2) and BEFORE we persist a new row. errorHandler
-    // turns the throw into 403.
-    const existing = await findUserByGoogleId(info.googleId);
-    if (!existing) {
-      assertDomainAllowed(info.email);
+
+    // Lookup by email (not googleId) — email is the stable account identity.
+    const found = await findUserByEmail(info.email);
+    if (!found) {
+      throw new AppError(ErrorCode.UNAUTHENTICATED, 'No account for this email');
     }
-    const user = await upsertByGoogleId(info);
+
     // F25 D6: deactivation gate. Blocked users must not obtain a fresh JWT.
-    // Already-issued tokens are invalidated by setUserBlocked -> bumpTokenVersion
-    // (authenticate 401s on ver mismatch); this gate stops new logins.
-    if (user.blocked === true) {
+    if (found.blocked === true) {
       throw new AppError(ErrorCode.FORBIDDEN, 'Account deactivated');
     }
+
+    // First-login googleId link (race-safe) + identity-mismatch defense. On a
+    // not-yet-linked account this sets googleId; on an already-linked account
+    // it re-reads and either returns the row (same googleId) or throws
+    // FORBIDDEN 'Account identity mismatch' (different googleId bound).
+    const user = await linkGoogleId(found.id, info.googleId);
+
     const token = await signJwt({
       sub: user.id,
       email: user.email,
