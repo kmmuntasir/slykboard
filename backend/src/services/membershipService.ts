@@ -1,0 +1,222 @@
+import { and, eq } from 'drizzle-orm';
+import { db } from '../db/client';
+import { projectMemberRoleEnum, projectMembers, users } from '../db/schema';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
+import { assertDomainAllowed } from './accessControl';
+
+// SLYK-01 Task F — centralizes ALL project_members access. No other layer should
+// read/write the join table directly. Mirrors the project's collapsed layering
+// (Route handler → Service with the singleton Drizzle `db`); there is no
+// repository layer in this codebase (controllers/ and repositories/ are empty).
+
+// Project transaction-client alias — identical idiom to userService.ts:19.
+// Middleware (requireProjectMember) passes its own tx into isProjectMember /
+// getMemberRole so the membership read shares the caller's transactional read.
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// PG unique_violation — composite PK (projectId, userId) is the only unique
+// constraint on project_members, so 23505 here always means "membership already
+// exists". addMember turns that into an idempotent role upsert.
+const PG_UNIQUE_VIOLATION = '23505';
+
+export type ProjectMemberRole = (typeof projectMemberRoleEnum.enumValues)[number];
+
+// Joined row shape for listProjectMembers — the display fields the member-management
+// UI renders, plus the membership role + when it was created.
+export type ProjectMemberRow = {
+  userId: string;
+  email: string;
+  fullName: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  role: ProjectMemberRole;
+  createdAt: Date;
+};
+
+// Result of createAndAddMember — the freshly inserted user + their membership row.
+export type CreatedMember = {
+  user: {
+    id: string;
+    email: string;
+    fullName: string;
+    displayName: string | null;
+    isPlatformAdmin: boolean;
+  };
+  membership: {
+    projectId: string;
+    userId: string;
+    role: ProjectMemberRole;
+    createdAt: Date;
+  };
+};
+
+// 1. Membership existence check. Takes a tx (NOT the db singleton) so middleware
+//    can run it inside the same transactional read as project resolution.
+export async function isProjectMember(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const rows = await tx
+    .select({ projectId: projectMembers.projectId })
+    .from(projectMembers)
+    .where(
+      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+// 2. Role lookup. Returns the enum value or null for non-members. Takes a tx so it
+//    composes with the caller's transactional read (e.g. requireProjectMember).
+export async function getMemberRole(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+): Promise<ProjectMemberRole | null> {
+  const rows = await tx
+    .select({ role: projectMembers.role })
+    .from(projectMembers)
+    .where(
+      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+    )
+    .limit(1);
+  return rows.length > 0 ? rows[0]!.role : null;
+}
+
+// 3. Roster for the member-management UI. Inner-join users, ordered by fullName asc.
+export async function listProjectMembers(projectId: string): Promise<ProjectMemberRow[]> {
+  return db
+    .select({
+      userId: users.id,
+      email: users.email,
+      fullName: users.fullName,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+      role: projectMembers.role,
+      createdAt: projectMembers.createdAt,
+    })
+    .from(projectMembers)
+    .innerJoin(users, eq(projectMembers.userId, users.id))
+    .where(eq(projectMembers.projectId, projectId))
+    .orderBy(users.fullName);
+}
+
+// 4. Idempotent add. Runs in its OWN transaction (db.transaction) so the 23505
+//    catch + role update are atomic w.r.t. the insert attempt. On a duplicate
+//    (projectId, userId) the unique violation is caught and the existing row's
+//    role is updated instead — net effect is an idempotent upsert of the role.
+export async function addMember(
+  projectId: string,
+  userId: string,
+  role: ProjectMemberRole = 'MEMBER',
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    try {
+      await tx.insert(projectMembers).values({ projectId, userId, role });
+    } catch (cause) {
+      // 23505 = unique_violation on the composite PK (projectId, userId) — the
+      // membership already exists. Treat as an idempotent upsert: update the role
+      // on the existing row instead of surfacing the conflict. Any other error is
+      // rethrown (no swallowed exceptions).
+      const code = (cause as { code?: string })?.code;
+      if (code !== PG_UNIQUE_VIOLATION) throw cause;
+      await tx
+        .update(projectMembers)
+        .set({ role })
+        .where(
+          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+        );
+    }
+  });
+}
+
+// 5. Delete a membership. Throws NOT_FOUND when no row exists (zero rows affected).
+//    Non-revealing by design — the message is the generic 'User not found' so it
+//    does not leak whether the project itself exists.
+export async function removeMember(projectId: string, userId: string): Promise<void> {
+  const deleted = await db
+    .delete(projectMembers)
+    .where(
+      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+    )
+    .returning();
+  if (deleted.length === 0) {
+    throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+  }
+}
+
+// 6. Promote an existing member to PROJECT_ADMIN. NOT_FOUND if they aren't a member.
+export async function promoteToProjectAdmin(
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  const updated = await db
+    .update(projectMembers)
+    .set({ role: 'PROJECT_ADMIN' })
+    .where(
+      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+    )
+    .returning();
+  if (updated.length === 0) {
+    throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+  }
+}
+
+// 7. Provisioning path for Member Management. ONE db.transaction: domain-gate the
+//    email BEFORE any insert (zero side effects on a wrong-domain email), then
+//    insert the user (googleId=null, isPlatformAdmin=false, blocked=false), then
+//    insert the project_members row. Returns the new user + membership.
+export async function createAndAddMember(
+  email: string,
+  fullName: string,
+  displayName: string | null,
+  projectId: string,
+  role: ProjectMemberRole = 'MEMBER',
+): Promise<CreatedMember> {
+  // Domain gate first — throws FORBIDDEN before any DB write on mismatch.
+  assertDomainAllowed(email);
+
+  return db.transaction(async (tx) => {
+    const [userRow] = await tx
+      .insert(users)
+      .values({
+        email,
+        fullName,
+        displayName,
+        googleId: null,
+        isPlatformAdmin: false,
+        blocked: false,
+      })
+      .returning({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        displayName: users.displayName,
+        isPlatformAdmin: users.isPlatformAdmin,
+      });
+    if (!userRow) {
+      throw new AppError(ErrorCode.INTERNAL_ERROR, 'Failed to create user');
+    }
+
+    const [membershipRow] = await tx
+      .insert(projectMembers)
+      .values({
+        projectId,
+        userId: userRow.id,
+        role,
+      })
+      .returning({
+        projectId: projectMembers.projectId,
+        userId: projectMembers.userId,
+        role: projectMembers.role,
+        createdAt: projectMembers.createdAt,
+      });
+    if (!membershipRow) {
+      throw new AppError(ErrorCode.INTERNAL_ERROR, 'Failed to create membership');
+    }
+
+    return { user: userRow, membership: membershipRow };
+  });
+}
