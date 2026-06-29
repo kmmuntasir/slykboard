@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '../db/client';
 import {
+  projectMembers,
   projectSequences,
   projects,
   tickets,
@@ -12,6 +13,7 @@ import {
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { isReservedSlug, isValidSlug, normalizeSlug } from '../utils/slug';
+import { isProjectMember } from './membershipService';
 
 export type ProjectRow = typeof projects.$inferSelect;
 
@@ -88,13 +90,73 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectR
   return row;
 }
 
-export async function listProjects(): Promise<ProjectRow[]> {
-  return db.select().from(projects).orderBy(projects.createdAt);
+// SLYK-01 Task J — visibility is membership-scoped with a Platform-Admin bypass.
+// A Member sees only projects where they have a project_members row; a Platform
+// Admin sees every project. Ordering by createdAt preserves the prior default.
+export async function listProjects(
+  userId: string,
+  isPlatformAdmin: boolean,
+): Promise<ProjectRow[]> {
+  if (isPlatformAdmin) {
+    return db.select().from(projects).orderBy(projects.createdAt);
+  }
+  // Members always see their projects regardless of projects.isActive —
+  // deactivation behavior is owned by DEL-04; here we only scope.
+  return db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      slug: projects.slug,
+      columns: projects.columns,
+      creatorId: projects.creatorId,
+      isActive: projects.isActive,
+      createdAt: projects.createdAt,
+      updatedAt: projects.updatedAt,
+    })
+    .from(projects)
+    .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
+    .where(eq(projectMembers.userId, userId))
+    .orderBy(projects.createdAt);
 }
 
-export async function getProjectBySlug(slug: string): Promise<ProjectRow | null> {
+// SLYK-01 Task J — non-revealing single-project lookup.
+//
+// - No-user overload (userId undefined): returns the row or null WITHOUT
+//   throwing. Used by createProject's slug-uniqueness probe — a free slug must
+//   surface as null, not as an exception.
+// - User-scoped overload (userId provided): unknown slug and inaccessible slug
+//   are indistinguishable — both throw the identical non-revealing FORBIDDEN
+//   ('You do not have access to this project'). Platform Admins bypass the
+//   membership check; everyone else is gated through membershipService.
+export async function getProjectBySlug(
+  slug: string,
+  userId?: string,
+  isPlatformAdmin?: boolean,
+): Promise<ProjectRow | null> {
   const [row] = await db.select().from(projects).where(eq(projects.slug, slug)).limit(1);
-  return row ?? null;
+
+  // Uniqueness-probe path: no caller identity → return existence, never throw.
+  if (userId === undefined) {
+    return row ?? null;
+  }
+
+  // User-scoped path: not-found is non-revealing (same FORBIDDEN as non-member).
+  if (!row) {
+    throw new AppError(ErrorCode.FORBIDDEN, 'You do not have access to this project');
+  }
+
+  // Platform Admin bypass — global visibility, no membership row required.
+  if (isPlatformAdmin === true) {
+    return row;
+  }
+
+  // Membership probe inside the caller's read scope via the shared tx idiom
+  // (membershipService owns ALL project_members access — no direct reads here).
+  const allowed = await db.transaction((tx) => isProjectMember(tx, row.id, userId));
+  if (!allowed) {
+    throw new AppError(ErrorCode.FORBIDDEN, 'You do not have access to this project');
+  }
+  return row;
 }
 
 // F27 T1: rename a project and/or replace its columns JSONB. Slug is NOT editable.

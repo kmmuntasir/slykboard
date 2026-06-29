@@ -269,7 +269,7 @@ describe('listProjects', () => {
     const rows = [{ id: 'r1' }, { id: 'r2' }];
     bag.dbSelectOrderBy.mockResolvedValueOnce(rows);
 
-    const result = await listProjects();
+    const result = await listProjects('uid', true);
 
     expect(result).toEqual(rows);
   });
