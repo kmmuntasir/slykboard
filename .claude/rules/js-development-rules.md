@@ -28,6 +28,8 @@ frontend/
 - Co-locate test files next to components
 - Use explicit prop interfaces
 - Use functional components with hooks
+- Component reusability is high priority
+- Any element that is duplicated (with 90% similarity) in two difference places must be turned into a component and reused, with necessary parameters to achieve the rest of the 10% functionality.
 
 ### State Management
 
