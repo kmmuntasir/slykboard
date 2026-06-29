@@ -19,20 +19,25 @@ import {
 // display to 3 digits (SLYK-001) — formatting is frontend-only (TicketCard).
 export const START_TICKET_NUMBER = 1;
 
-// PRD §8.1 — role enum. Admin manages settings; Member is default.
-export const roleEnum = pgEnum('Role', ['ADMIN', 'MEMBER']);
-
 // PRD §8.1 — Users table, verbatim columns + standard UTC timestamps.
 // snake_case column names via the 2nd arg; camelCase access keys via the 1st arg.
 export const users = pgTable(
   'Users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    googleId: text('google_id').notNull().unique(),
+    // SLYK-01: googleId is nullable + UNIQUE-nullable so the bootstrap admin
+    // (no Google identity yet) and member-created users coexist before first login.
+    // Postgres allows multiple NULLs in a unique index, so uniqueness only binds
+    // real Google identities.
+    googleId: text('google_id'),
     email: text('email').notNull().unique(),
     fullName: text('full_name').notNull(),
+    // SLYK-01: nullable short name for the UI; falls back to fullName when null.
+    displayName: text('display_name'),
     avatarUrl: text('avatar_url'),
-    role: roleEnum('role').default('MEMBER').notNull(),
+    // SLYK-01: three-tier model. isPlatformAdmin replaces the global role enum —
+    // a boolean platform-admin flag. Project-scoped roles live in projectMembers.
+    isPlatformAdmin: boolean('is_platform_admin').default(false).notNull(),
     // F07 D3: token version for hard session invalidation. authenticate compares
     // the JWT `ver` claim to this column; bumpTokenVersion increments it.
     // Default 0 so existing rows need no data migration.
@@ -48,7 +53,9 @@ export const users = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  () => ({
+  (table) => ({
+    // SLYK-01: UNIQUE-nullable index on googleId (see column comment above).
+    usersGoogleIdUniq: uniqueIndex('users_google_id_uniq').on(table.googleId),
     // F06 D1 originally had users_one_admin (at most one ADMIN row).
     // F25 D2: DROPPED — multi-admin is F25's goal. The first-admin bootstrap race
     // is guarded at the application level (F06 checks userCount === 0 before promoting).
@@ -83,6 +90,9 @@ export const projects = pgTable('Projects', {
   creatorId: uuid('creator_id')
     .notNull()
     .references(() => users.id),
+  // SLYK-01: project soft-activation flag. Column ONLY here — deactivation
+  // behavior is owned by DEL-04 (out of scope for this task).
+  isActive: boolean('is_active').default(true).notNull(),
   // F08 D-Timestamps: PRD omits; aligns with Users schema.
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
@@ -90,6 +100,39 @@ export const projects = pgTable('Projects', {
     .$onUpdate(() => new Date())
     .notNull(),
 });
+
+// SLYK-01 §Three-Tier Roles — project-scoped membership role enum.
+// PROJECT_ADMIN manages a project's settings & members; MEMBER is the default.
+// Distinct from the platform-admin boolean on users (global, in the JWT `pa` claim).
+export const projectMemberRoleEnum = pgEnum('ProjectMemberRole', [
+  'PROJECT_ADMIN',
+  'MEMBER',
+]);
+
+// SLYK-01 — Project membership join. Composite PK (projectId, userId) enforces the
+// unique membership invariant. userId index backs the "list my projects" query.
+// Both FKs ON DELETE CASCADE — deleting a project or user cleans up memberships.
+export const projectMembers = pgTable(
+  'project_members',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: projectMemberRoleEnum('role').default('MEMBER').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.projectId, table.userId] }),
+    userIdx: index('project_members_user_id_idx').on(table.userId),
+  }),
+);
 
 // F12 D1: per-project ticket_number counter. allocateTicketNumber() does
 // SELECT ... FOR UPDATE on this row inside db.transaction; the unique
