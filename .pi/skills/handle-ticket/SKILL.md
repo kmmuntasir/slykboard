@@ -5,6 +5,14 @@ description: End-to-end ticket handler. From a ticket file, sync from origin/dev
 
 # Handle Ticket Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> You drive the chain of sub-skills below **in order, exactly as written**. Do not skip, reorder, or inline any phase.
+>
+> **Each sub-skill you invoke will itself dispatch `analyst`/coder subprocesses via `delegate.sh` — that delegation is mandatory inside those skills, and you must not interfere with it.** Do not "help" a sub-skill by reading files yourself or doing its work inline to "save time." Invoke the sub-skill, let it run its mandatory delegation steps, capture its artifact, pass it to the next phase.
+>
+> The entire point of this skill is **context isolation across the whole ticket lifecycle.** If you short-circuit any phase by doing its work inline, you have **failed** the workflow, no matter how good the output looks. **Execute the phases verbatim.**
+
 Run a single ticket end-to-end by chaining four existing skills in order:
 
 ```

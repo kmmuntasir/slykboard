@@ -5,6 +5,12 @@ description: Comprehensive PR review covering the Node.js/Express + PostgreSQL b
 
 # PR Review Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> Every step below is **mandatory, not optional**. You **MUST** follow them exactly as written.
+>
+> **The review investigation MUST be done by dispatching `analyst` subprocesses via `delegate.sh`.** You are **FORBIDDEN** from reading the diff/files yourself, even if you think it would be faster or "good enough," or because the diff "looks small." The entire point is **context isolation** — you synthesize the review; `analyst` subprocesses do ALL the diff analysis. If you read the files yourself, you have **failed** the workflow. **Do not optimize against this instruction. Spawn the subprocesses.**
+
 When the user requests a **PR review** or to **compare branches**:
 
 ### Branch Defaults
@@ -36,7 +42,7 @@ If the rebase succeeds, proceed to the review steps below.
 
 ### Parallel Delegation Strategy
 
-Accelerate the review using **up to 3 parallel `analyst` delegations** (via the delegate script — read-only, so they can't mutate the tree). Split independent review tasks across delegations to save your context window and speed up the process.
+Accelerate the review using **3 parallel `analyst` delegations** (via the delegate script — read-only, so they can't mutate the tree). Split independent review tasks across delegations to save your context window and speed up the process.
 
 ```bash
 ./.pi/skills/delegate/scripts/delegate.sh --parallel \
@@ -51,7 +57,7 @@ Accelerate the review using **up to 3 parallel `analyst` delegations** (via the 
 | 2 | Stack-specific checks (Express/Node backend + React/TS frontend) |
 | 3 | Test coverage assessment + code quality checklist |
 
-**When to parallelise:** always use parallel delegations when the diff is non-trivial (more than a few files). For tiny diffs (1–2 files, cosmetic), a single-pass review is fine.
+**When to parallelise:** **always** use parallel delegations — even for tiny diffs. **Never review inline.** The 3-subprocess fan-out is mandatory; do not reduce it.
 
 **How to parallelise:** launch all independent delegations in a single `--parallel` call. Each delegation runs `git diff`/`git log` within its scope. After all return, synthesize the findings into the final review summary (step 6).
 

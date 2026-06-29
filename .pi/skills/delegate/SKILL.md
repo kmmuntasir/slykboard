@@ -5,9 +5,20 @@ description: Isolated-context delegation primitive. Spawns headless `pi -p` subp
 
 # Delegate Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> This skill is **non-optional**. When ANY skill tells you to delegate/dispatch to a role via this script, you **MUST** run `delegate.sh` exactly as instructed. You are **FORBIDDEN** from:
+>
+> - Deciding it would be "simpler" / "faster" / "cheaper" to do the work in your own context instead.
+> - "Reasoning" about whether delegation is worth it, or weighing subprocess cost vs. inline work.
+> - Reading files yourself when the step says to dispatch the `analyst`.
+> - Writing code yourself when the step says to dispatch a coder.
+>
+> The entire purpose of this system is **context isolation**. If you do the work inline, you have **failed** the workflow, no matter how good the output looks. **Do not optimize against the instruction. Do not second-guess the workflow. Spawn the subprocess.** The instruction is an order, not a suggestion.
+
 Pi has **no native subagents**. To get the same context isolation Claude Code gives you with the `Task`/`Agent` tool, you spawn **headless `pi -p` subprocesses** instead. Each subprocess is a fully independent agent: its own context window, its own tool set, its own session. It loads the target role skill via `/skill:<role>`, does the work, and returns only its final text answer to your stdout.
 
-This skill is the primitive every other coordinating skill (`orchestrator`, `handle-ticket`, `create-implementation-plan`, `pr-review`, …) builds on. **When you are coordinating, dispatch via this script — do not do the analysis/coding in your own context.** Keep your context as a clean dispatcher that reads digests and decides sequencing.
+This skill is the primitive every other coordinating skill (`orchestrator`, `handle-ticket`, `create-implementation-plan`, `pr-review`, ...) builds on. **When you are coordinating, dispatch via this script — do not do the analysis/coding in your own context.** Keep your context as a clean dispatcher that reads digests and decides sequencing.
 
 ## The script: `scripts/delegate.sh`
 

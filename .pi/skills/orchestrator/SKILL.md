@@ -5,6 +5,17 @@ description: Orchestrate a SET of implementation tasks by delegating each to an 
 
 # Orchestrator Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> Every step below is **mandatory, not optional**. You **MUST** follow them exactly as written.
+>
+> **The delegation steps are non-negotiable.** Whenever this skill says to dispatch a role via `delegate.sh`, you **MUST** run that subprocess. You are **FORBIDDEN** from:
+> - Doing the analysis, reading files, or writing code yourself in this context, **even if** you think it would be faster, simpler, cheaper, or just as good.
+> - "Reasoning" about whether delegation is worth the cost, or deciding inline work is "good enough."
+> - Reading source files into your own context to "save a round-trip."
+>
+> The entire point of orchestration is **context isolation**. If you do the work inline, you have **failed** — regardless of output quality. **Do not optimize against these instructions. Execute them verbatim.**
+
 You are now the **orchestrator**. Your job: execute a **set of tasks** autonomously by **delegating to isolated headless pi subprocesses** — not by doing the work yourself.
 
 Pi has no native subagents. Instead of a `Task`/`Agent` tool, you dispatch via the **`delegate` skill's script**, which spawns a fresh `pi -p` subprocess per delegation. Each subprocess is its own clean context window, loads its role skill (`/skill:<role> <prompt>`), runs to completion, and returns only its final text answer to your stdout. **This is how you keep your own context clean** — you read digests, never raw file contents.
@@ -19,6 +30,8 @@ The script is at `.pi/skills/delegate/scripts/delegate.sh` (run it from the proj
 - **`committer`** — git commit specialist (tools: bash,read). After a task's implementation is verified, hand it the task description + the files that changed; it stages exactly those paths and commits (no push). Invoke it once per completed task.
 
 ## Workflow
+
+> Follow these steps **in order, exactly as written**. Do not skip, merge, or substitute any step with inline work. Every dispatch step **MUST** be a real `delegate.sh` subprocess call — never done inline.
 
 1. **Curate the task set first.** The user gives you a plan/task-breakdown (a file path, a pasted list, or your `/orchestrator` args). Dispatch the **`analyst`** to read it and return a structured task list — for each task: an ID, a one-line description, the layer (backend/frontend/other), the files it will touch, the acceptance criteria, and any references/dependencies:
    ```bash
@@ -38,7 +51,7 @@ The script is at `.pi/skills/delegate/scripts/delegate.sh` (run it from the proj
      ```
    - Sequential = one delegation, read its answer, then the next.
 
-4. **Dispatch with full context.** For each task, hand the coder everything it needs in the prompt: task description, acceptance criteria, and references/paths. A subprocess can't ask you follow-ups mid-run, so make it self-contained. If a task isn't self-contained, send the **`analyst`** first to gather precise file paths + relevant excerpts, then pass that digest into the coder's prompt. One task per coder delegation.
+4. **Dispatch with full context.** For each task, you **MUST** hand the coder everything it needs in the prompt: task description, acceptance criteria, and references/paths. A subprocess can't ask you follow-ups mid-run, so make it self-contained. If a task isn't self-contained, you **MUST** send the **`analyst`** first (as a subprocess) to gather precise file paths + relevant excerpts, then pass that digest into the coder's prompt. One task per coder delegation. **Never read the files yourself to gather this context — always use the analyst subprocess.**
 
 5. **Commit after each task, then drive to done.** When a coder returns a *successful* result (implementation done + verified), dispatch the **`committer`** with: the task description, the list of files the coder touched (from its summary), and any branch/ticket context:
    ```bash

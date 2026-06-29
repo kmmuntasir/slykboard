@@ -5,6 +5,12 @@ description: Break a large implementation plan into small, parallelizable tasks 
 
 # Task Breakdown Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> Both phases below are **mandatory, not optional**. You **MUST** follow them exactly as written.
+>
+> **Codebase investigation in both phases MUST be done by dispatching `analyst` subprocesses via `delegate.sh`.** You are **FORBIDDEN** from reading source files yourself, even if you think it would be faster or "good enough," or because the plan "seems clear." The entire point is **context isolation** — you synthesize and write the breakdown; `analyst` subprocesses do ALL the investigation. If you read the files yourself, you have **failed** the workflow. **Do not optimize against this instruction. Spawn the subprocesses.**
+
 Read the provided plan file. Then follow the two-phase process below. Analyze the codebase via isolated `analyst` delegations (to keep your context clean).
 
 ## Phase 1: Codebase Analysis (via `analyst` delegations)
@@ -18,7 +24,7 @@ Specifically:
 - **Identify hidden coupling** — shared types, utilities, or config the plan doesn't explicitly call out but tasks will touch.
 - **Check for prior art** — search for existing implementations that partially cover what the plan describes.
 
-Dispatch **up to 3 parallel `analyst` delegations** via the delegate script to speed up this phase and keep the main context window clean:
+Dispatch **3 parallel `analyst` delegations** via the delegate script to speed up this phase and keep the main context window clean:
 
 ```bash
 ./.pi/skills/delegate/scripts/delegate.sh --parallel \
@@ -33,11 +39,11 @@ Dispatch **up to 3 parallel `analyst` delegations** via the delegate script to s
 | 2 | Trace data flow and interfaces the plan references — read relevant source files |
 | 3 | Search for prior art, existing utilities, and hidden coupling across the codebase |
 
-Each delegation returns a concise summary. Use those summaries — not raw exploration — to inform the breakdown.
+Each delegation returns a concise summary. Use those summaries — not raw exploration — to inform the breakdown. **Never investigate inline.**
 
 ## Phase 2: Task Breakdown
 
-Using the plan plus the codebase analysis, break the work into small, self-contained tasks that individual developers can pick up independently. Continue using **up to 3 parallel `analyst` delegations** during this phase to draft batches of tasks concurrently:
+Using the plan plus the codebase analysis, break the work into small, self-contained tasks that individual developers can pick up independently. Continue using **3 parallel `analyst` delegations** during this phase to draft batches of tasks concurrently:
 
 ```bash
 ./.pi/skills/delegate/scripts/delegate.sh --parallel \

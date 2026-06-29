@@ -5,6 +5,12 @@ description: Verify implementation against task/plan files, identify gaps and mi
 
 # Verify Implementation Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> Every step below is **mandatory, not optional**. You **MUST** follow them exactly as written.
+>
+> **The codebase verification (Step 2) MUST be done by dispatching `analyst` subprocesses via `delegate.sh`.** You are **FORBIDDEN** from reading source files yourself to check completeness, even if you think it would be faster or "good enough." The entire point is **context isolation** — you synthesize the report; `analyst` subprocesses do ALL the verification. If you read the files yourself, you have **failed** the workflow. **Do not optimize against this instruction. Spawn the subprocesses.**
+
 Read the provided task/plan file(s). Analyze the current codebase state against the planned tasks (via isolated `analyst` delegations to keep your context clean). Identify gaps and missing implementations. Write a comprehensive verification report.
 
 ## Inputs
@@ -39,7 +45,7 @@ Report: "Read N tasks from M files. Analyzing against current codebase..."
 
 ### Step 2: Analyze Codebase State (via `analyst` delegations)
 
-Analyze the current codebase to determine what's implemented vs. what was planned. Dispatch **up to 3 parallel `analyst` delegations** via the delegate script:
+Analyze the current codebase to determine what's implemented vs. what was planned. Dispatch **3 parallel `analyst` delegations** via the delegate script:
 
 ```bash
 ./.pi/skills/delegate/scripts/delegate.sh --parallel \
@@ -178,7 +184,7 @@ T3: ❌ Missing (file not created)
 
 ## Important Rules
 
-1. **Use parallel `analyst` delegations** — up to 3 for speed and context efficiency.
+1. **Use parallel `analyst` delegations** — exactly 3, mandatory. Never verify inline.
 2. **Report alongside source** — same directory as the first provided file.
 3. **Be comprehensive** — include every task, no omissions.
 4. **Document gaps clearly** — what's missing, where, what to fix.

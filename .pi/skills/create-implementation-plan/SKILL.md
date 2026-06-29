@@ -5,6 +5,17 @@ description: Read a ticket file (bug, feature, or enhancement), analyze the code
 
 # Create Implementation Plan Skill
 
+> ## MANDATORY EXECUTION — READ FIRST
+>
+> Every step below is **mandatory, not optional**. You **MUST** follow them exactly as written, in order.
+>
+> **The codebase analysis (Step 2) MUST be done by dispatching `analyst` subprocesses via `delegate.sh`.** You are **FORBIDDEN** from:
+> - Reading the source files yourself, even if you think it would be faster or "good enough."
+> - "Reasoning" about whether spawning analyst subprocesses is worth it vs. reading inline.
+> - Deciding the ticket is "small" and skipping delegation as an optimization.
+>
+> The entire point of this skill is **context isolation** — you synthesize and write the plan; the `analyst` subprocesses do ALL the codebase investigation. If you read the files yourself, you have **failed** the workflow. **Do not optimize against this instruction. Spawn the subprocesses exactly as Step 2 prescribes.**
+
 Read the provided ticket carefully, understand what needs to be delivered, analyze the codebase via isolated `analyst` delegations (to keep your context clean), then write a complete and comprehensive implementation plan as a new markdown file in the **same folder** as the ticket.
 
 The ticket may be a **bug**, **feature**, or **enhancement** — adapt the analysis focus and plan shape to the ticket type.
@@ -35,9 +46,9 @@ Resolve the input to an absolute path and read it **completely**. Extract and ho
 
 State your understanding back before analyzing: "Read ticket SLYK-300 (bug) — <one-line summary>. Analyzing codebase..." (swap the type and summary as appropriate).
 
-### Step 2: Analyze the codebase (via isolated `analyst` delegations)
+### Step 2: Analyze the codebase (via isolated `analyst` delegations) — MANDATORY
 
-Dispatch **up to 3 parallel `analyst` delegations** via the delegate script to investigate and keep your main context window clean. The split adapts to the ticket type.
+**You MUST dispatch `analyst` subprocesses via the delegate script to investigate the codebase. Do NOT read the source files yourself.** This step is non-optional regardless of ticket size. Dispatch **3 parallel `analyst` delegations** via the delegate script to investigate and keep your main context window clean. The split adapts to the ticket type.
 
 ```bash
 ./.pi/skills/delegate/scripts/delegate.sh --parallel analyst "<probe A>" analyst "<probe B>" analyst "<probe C>"
@@ -63,7 +74,7 @@ Backend lives at `backend/src` (Express 5 + Drizzle ORM + PostgreSQL; Drizzle mi
 
 Each delegation returns a **curated digest** with `path:line` evidence — not raw file dumps. Work from those digests.
 
-If the ticket is clearly single-layer or small, drop to 1–2 delegations. Add more `analyst` calls only if a digest surfaces a new area worth a focused probe.
+**Do not drop to fewer delegations and do not read files inline.** Even for a single-layer or small ticket, the minimum is **1 `analyst` subprocess** — never zero. If a digest surfaces a new area worth a focused probe, add another `analyst` delegation. You synthesize; the analysts investigate.
 
 ### Step 3: Synthesize the approach
 
@@ -158,7 +169,7 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 ## Key Principles
 
-- **Delegate analysis, write yourself.** Keep the main context clean — investigate via `analyst` delegations, synthesize and write the plan directly.
+- **Delegate analysis, write yourself.** This is mandatory, not a preference. Investigate **only** via `analyst` delegations; synthesize and write the plan yourself. Never read source files inline to inform the plan.
 - **Evidence-backed.** Every code claim cites `path:line`. No guesses presented as fact.
 - **Convention-correct.** Respect the layered call rule and the project's style/exception/testing conventions; never propose exposing entities from controllers or putting business logic in controllers.
 - **Adapt to the ticket type.** Bugs hunt a root cause; features/enhancements lay out a design. Same plan skeleton, type-appropriate emphasis.
