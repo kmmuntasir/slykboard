@@ -27,3 +27,6 @@ coverage/
 
 # ESLint cache
 .eslintcache
+
+# AI-generated product-management workspace (questions, state, deliverables drafts)
+.docs/ai-generated/
