@@ -4,6 +4,7 @@ import { projectMemberRoleEnum, projectMembers, users } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { assertDomainAllowed } from './accessControl';
+import { findUserById } from './userService';
 
 // SLYK-01 Task F — centralizes ALL project_members access. No other layer should
 // read/write the join table directly. Mirrors the project's collapsed layering
@@ -207,6 +208,17 @@ export async function addExistingMember(
   userId: string,
   role: ProjectMemberRole = 'MEMBER',
 ): Promise<MembershipRow> {
+  // Resolve the target user BEFORE any insert. A Platform Admin is a default
+  // member of every project (enforced at the gate layer — requireProjectMember),
+  // so adding an explicit row is meaningless and is rejected as a conflict with
+  // no row inserted. An unknown user surfaces the non-revealing 'User not found'
+  // (matches removeMember / setMemberRole).
+  const target = await findUserById(userId);
+  if (!target) throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+  if (target.isPlatformAdmin) {
+    throw new AppError(ErrorCode.CONFLICT, 'Already a member');
+  }
+
   const columns = {
     projectId: projectMembers.projectId,
     userId: projectMembers.userId,
@@ -256,23 +268,36 @@ export async function createAndAddMember(
   assertDomainAllowed(email);
 
   return db.transaction(async (tx) => {
-    const [userRow] = await tx
-      .insert(users)
-      .values({
-        email,
-        fullName,
-        displayName,
-        googleId: null,
-        isPlatformAdmin: false,
-        blocked: false,
-      })
-      .returning({
-        id: users.id,
-        email: users.email,
-        fullName: users.fullName,
-        displayName: users.displayName,
-        isPlatformAdmin: users.isPlatformAdmin,
-      });
+    let userRow;
+    try {
+      [userRow] = await tx
+        .insert(users)
+        .values({
+          email,
+          fullName,
+          displayName,
+          googleId: null,
+          isPlatformAdmin: false,
+          blocked: false,
+        })
+        .returning({
+          id: users.id,
+          email: users.email,
+          fullName: users.fullName,
+          displayName: users.displayName,
+          isPlatformAdmin: users.isPlatformAdmin,
+        });
+    } catch (cause) {
+      // 23505 = unique_violation on users.email — the email is already
+      // registered. Surface a clean CONFLICT and do NOT fall through to the
+      // project_members insert (zero side effects on the conflict path). Any
+      // other error is rethrown.
+      const code = (cause as { code?: string })?.code;
+      if (code === PG_UNIQUE_VIOLATION) {
+        throw new AppError(ErrorCode.CONFLICT, 'User already exists');
+      }
+      throw cause;
+    }
     if (!userRow) {
       throw new AppError(ErrorCode.INTERNAL_ERROR, 'Failed to create user');
     }

@@ -28,6 +28,8 @@ const bag = vi.hoisted(() => ({
   dbDeleteReturning: vi.fn(),
   // db.update().set().where().returning() -> promoteToProjectAdmin / setMemberRole
   dbUpdateReturning: vi.fn(),
+  // userService.findUserById -> addExistingMember PA pre-check
+  findUserById: vi.fn(),
   txInsertValuesArg: {} as Record<string, unknown>,
   txUpdateSetArg: {} as Record<string, unknown>,
   dbUpdateSetArg: {} as Record<string, unknown>,
@@ -37,6 +39,7 @@ const bag = vi.hoisted(() => ({
 const testEnv = vi.hoisted(() => ({ env: { allowedDomain: undefined as string | undefined } }));
 
 vi.mock('../config', () => ({ env: testEnv.env }));
+vi.mock('../services/userService', () => ({ findUserById: bag.findUserById }));
 vi.mock('../db/client', () => {
   const tx = {
     select: () => {
@@ -123,6 +126,7 @@ function resetBag() {
   bag.dbListRows.mockReset();
   bag.dbDeleteReturning.mockReset();
   bag.dbUpdateReturning.mockReset();
+  bag.findUserById.mockReset();
   bag.txInsertValuesArg = {};
   bag.txUpdateSetArg = {};
   bag.dbUpdateSetArg = {};
@@ -264,7 +268,8 @@ describe('addMember', () => {
 describe('addExistingMember', () => {
   beforeEach(resetBag);
 
-  it('inserts and returns the membership row on a fresh add', async () => {
+  it('inserts and returns the membership row on a fresh add (non-PA target)', async () => {
+    bag.findUserById.mockResolvedValueOnce({ id: USER_ID, isPlatformAdmin: false });
     const inserted = { ...membershipRow, role: 'PROJECT_ADMIN' };
     bag.txInsertReturning.mockResolvedValueOnce([inserted]);
 
@@ -275,12 +280,14 @@ describe('addExistingMember', () => {
   });
 
   it('defaults to MEMBER when role is omitted', async () => {
+    bag.findUserById.mockResolvedValueOnce({ id: USER_ID, isPlatformAdmin: false });
     bag.txInsertReturning.mockResolvedValueOnce([membershipRow]);
     await addExistingMember(PROJECT_ID, USER_ID);
     expect(bag.txInsertValuesArg.role).toBe('MEMBER');
   });
 
   it('is idempotent on 23505: re-fetches via UPDATE + returns the updated row', async () => {
+    bag.findUserById.mockResolvedValueOnce({ id: USER_ID, isPlatformAdmin: false });
     bag.txInsertReturning.mockRejectedValueOnce({ code: '23505' });
     const updated = { ...membershipRow, role: 'PROJECT_ADMIN' };
     bag.txUpdateReturning.mockResolvedValueOnce([updated]);
@@ -292,8 +299,33 @@ describe('addExistingMember', () => {
   });
 
   it('re-throws non-23505 errors from the insert', async () => {
+    bag.findUserById.mockResolvedValueOnce({ id: USER_ID, isPlatformAdmin: false });
     bag.txInsertReturning.mockRejectedValueOnce({ code: '23503' });
     await expect(addExistingMember(PROJECT_ID, USER_ID)).rejects.toMatchObject({ code: '23503' });
+  });
+
+  it('rejects with CONFLICT "Already a member" for a Platform Admin target and inserts no row', async () => {
+    bag.findUserById.mockResolvedValueOnce({ id: USER_ID, isPlatformAdmin: true });
+
+    await expect(addExistingMember(PROJECT_ID, USER_ID)).rejects.toMatchObject({
+      code: ErrorCode.CONFLICT,
+      message: 'Already a member',
+    });
+
+    // PA short-circuit runs BEFORE the transaction → no insert attempted.
+    expect(bag.txInsertReturning).not.toHaveBeenCalled();
+    expect(bag.txUpdateReturning).not.toHaveBeenCalled();
+  });
+
+  it('rejects with NOT_FOUND "User not found" for an unknown userId', async () => {
+    bag.findUserById.mockResolvedValueOnce(undefined);
+
+    await expect(addExistingMember(PROJECT_ID, USER_ID)).rejects.toMatchObject({
+      code: ErrorCode.NOT_FOUND,
+      message: 'User not found',
+    });
+
+    expect(bag.txInsertReturning).not.toHaveBeenCalled();
   });
 });
 
@@ -420,6 +452,30 @@ describe('createAndAddMember', () => {
     await createAndAddMember('a@allowed.com', 'A', null, PROJECT_ID);
 
     expect(db.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps a duplicate-email 23505 on the users insert to CONFLICT "User already exists" and skips the project_members insert', async () => {
+    testEnv.env.allowedDomain = 'allowed.com';
+    bag.txInsertReturning.mockRejectedValueOnce({ code: '23505' }); // users insert
+
+    await expect(
+      createAndAddMember('dup@allowed.com', 'Dup', null, PROJECT_ID),
+    ).rejects.toMatchObject({ code: ErrorCode.CONFLICT, message: 'User already exists' });
+
+    // Only the users insert ran — the project_members insert did not execute.
+    expect(bag.txInsertReturning).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-throws non-23505 errors from the users insert unchanged', async () => {
+    testEnv.env.allowedDomain = 'allowed.com';
+    const fkErr = { code: '23503' };
+    bag.txInsertReturning.mockRejectedValueOnce(fkErr);
+
+    await expect(
+      createAndAddMember('x@allowed.com', 'X', null, PROJECT_ID),
+    ).rejects.toEqual(fkErr);
+
+    expect(bag.txInsertReturning).toHaveBeenCalledTimes(1);
   });
 });
 
