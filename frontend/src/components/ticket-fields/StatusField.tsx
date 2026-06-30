@@ -14,6 +14,13 @@ import type { TicketFormValues } from '@/hooks/useTicketForm';
 // so the host only needs to pass the slug.
 export interface StatusFieldProps {
     projectSlug: string;
+    /**
+     * Edit-modal only: the ticket's UUID + current board position. Passed through
+     * to the host's onMove so a status change can route through moveTicket paired
+     * with the ticket's position. Create flow omits both.
+     */
+    ticketId?: string;
+    ticketPosition?: number;
     /** Edit-modal only: when provided, a status change routes through moveTicket
      *  (paired with position) instead of updateTicket. Create flow omits it. */
     onMove?: (statusColumn: string) => void;
@@ -23,7 +30,6 @@ export function StatusField({ projectSlug, onMove }: StatusFieldProps) {
     const { watch, setValue } = useFormContext<TicketFormValues>();
     const { data: project } = useProject(projectSlug);
 
-    // eslint-disable-next-line react-hooks/incompatible-library
     const statusColumn = watch('statusColumn') ?? '';
 
     const columns = project?.columns ?? [];

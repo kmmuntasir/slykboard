@@ -5,7 +5,13 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from './cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline';
+export type ButtonVariant =
+    | 'primary'
+    | 'secondary'
+    | 'ghost'
+    | 'destructive'
+    | 'destructive-outline'
+    | 'outline';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -18,6 +24,8 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
     secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
     destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+    'destructive-outline':
+        'border border-destructive bg-background text-destructive hover:bg-destructive/10',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
     outline: 'border border-border bg-background hover:bg-accent hover:text-accent-foreground',
 };
