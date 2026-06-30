@@ -269,85 +269,24 @@ describe('GET /api/projects/:slug/reports/tickets (F48 scoped)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// F23/F24 (DEPRECATED per F48 D2): global endpoints — /api/reports/{time,tickets}
-// Backward-compat: still mounted, still 200, but call the service WITHOUT
-// projectId (global aggregation) and log a [DEPRECATED] warning.
-// ---------------------------------------------------------------------------
-
-describe('GET /api/reports/time (deprecated global, backward compat)', () => {
-  it('returns 200 and calls service WITHOUT projectId (PA)', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedGetTimeReport.mockResolvedValue(timeReportPayload as never);
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const res = await request(app)
-      .get('/api/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor(true)}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.users).toHaveLength(1);
-    // No projectId key at all → global aggregation preserved.
-    expect(mockedGetTimeReport).toHaveBeenCalledWith({ period: 'weekly', offset: 0 });
-    expect(mockedGetTimeReport).not.toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: expect.anything() }),
-    );
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[DEPRECATED]'));
-    warnSpy.mockRestore();
-  });
-
-  it('returns 403 FORBIDDEN for a non-PA member (SLYK-01 Task K)', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-
-    const res = await request(app)
-      .get('/api/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`);
-
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
-    expect(mockedGetTimeReport).not.toHaveBeenCalled();
-  });
-
-  it('returns 401 UNAUTHENTICATED without Bearer', async () => {
-    const res = await request(app).get('/api/reports/time');
-
-    expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('UNAUTHENTICATED');
-    expect(mockedGetTimeReport).not.toHaveBeenCalled();
-  });
-});
-
-describe('GET /api/reports/tickets (deprecated global, backward compat)', () => {
-  it('returns 200 and calls service WITHOUT projectId (PA)', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedGetTicketSummary.mockResolvedValue(ticketSummaryPayload as never);
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const res = await request(app)
-      .get('/api/reports/tickets')
-      .set('Authorization', `Bearer ${await tokenFor(true)}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.users[0].counts.total).toBe(3);
-    expect(mockedGetTicketSummary).toHaveBeenCalledWith({ period: 'weekly', offset: 0 });
-    expect(mockedGetTicketSummary).not.toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: expect.anything() }),
-    );
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[DEPRECATED]'));
-    warnSpy.mockRestore();
-  });
-
-  it('returns 403 FORBIDDEN for a non-PA member (SLYK-01 Task K)', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-
-    const res = await request(app)
-      .get('/api/reports/tickets')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`);
-
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
-    expect(mockedGetTicketSummary).not.toHaveBeenCalled();
+describe('SLYK-16: removed global report routes return 404', () => {
+  const cases = [{ path: '/api/reports/time' }, { path: '/api/reports/tickets' }];
+  cases.forEach(({ path }) => {
+    it(`${path} → 404 for a MEMBER`, async () => {
+      const res = await request(app)
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenFor(false)}`);
+      expect(res.status).toBe(404);
+      expect(mockedGetTimeReport).not.toHaveBeenCalled();
+      expect(mockedGetTicketSummary).not.toHaveBeenCalled();
+    });
+    it(`${path} → 404 for a PLATFORM_ADMIN`, async () => {
+      const res = await request(app)
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenFor(true)}`);
+      expect(res.status).toBe(404);
+      expect(mockedGetTimeReport).not.toHaveBeenCalled();
+      expect(mockedGetTicketSummary).not.toHaveBeenCalled();
+    });
   });
 });
