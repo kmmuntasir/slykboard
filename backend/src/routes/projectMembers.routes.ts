@@ -161,7 +161,7 @@ projectMembersRouter.patch(
     async (req, res) => {
         const { userId } = req.params as { userId: string };
         const body = req.body as { role: 'PROJECT_ADMIN' | 'MEMBER' };
-        await membershipService.setMemberRole(req.project!.id, userId, body.role);
+        await membershipService.setMemberRole(req.project!.id, userId, body.role, req.user!.id);
         res.json(success({ userId, role: body.role }));
     },
 );
@@ -176,7 +176,7 @@ projectMembersRouter.delete(
     requireProjectAdmin(),
     async (req, res) => {
         const { userId } = req.params as { userId: string };
-        await membershipService.removeMember(req.project!.id, userId);
+        await membershipService.removeMember(req.project!.id, userId, req.user!.id);
         res.json(success({ userId }));
     },
 );
