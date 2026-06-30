@@ -726,4 +726,154 @@ describe('PATCH /api/projects/:slug (F27)', () => {
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
+
+  // ---- SLYK-04 / DEL-04: activation flag (isActive) on PATCH /:slug ----
+  //
+  // Authorization contract: requirePlatformAdmin guards the whole stack, so a
+  // non-PA Member OR Project-Admin attempting to flip isActive is rejected with
+  // 403 from the middleware BEFORE updateProject is called — the membership tier
+  // the caller holds (MEMBER vs PROJECT_ADMIN) is irrelevant; only the PA bit
+  // grants the write. Validation: isActive must be a real boolean — a string
+  // 'true' is rejected by the Zod schema (400). The deep-link deny test pins
+  // the non-revealing contract: a non-PA hitting a DEACTIVATED project's deep
+  // link gets a 403 byte-identical to the non-member FORBIDDEN body; a PA
+  // still reaches the deactivated row; reactivating restores the non-PA deep
+  // link to 200.
+
+  it('returns 200 + updated project for ADMIN patching isActive:false (deactivate)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const deactivatedRow = { ...updatedProjectRow, isActive: false };
+    mockedUpdate.mockResolvedValue(
+      deactivatedRow as unknown as Awaited<ReturnType<typeof projectService.updateProject>>,
+    );
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isActive: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.isActive).toBe(false);
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'SLYK', isActive: false }),
+    );
+  });
+
+  it('returns 200 + updated project for ADMIN patching isActive:true (reactivate)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const reactivatedRow = { ...updatedProjectRow, isActive: true };
+    mockedUpdate.mockResolvedValue(
+      reactivatedRow as unknown as Awaited<ReturnType<typeof projectService.updateProject>>,
+    );
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isActive: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.isActive).toBe(true);
+    expect(mockedUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'SLYK', isActive: true }),
+    );
+  });
+
+  it('returns 403 FORBIDDEN for MEMBER patching isActive (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ isActive: false });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 FORBIDDEN for a Project-Admin patching isActive (updateProject NOT called)', async () => {
+    // requirePlatformAdmin keys off the JWT's PA bit, NOT the project_members
+    // tier. A PROJECT_ADMIN is still a non-PA, so the middleware denies before
+    // the service is reached.
+    mockedFindVersion.mockResolvedValue(0);
+    membershipMock.getMemberRole.mockResolvedValue('PROJECT_ADMIN');
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ isActive: false });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED when isActive is a string "true" (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isActive: 'true' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('deep-link deny: a DEACTIVATED project non-PA deep-link 403 is byte-identical to the non-member 403', async () => {
+    // The non-revealing contract: a non-PA hitting a deactivated project must
+    // get the same FORBIDDEN body as a non-member hitting any project. Both go
+    // through the same service throw, so the envelopes must be deep-equal.
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+
+    const deactivated = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+    const nonMember = await request(app)
+      .get('/api/projects/GHOST')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(deactivated.status).toBe(403);
+    expect(nonMember.status).toBe(403);
+    // Byte-identical assertion: deep-equal on the full response body.
+    expect(deactivated.body).toEqual(nonMember.body);
+    // And the literal message matches the contract.
+    expect(deactivated.body.error.message).toBe('You do not have access to this project');
+  });
+
+  it('PA still reaches a DEACTIVATED project row (deep-link 200)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const deactivatedRow = { ...projectRow, isActive: false };
+    mockedGetBySlug.mockResolvedValue(deactivatedRow as never);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.isActive).toBe(false);
+    expect(mockedGetBySlug).toHaveBeenCalledWith('SLYK', 'u1', true);
+  });
+
+  it('reactivating restores a previously-denying non-PA deep link to 200', async () => {
+    // Phase 1: project is deactivated → non-PA deep link is denied (403).
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+    const denied = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+    expect(denied.status).toBe(403);
+
+    // Phase 2: project reactivated (isActive:true) → the same non-PA member's
+    // deep link now resolves (200). The service contract re-admits a member
+    // once the row is active again.
+    mockedGetBySlug.mockResolvedValue({ ...projectRow, isActive: true } as never);
+    const restored = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+    expect(restored.status).toBe(200);
+    expect(restored.body.data.isActive).toBe(true);
+  });
 });

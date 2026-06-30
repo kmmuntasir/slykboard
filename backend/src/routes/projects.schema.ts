@@ -42,6 +42,9 @@ export const updateProjectBodySchema = z.object({
       message: 'Column ids must be unique',
     })
     .optional(),
+  // DEL-04: activation toggle. Only boolean values are accepted; a string like
+  // 'true' must be rejected by validateRequest (400). undefined means "don't touch".
+  isActive: z.boolean().optional(),
 });
 
 export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;

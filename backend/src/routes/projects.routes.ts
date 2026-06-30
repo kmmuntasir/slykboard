@@ -142,6 +142,9 @@ projectsRouter.patch(
       slug,
       name: body.name,
       columns: body.columns,
+      // DEL-04: forward the optional activation flag (service stops timers on
+      // deactivate, inside its transaction).
+      isActive: body.isActive,
     });
     res.json(success(updated));
   },
