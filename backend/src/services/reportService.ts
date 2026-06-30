@@ -74,11 +74,12 @@ function formatWindowLabel(start: Date, period: 'weekly' | 'monthly'): string {
 export async function getTimeReport(args: {
   period: 'weekly' | 'monthly';
   offset: number;
-  // F48: optional project scope. Absent = global aggregation (old behavior,
-  // used by the deprecated /api/reports/time route). When provided, time is
-  // scoped via a join timeEntries → tickets (timeEntries has no projectId column).
-  projectId?: string;
+  // F48: project scope is REQUIRED. Time is scoped via a join
+  // timeEntries → tickets (timeEntries has no projectId column).
+  projectId: string;
 }): Promise<TimeReportResponse> {
+  // SLYK-16 T3: defense-in-depth runtime guard — reject JS callers that bypass TS.
+  if (!args.projectId) throw new Error('projectId is required');
   const start = computeWindowStart(args.period, args.offset);
   const end = computeWindowEnd(start, args.period);
   const label = formatWindowLabel(start, args.period);
@@ -96,10 +97,6 @@ export async function getTimeReport(args: {
     manualEntryMinutes: timeEntries.manualEntryMinutes,
   };
 
-  // Global path (deprecated /api/reports/time) — no project join, no projectId filter.
-  const withoutProject = () =>
-    db.select(baseSelect).from(timeEntries).leftJoin(users, eq(users.id, timeEntries.userId));
-
   // Scoped path — join tickets to filter on projectId.
   const withProject = () =>
     db
@@ -108,14 +105,14 @@ export async function getTimeReport(args: {
       .leftJoin(users, eq(users.id, timeEntries.userId))
       .leftJoin(tickets, eq(tickets.id, timeEntries.ticketId));
 
-  const query = args.projectId ? withProject() : withoutProject();
+  const query = withProject();
 
   const rows = await query.where(
     and(
       gte(timeEntries.startTime, start),
       lt(timeEntries.startTime, end),
       isNotNull(timeEntries.endTime),
-      ...(args.projectId ? [eq(tickets.projectId, args.projectId)] : []),
+      eq(tickets.projectId, args.projectId),
     ),
   );
 
@@ -149,43 +146,32 @@ export async function getTimeReport(args: {
 export async function getTicketSummary(args: {
   period: 'weekly' | 'monthly';
   offset: number;
-  // F48: optional project scope. Absent = global aggregation (old behavior,
-  // used by the deprecated /api/reports/tickets route).
-  projectId?: string;
+  // F48: project scope is REQUIRED.
+  projectId: string;
 }): Promise<TicketSummaryResponse> {
+  // SLYK-16 T3: defense-in-depth runtime guard — reject JS callers that bypass TS.
+  if (!args.projectId) throw new Error('projectId is required');
   const start = computeWindowStart(args.period, args.offset);
   const end = computeWindowEnd(start, args.period);
   const label = formatWindowLabel(start, args.period);
 
-  // 1. F48 D6: derive the "Done" column ids. When projectId is provided, read
+  // 1. F48 D6: derive the "Done" column ids. projectId is required, so read
   //    only that one project's columns (the scoped route's membership gate
   //    already paid the lookup cost; we re-derive here to keep the service
-  //    req-free). When absent, fall back to the global scan (old behavior).
+  //    req-free).
   const doneColumnIds = new Set<string>();
-  if (args.projectId) {
-    const [project] = await db
-      .select({ columns: projects.columns })
-      .from(projects)
-      .where(eq(projects.id, args.projectId))
-      .limit(1);
-    const cols = project?.columns;
-    if (cols && cols.length > 0) {
-      doneColumnIds.add(cols[cols.length - 1]!.id);
-    }
-  } else {
-    const projectRows = await db
-      .select({ id: projects.id, columns: projects.columns })
-      .from(projects);
-    for (const p of projectRows) {
-      const cols = p.columns;
-      if (cols && cols.length > 0) {
-        doneColumnIds.add(cols[cols.length - 1]!.id);
-      }
-    }
+  const [project] = await db
+    .select({ columns: projects.columns })
+    .from(projects)
+    .where(eq(projects.id, args.projectId))
+    .limit(1);
+  const cols = project?.columns;
+  if (cols && cols.length > 0) {
+    doneColumnIds.add(cols[cols.length - 1]!.id);
   }
 
-  // 2. F48: tickets updated in window, not soft-deleted, with an assignee.
-  //    Scoped path adds eq(tickets.projectId, projectId) to the WHERE clause.
+  // 2. F48: tickets updated in window, not soft-deleted, with an assignee,
+  //    scoped to projectId.
   const assigneeAlias = alias(users, 'assignee');
   const ticketRows = await db
     .select({
@@ -203,7 +189,7 @@ export async function getTicketSummary(args: {
         lt(tickets.updatedAt, end),
         isNull(tickets.deletedAt),
         isNotNull(tickets.assigneeId),
-        ...(args.projectId ? [eq(tickets.projectId, args.projectId)] : []),
+        eq(tickets.projectId, args.projectId),
       ),
     );
 
