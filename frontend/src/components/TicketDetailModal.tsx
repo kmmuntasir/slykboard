@@ -6,7 +6,7 @@ import { fetchTicket } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
 import { formatTicketId } from '@/utils/formatTicketId';
 import { formatDate } from '@/utils/formatDate';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import type { UpdateTicketDto } from '@/types/ticket';
 import { Modal } from './Modal';
@@ -38,7 +38,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-    const isAdmin = useRequireRole('ADMIN');
+    const isAdmin = useRequirePlatformAdmin();
     const deleteTicketMutation = useDeleteTicket();
 
     // F16 D7: reconcile board/modal drift — refetch the detail while the modal is

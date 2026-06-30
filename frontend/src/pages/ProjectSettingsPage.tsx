@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router';
 import { useProject } from '@/hooks/useProjects';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { LabelManager } from '@/components/LabelManager';
 import { ProjectColumnsManager } from '@/components/ProjectColumnsManager';
 import { Retry } from '@/components/Retry';
@@ -27,7 +27,7 @@ interface SettingsBodyProps {
 
 function SettingsBody({ slug }: SettingsBodyProps) {
     const { data: project, isLoading, error, refetch } = useProject(slug);
-    const isAdmin = useRequireRole('ADMIN');
+    const isAdmin = useRequirePlatformAdmin();
 
     if (isLoading) {
         return (

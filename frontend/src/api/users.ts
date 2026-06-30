@@ -11,30 +11,32 @@ export interface WorkspaceUser {
   id: string;
   email: string;
   fullName: string;
-  role: 'ADMIN' | 'MEMBER';
+  isPlatformAdmin: boolean;
+  displayName?: string | null;
   avatarUrl: string | null;
   blocked: boolean;
 }
 
-// F13 T9: GET /users — workspace-wide user picker source. Excludes email/role.
+// F13 T9: GET /users — workspace-wide user picker source. Excludes email/admin status.
 export async function listUsers(): Promise<UserOption[]> {
   return apiFetch<UserOption[]>('/users');
 }
 
 // F25: GET /users — admin user-management roster. Returns the full user shape
-// (email/role/blocked) so SettingsPage can render the management table.
+// (email/isPlatformAdmin/blocked) so SettingsPage can render the management table.
 export async function fetchUsers(): Promise<WorkspaceUser[]> {
   return apiFetch<WorkspaceUser[]>('/users');
 }
 
-// F25: PATCH /users/:userId/role — admin-only. Server guards the last-admin demote.
-export async function updateUserRole(
+// SLYK-01: PATCH /users/:userId/isPlatformAdmin — admin-only. Server guards the
+// last-admin demote (409).
+export async function updatePlatformAdmin(
   userId: string,
-  role: 'ADMIN' | 'MEMBER',
+  isPlatformAdmin: boolean,
 ): Promise<WorkspaceUser> {
-  return apiFetch<WorkspaceUser>(`/users/${userId}/role`, {
+  return apiFetch<WorkspaceUser>(`/users/${userId}/isPlatformAdmin`, {
     method: 'PATCH',
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({ isPlatformAdmin }),
   });
 }
 

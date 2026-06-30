@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { AssigneeAvatar } from '@/components/AssigneeAvatar';
 import { Modal } from '@/components/Modal';
 import { fetchUsers, type WorkspaceUser } from '@/api/users';
-import { useUpdateUserRole, useSetUserBlocked } from '@/hooks/useUserManagement';
+import { useUpdatePlatformAdmin, useSetUserBlocked } from '@/hooks/useUserManagement';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { ApiClientError } from '@/api/client';
 
 type ConfirmAction = 'promote' | 'demote' | 'deactivate' | 'reactivate';
 
@@ -16,7 +17,7 @@ interface ConfirmTarget {
 
 // F25: admin user management. Lists every workspace user with role + status
 // badges and per-row Promote/Demote + Activate/Deactivate actions. The route is
-// gated by RequireRole('ADMIN'), so only admins reach this page. The "only admin"
+// gated by RequirePlatformAdmin, so only platform admins reach this page. The "only admin"
 // demote hint is client-side courtesy; the server enforces the real guard.
 export function SettingsPage() {
     const currentUser = useAuthStore((s) => s.user);
@@ -29,7 +30,7 @@ export function SettingsPage() {
         queryFn: fetchUsers,
     });
 
-    const roleMutation = useUpdateUserRole();
+    const roleMutation = useUpdatePlatformAdmin();
     const blockMutation = useSetUserBlocked();
 
     // F25: confirmation gate for the deactivation/reactivation mutation. The row
@@ -39,7 +40,10 @@ export function SettingsPage() {
     const handleConfirm = (target: ConfirmTarget) => {
         if (target.action === 'promote' || target.action === 'demote') {
             roleMutation.mutate(
-                { userId: target.userId, role: target.action === 'promote' ? 'ADMIN' : 'MEMBER' },
+                {
+                    userId: target.userId,
+                    isPlatformAdmin: target.action === 'promote',
+                },
                 { onSuccess: () => setConfirmTarget(null) },
             );
         } else {
@@ -53,7 +57,7 @@ export function SettingsPage() {
     const roster = users ?? [];
     // Client hint: disable self-demote when you are the only admin. Server still
     // enforces the real last-admin guard.
-    const adminCount = roster.filter((u) => u.role === 'ADMIN').length;
+    const adminCount = roster.filter((u) => u.isPlatformAdmin).length;
 
     return (
         <div className="p-8">
@@ -89,14 +93,14 @@ export function SettingsPage() {
                                     key={user.id}
                                     user={user}
                                     isSelf={user.id === currentUser?.id}
-                                    isOnlyAdmin={user.role === 'ADMIN' && adminCount <= 1}
+                                    isOnlyAdmin={user.isPlatformAdmin && adminCount <= 1}
                                     rolePending={roleMutation.isPending}
                                     blockPending={blockMutation.isPending}
-                                    onRoleChange={(role) =>
+                                    onRoleChange={(nextIsPlatformAdmin) =>
                                         setConfirmTarget({
                                             userId: user.id,
                                             fullName: user.fullName,
-                                            action: role === 'ADMIN' ? 'promote' : 'demote',
+                                            action: nextIsPlatformAdmin ? 'promote' : 'demote',
                                         })
                                     }
                                     onBlockChange={(blocked) =>
@@ -121,6 +125,15 @@ export function SettingsPage() {
                     title={confirmTitle(confirmTarget)}
                 >
                     <p className="text-sm text-muted-foreground">{confirmBody(confirmTarget)}</p>
+                    {(roleMutation.error || blockMutation.error) && (
+                        <p role="alert" className="text-sm text-destructive">
+                            {roleMutation.error instanceof ApiClientError
+                                ? roleMutation.error.message
+                                : blockMutation.error instanceof ApiClientError
+                                  ? blockMutation.error.message
+                                  : 'Action failed — please try again.'}
+                        </p>
+                    )}
                     <div className="mt-6 flex justify-end gap-2">
                         <button
                             type="button"
@@ -151,7 +164,7 @@ interface UserRowProps {
     isOnlyAdmin: boolean;
     rolePending: boolean;
     blockPending: boolean;
-    onRoleChange: (role: 'ADMIN' | 'MEMBER') => void;
+    onRoleChange: (nextIsPlatformAdmin: boolean) => void;
     onBlockChange: (blocked: boolean) => void;
 }
 
@@ -164,7 +177,7 @@ function UserRow({
     onRoleChange,
     onBlockChange,
 }: UserRowProps) {
-    const isAdmin = user.role === 'ADMIN';
+    const isAdmin = user.isPlatformAdmin;
     const isBlocked = user.blocked;
     const rowBusy = rolePending || blockPending;
 
@@ -195,7 +208,7 @@ function UserRow({
                 </div>
             </td>
             <td className="px-4 py-2.5">
-                <RoleBadge role={user.role} />
+                <RoleBadge isPlatformAdmin={user.isPlatformAdmin} />
             </td>
             <td className="px-4 py-2.5">
                 <StatusBadge blocked={user.blocked} />
@@ -204,7 +217,7 @@ function UserRow({
                 <div className="flex justify-end gap-2">
                     <button
                         type="button"
-                        onClick={() => onRoleChange(isAdmin ? 'MEMBER' : 'ADMIN')}
+                        onClick={() => onRoleChange(!isAdmin)}
                         disabled={roleDisabled}
                         title={
                             isSelf && isOnlyAdmin
@@ -287,8 +300,8 @@ function confirmButtonClass(action: ConfirmAction): string {
     }
 }
 
-function RoleBadge({ role }: { role: 'ADMIN' | 'MEMBER' }) {
-    return role === 'ADMIN' ? (
+function RoleBadge({ isPlatformAdmin }: { isPlatformAdmin: boolean }) {
+    return isPlatformAdmin ? (
         <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
             Admin
         </span>

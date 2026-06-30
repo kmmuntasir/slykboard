@@ -5,7 +5,8 @@ export interface AuthResponseUser {
   email: string;
   fullName: string;
   avatarUrl: string | null;
-  role: 'ADMIN' | 'MEMBER';
+  isPlatformAdmin: boolean;
+  displayName: string | null;
 }
 
 export interface AuthResponse {

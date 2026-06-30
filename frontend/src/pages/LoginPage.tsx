@@ -25,7 +25,8 @@ export function LoginPage() {
                     id: user.id,
                     email: user.email,
                     name: user.fullName,
-                    role: user.role,
+                    isPlatformAdmin: user.isPlatformAdmin,
+                    displayName: user.displayName,
                     avatarUrl: user.avatarUrl,
                     blocked: false,
                 });

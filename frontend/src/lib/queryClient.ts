@@ -36,8 +36,8 @@ export const queryClient = new QueryClient({
       staleTime: 30_000,
       refetchOnWindowFocus: true,
       // F07 D6 / F28 T2: don't retry 401s (the apiFetch interceptor handles
-      // refresh/logout) or 403s (role demotion is permanent now that backend
-      // requireRole is live in F17/F25 — retrying only burns the budget).
+      // refresh/logout) or 403s (platform-admin demotion is permanent now that
+      // the backend guard is live in F17/F25 — retrying only burns the budget).
       // Other errors retry up to 3 times (default).
       retry: (failureCount, error) => {
         if (error instanceof ApiClientError) {

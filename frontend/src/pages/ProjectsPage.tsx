@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useProjects, useCreateProject } from '@/hooks/useProjects';
 import { useProjectStore } from '@/stores/useProjectStore';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { EmptyState } from '@/components/EmptyState';
 import { Retry } from '@/components/Retry';
 import { SkeletonLine } from '@/components/Skeleton';
@@ -14,7 +14,7 @@ export function ProjectsPage() {
     const { data: projects, isLoading, error: queryError, refetch } = useProjects();
     const createProject = useCreateProject();
     const setLastSelectedSlug = useProjectStore((s) => s.setLastSelectedSlug);
-    const isAdmin = useRequireRole('ADMIN');
+    const isAdmin = useRequirePlatformAdmin();
 
     const [name, setName] = useState('');
     const [slug, setSlug] = useState('');

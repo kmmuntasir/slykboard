@@ -8,7 +8,8 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string; // maps from backend fullName
-  role: 'ADMIN' | 'MEMBER';
+  isPlatformAdmin: boolean;
+  displayName?: string | null;
   avatarUrl: string | null;
   blocked: boolean;
 }

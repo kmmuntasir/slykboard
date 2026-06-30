@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateUserRole, setUserBlocked } from '@/api/users';
+import { updatePlatformAdmin, setUserBlocked } from '@/api/users';
 
 // F25: admin user-management mutations. Both invalidate the ['users'] cache so the
 // SettingsPage roster refetches on success (and the F13 user picker stays fresh).
-export function useUpdateUserRole() {
+export function useUpdatePlatformAdmin() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: 'ADMIN' | 'MEMBER' }) =>
-      updateUserRole(userId, role),
-    meta: { revertMessage: "Couldn't update role" },
+    mutationFn: ({ userId, isPlatformAdmin }: { userId: string; isPlatformAdmin: boolean }) =>
+      updatePlatformAdmin(userId, isPlatformAdmin),
+    meta: { revertMessage: "Couldn't update platform-admin status" },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
 }

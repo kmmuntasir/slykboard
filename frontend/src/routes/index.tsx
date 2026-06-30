@@ -2,7 +2,7 @@ import { Navigate, Outlet, createBrowserRouter } from 'react-router';
 import { AppLayout } from '@/components/AppLayout';
 import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
-import { RequireRole } from '@/components/RequireRole';
+import { RequirePlatformAdmin } from '@/components/RequirePlatformAdmin';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 import { BoardPage, TicketDetailRoute } from '@/pages/BoardPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
@@ -99,7 +99,7 @@ export const router = createBrowserRouter([
                                     { path: '/reports', element: <ReportsRedirect /> },
                                     {
                                         path: '/settings',
-                                        element: <RequireRole role="ADMIN" />,
+                                        element: <RequirePlatformAdmin />,
                                         children: [{ index: true, element: <SettingsPage /> }],
                                     },
                                     // SLYK-F28: dedicated 403 page, reachable directly.

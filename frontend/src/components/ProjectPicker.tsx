@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router';
 import { FolderKanban, ChevronDown, Check, AlertCircle } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 import { useProjectStore } from '@/stores/useProjectStore';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { cn } from '@/components/ui/cn';
 import {
     Dropdown,
@@ -50,7 +50,7 @@ export function ProjectPicker() {
     const { data: projects, isLoading, isError, refetch } = useProjects();
     const lastSelectedSlug = useProjectStore((s) => s.lastSelectedSlug);
     const setLastSelectedSlug = useProjectStore((s) => s.setLastSelectedSlug);
-    const isAdmin = useRequireRole('ADMIN');
+    const isAdmin = useRequirePlatformAdmin();
 
     // D2 — controlled value: route primary, store fallback, "" placeholder.
     const selectedSlug = params.slug ?? lastSelectedSlug ?? '';

@@ -15,7 +15,7 @@ import {
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { logout } from '@/api/auth';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
 import { cn } from '@/components/ui/cn';
 import { Avatar } from '@/components/ui/Avatar';
@@ -101,7 +101,7 @@ export function TopNav() {
     const [open, setOpen] = useState(false);
     const user = useAuthStore((s) => s.user);
     const clear = useAuthStore((s) => s.clear);
-    const isAdmin = useRequireRole('ADMIN');
+    const isAdmin = useRequirePlatformAdmin();
     const navigate = useNavigate();
     // F42 — D1: URL param is primary, persisted store is the fallback.
     // Non-null slug ⇒ a project is selected ⇒ Board routes to its board.
