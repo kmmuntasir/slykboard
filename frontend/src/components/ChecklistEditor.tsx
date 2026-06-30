@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { Button } from './ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { TextInput } from './ui/TextInput';
 import { cn } from './ui/cn';
 import type { ChecklistItem } from '@/types/ticket';
@@ -93,12 +94,10 @@ export function ChecklistEditor({
             <ul className="space-y-1">
                 {value.map((item) => (
                     <li key={item.id} className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
+                        <Checkbox
                             checked={item.done}
-                            onChange={() => toggle(item.id)}
+                            onCheckedChange={() => toggle(item.id)}
                             aria-label={`Toggle "${item.text}"`}
-                            className="h-4 w-4"
                         />
                         <TextInput
                             type="text"

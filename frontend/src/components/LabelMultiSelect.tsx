@@ -7,8 +7,8 @@ import { LabelChip } from './LabelChip';
 import { Retry } from './Retry';
 import { EmptyState } from './EmptyState';
 import { SkeletonLine } from './Skeleton';
+import { Checkbox } from '@/components/ui/Checkbox';
 import type { Label } from '@/types/label';
-import type { MouseEvent as ReactMouseEvent } from 'react';
 
 // F14 T7: native multi-select popover (no cmdk/Radix dep).
 // Trigger shows selected chips; popover lists all project labels with
@@ -125,15 +125,11 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                                 key={l.id}
                                 className="flex cursor-pointer items-center gap-2 p-2 hover:bg-accent"
                             >
-                                <input
-                                    type="checkbox"
+                                <Checkbox
                                     checked={value.includes(l.id)}
-                                    onChange={() => toggle(l.id)}
-                                    onClick={(e: ReactMouseEvent<HTMLInputElement>) =>
-                                        e.stopPropagation()
-                                    }
+                                    onCheckedChange={() => toggle(l.id)}
+                                    onClick={(e) => e.stopPropagation()}
                                     aria-label={l.name}
-                                    className="h-4 w-4"
                                 />
                                 <span
                                     className="inline-block h-3 w-3 rounded-full"
