@@ -29,10 +29,15 @@ const bag = vi.hoisted(() => ({
   // F27 updateProject: set(...) arg captured; returning() resolves to dbUpdateReturning
   dbUpdateReturning: vi.fn(),
   dbUpdateSetArg: {} as InsertValues,
+  // listProjects member branch: captures the .where(...) predicate so the
+  // isActive filter is observable through the fluent mock.
+  dbSelectWhereArg: undefined as unknown,
   // F12: all in-tx inserts, captured in call order. Each entry is the values
   // object handed to tx.insert(...).values(...). The PROJECTS insert is also
   // mirrored into dbInsertValuesArg so existing assertions stay green.
   txInserts: [] as InsertValues[],
+  // DEL-04: mocked stopTimersForProject from timerService.
+  stopTimersForProject: vi.fn(),
 }));
 
 vi.mock('../db/client', () => {
@@ -44,6 +49,10 @@ vi.mock('../db/client', () => {
   type TxClient = {
     insert: () => {
       values: (v: InsertValues) => { returning: () => Promise<unknown[]> };
+    };
+    select: (selectArg?: unknown) => unknown;
+    update: () => {
+      set: (v: InsertValues) => { where: () => { returning: () => Promise<unknown[]> } };
     };
   };
   const tx: TxClient = {
@@ -60,21 +69,70 @@ vi.mock('../db/client', () => {
         };
       },
     }),
-  };
-  const db = {
-    // F27: select() with a shape arg (count(*) query) routes to dbSelectCount;
-    // select() with no arg (slug lookup / list) keeps the existing limit/orderBy chain.
-    select: vi.fn((selectArg?: unknown) => {
+    // F27/DEL-04: in-tx select. A shape arg is either a count(*) query
+    // (terminal at .where()) or the member-list query (uses .innerJoin() then
+    // .where().orderBy()). innerJoin disambiguates the two.
+    select: (selectArg?: unknown) => {
       if (selectArg !== undefined) {
-        const countChain = {
-          from: () => countChain,
+        const listPostJoin = {
+          where: (arg?: unknown) => {
+            bag.dbSelectWhereArg = arg;
+            return listPostJoin;
+          },
+          orderBy: () => bag.dbSelectOrderBy(),
+        };
+        const shapeChain = {
+          from: () => shapeChain,
+          innerJoin: () => listPostJoin,
           where: () => bag.dbSelectCount(),
         };
-        return countChain;
+        return shapeChain;
       }
       const chain = {
         from: () => chain,
-        where: () => chain,
+        where: (arg?: unknown) => {
+          bag.dbSelectWhereArg = arg;
+          return chain;
+        },
+        limit: () => bag.dbSelectLimit(),
+        orderBy: () => bag.dbSelectOrderBy(),
+      };
+      return chain;
+    },
+    // DEL-04: in-tx update drives updateProject's tx.update(projects).set(...).returning().
+    update: () => ({
+      set: (v: InsertValues) => {
+        bag.dbUpdateSetArg = v;
+        return { where: () => ({ returning: () => bag.dbUpdateReturning() }) };
+      },
+    }),
+  };
+  const db = {
+    // F27/DEL-04: select() with a shape arg is either a count(*) query
+    // (terminal at .where()) or the member-list query (.innerJoin() then
+    // .where().orderBy()). select() with no arg is the slug lookup.
+    select: vi.fn((selectArg?: unknown) => {
+      if (selectArg !== undefined) {
+        const listPostJoin = {
+          where: (arg?: unknown) => {
+            bag.dbSelectWhereArg = arg;
+            return listPostJoin;
+          },
+          orderBy: () => bag.dbSelectOrderBy(),
+        };
+        const shapeChain = {
+          from: () => shapeChain,
+          innerJoin: () => listPostJoin,
+          where: () => bag.dbSelectCount(),
+        };
+        return shapeChain;
+      }
+      const chain = {
+        from: () => chain,
+        where: (arg?: unknown) => {
+          bag.dbSelectWhereArg = arg;
+          return chain;
+        },
         limit: () => bag.dbSelectLimit(),
         orderBy: () => bag.dbSelectOrderBy(),
       };
@@ -103,6 +161,12 @@ vi.mock('../db/client', () => {
   return { db };
 });
 
+// DEL-04: mock stopTimersForProject so tests can assert called/not-called
+// without touching timeEntries. The factory closes over the hoisted bag.
+vi.mock('./timerService', () => ({
+  stopTimersForProject: (...args: unknown[]) => bag.stopTimersForProject(...args),
+}));
+
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { createProject, getProjectBySlug, listProjects, updateProject } from './projectService';
@@ -115,7 +179,9 @@ function resetBag() {
   bag.dbSelectCount.mockReset();
   bag.dbUpdateReturning.mockReset();
   bag.dbUpdateSetArg = {};
+  bag.dbSelectWhereArg = undefined;
   bag.txInserts = [];
+  bag.stopTimersForProject.mockReset();
 }
 
 describe('createProject', () => {
@@ -408,5 +474,140 @@ describe('updateProject', () => {
     expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
     expect(error.message.toLowerCase()).toContain('unique');
     expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+  });
+});
+
+// DEL-04 Task T3 (a): deactivating a project stops all running timers on its
+// tickets via stopTimersForProject, called inside the same transaction and
+// BEFORE the projects UPDATE. The update set carries isActive:false.
+describe('updateProject — DEL-04 deactivation (isActive:false)', () => {
+  beforeEach(resetBag);
+
+  const projectRow = {
+    id: 'p-deact',
+    name: 'Slyk',
+    slug: 'SLYK',
+    columns: [{ id: 'a', name: 'To Do' }],
+    creatorId: 'u1',
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it('calls stopTimersForProject(tx, project.id) and writes isActive:false', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]); // project found
+    const updatedRow = { ...projectRow, isActive: false };
+    bag.dbUpdateReturning.mockResolvedValueOnce([updatedRow]);
+
+    const result = await updateProject({ slug: 'SLYK', isActive: false });
+
+    expect(result.isActive).toBe(false);
+    // stopTimersForProject invoked once, inside the tx, with the project id.
+    expect(bag.stopTimersForProject).toHaveBeenCalledTimes(1);
+    expect(bag.stopTimersForProject).toHaveBeenCalledWith(expect.anything(), projectRow.id);
+    // The projects UPDATE carries isActive:false (and updatedAt).
+    expect(bag.dbUpdateSetArg.isActive).toBe(false);
+    // The projects UPDATE actually ran (deactivation is not a no-op).
+    expect(bag.dbUpdateReturning).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not touch isActive when it is omitted (undefined => no-op)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]);
+    const updatedRow = { ...projectRow, name: 'Renamed' };
+    bag.dbUpdateReturning.mockResolvedValueOnce([updatedRow]);
+
+    await updateProject({ slug: 'SLYK', name: 'Renamed' });
+
+    expect(bag.dbUpdateSetArg.isActive).toBeUndefined();
+    expect(bag.stopTimersForProject).not.toHaveBeenCalled();
+  });
+});
+
+// DEL-04 Task T3 (b): reactivating a project must NOT stop timers.
+describe('updateProject — DEL-04 reactivation (isActive:true)', () => {
+  beforeEach(resetBag);
+
+  const projectRow = {
+    id: 'p-react',
+    name: 'Slyk',
+    slug: 'SLYK',
+    columns: [{ id: 'a', name: 'To Do' }],
+    creatorId: 'u1',
+    isActive: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it('does NOT call stopTimersForProject and writes isActive:true', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([projectRow]);
+    const updatedRow = { ...projectRow, isActive: true };
+    bag.dbUpdateReturning.mockResolvedValueOnce([updatedRow]);
+
+    const result = await updateProject({ slug: 'SLYK', isActive: true });
+
+    expect(result.isActive).toBe(true);
+    expect(bag.stopTimersForProject).not.toHaveBeenCalled();
+    expect(bag.dbUpdateSetArg.isActive).toBe(true);
+  });
+});
+
+// DEL-04 Task T3 (c): listProjects member branch excludes inactive projects
+// (the membership join is further gated by projects.isActive = true), while
+// the Platform-Admin branch still includes them (no .where at all).
+describe('listProjects — DEL-04 isActive filter', () => {
+  beforeEach(resetBag);
+
+  it('member branch applies a .where predicate (isActive gate present)', async () => {
+    const rows = [{ id: 'r1', isActive: true }];
+    bag.dbSelectOrderBy.mockResolvedValueOnce(rows);
+
+    const result = await listProjects('uid', false);
+
+    expect(result).toEqual(rows);
+    // The member branch must filter; a .where predicate was captured.
+    expect(bag.dbSelectWhereArg).toBeDefined();
+  });
+
+  it('Platform-Admin branch does NOT filter (sees inactive projects too)', async () => {
+    const rows = [
+      { id: 'r1', isActive: true },
+      { id: 'r2', isActive: false },
+    ];
+    bag.dbSelectOrderBy.mockResolvedValueOnce(rows);
+
+    const result = await listProjects('uid', true);
+
+    expect(result).toEqual(rows);
+    // PA branch is `select().from().orderBy()` — no .where clause at all.
+    expect(bag.dbSelectWhereArg).toBeUndefined();
+  });
+});
+
+// DEL-04 Task T3 (d): a non-PA caller probing a deactivated project gets the
+// byte-identical non-revealing FORBIDDEN literal used by the membership deny.
+// The membership probe must never run (no db.transaction for membership).
+describe('getProjectBySlug — DEL-04 non-revealing deny on inactive project', () => {
+  beforeEach(resetBag);
+
+  const FORBIDDEN = 'You do not have access to this project';
+
+  it('throws the byte-identical FORBIDDEN for a non-PA on an inactive project', async () => {
+    const inactiveRow = { id: 'p-x', slug: 'GHOST', isActive: false };
+    bag.dbSelectLimit.mockResolvedValueOnce([inactiveRow]);
+
+    const error = await getProjectBySlug('ghost', 'uid', false).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.FORBIDDEN);
+    expect((error as AppError).message).toBe(FORBIDDEN);
+  });
+
+  it('PA bypass still returns an inactive project (no deny)', async () => {
+    const inactiveRow = { id: 'p-x', slug: 'GHOST', isActive: false };
+    bag.dbSelectLimit.mockResolvedValueOnce([inactiveRow]);
+
+    const result = await getProjectBySlug('ghost', 'uid', true);
+
+    expect(result).toEqual(inactiveRow);
   });
 });

@@ -14,6 +14,7 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { isReservedSlug, isValidSlug, normalizeSlug } from '../utils/slug';
 import { isProjectMember } from './membershipService';
+import { stopTimersForProject } from './timerService';
 
 export type ProjectRow = typeof projects.$inferSelect;
 
@@ -100,8 +101,9 @@ export async function listProjects(
   if (isPlatformAdmin) {
     return db.select().from(projects).orderBy(projects.createdAt);
   }
-  // Members always see their projects regardless of projects.isActive —
-  // deactivation behavior is owned by DEL-04; here we only scope.
+  // DEL-04: members see only their ACTIVE projects. Platform Admins (branch
+  // above) still see inactive ones. The membership join is further gated by
+  // projects.isActive so a deactivated project drops out of a member's list.
   return db
     .select({
       id: projects.id,
@@ -115,7 +117,7 @@ export async function listProjects(
     })
     .from(projects)
     .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
-    .where(eq(projectMembers.userId, userId))
+    .where(and(eq(projectMembers.userId, userId), eq(projects.isActive, true)))
     .orderBy(projects.createdAt);
 }
 
@@ -150,6 +152,14 @@ export async function getProjectBySlug(
     return row;
   }
 
+  // DEL-04: non-revealing deny for deactivated projects. A non-PA caller must
+  // not be able to distinguish a deactivated project from an inaccessible one,
+  // so this throws the byte-identical FORBIDDEN literal used by the membership
+  // deny below. Must run AFTER the PA bypass and BEFORE the membership probe.
+  if (row.isActive === false) {
+    throw new AppError(ErrorCode.FORBIDDEN, 'You do not have access to this project');
+  }
+
   // Membership probe inside the caller's read scope via the shared tx idiom
   // (membershipService owns ALL project_members access — no direct reads here).
   const allowed = await db.transaction((tx) => isProjectMember(tx, row.id, userId));
@@ -159,68 +169,86 @@ export async function getProjectBySlug(
   return row;
 }
 
-// F27 T1: rename a project and/or replace its columns JSONB. Slug is NOT editable.
+// F27 T1: rename a project and/or replace its columns JSONB, and/or toggle its
+// DEL-04 activation flag. Slug is NOT editable. The whole body runs in ONE
+// transaction so the column-removal probe, the optional timer-stop on
+// deactivation, and the projects UPDATE all commit or roll back together.
 // Blocking rule: a column still holding live (non-deleted) tickets cannot be removed.
 export async function updateProject(args: {
   slug: string;
   name?: string;
   columns?: Column[];
+  isActive?: boolean;
 }): Promise<ProjectRow> {
-  const project = await getProjectBySlug(args.slug);
-  if (!project) {
-    throw new AppError(ErrorCode.NOT_FOUND, `Project '${args.slug}' not found`);
-  }
+  return db.transaction(async (tx) => {
+    const project = await getProjectBySlug(args.slug);
+    if (!project) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Project '${args.slug}' not found`);
+    }
 
-  const updateSet: Partial<ProjectRow> = { updatedAt: new Date() };
-  if (args.name !== undefined) {
-    updateSet.name = args.name;
-  }
-  if (args.columns !== undefined) {
-    if (args.columns.length === 0) {
-      throw new AppError(ErrorCode.CONFLICT, 'A project must have at least one column');
+    // DEL-04: deactivating a project stops every running timer on its tickets.
+ // Runs inside this tx BEFORE the projects UPDATE so a failure rolls back both.
+    // Reactivation (isActive===true) must NOT touch timers.
+    if (args.isActive === false) {
+      await stopTimersForProject(tx, project.id);
     }
-    for (const col of args.columns) {
-      if (!col.id || !col.name || col.name.trim() === '') {
-        throw new AppError(
-          ErrorCode.VALIDATION_FAILED,
-          'Each column must have an id and non-empty name',
-        );
-      }
-    }
-    const columnIds = args.columns.map((c) => c.id);
-    if (new Set(columnIds).size !== columnIds.length) {
-      throw new AppError(ErrorCode.VALIDATION_FAILED, 'Column ids must be unique');
-    }
-    // F27: block deleting a column that still has live (non-deleted) tickets.
-    const oldIds = new Set(project.columns.map((c) => c.id));
-    const newIds = new Set(args.columns.map((c) => c.id));
-    const removed = [...oldIds].filter((id) => !newIds.has(id));
-    for (const colId of removed) {
-      const [row] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(tickets)
-        .where(
-          and(
-            eq(tickets.projectId, project.id),
-            eq(tickets.statusColumn, colId),
-            isNull(tickets.deletedAt),
-          ),
-        );
-      if (row && Number(row.count) > 0) {
-        throw new AppError(
-          ErrorCode.CONFLICT,
-          `Cannot delete column: ${row.count} ticket(s) still in this column. Move them first.`,
-        );
-      }
-    }
-    updateSet.columns = args.columns;
-  }
 
-  const [updated] = await db
-    .update(projects)
-    .set(updateSet)
-    .where(eq(projects.slug, args.slug))
-    .returning();
-  // Project existence was verified above; the UPDATE targets that same row.
-  return updated!;
+    const updateSet: Partial<ProjectRow> = { updatedAt: new Date() };
+    if (args.name !== undefined) {
+      updateSet.name = args.name;
+    }
+    // Only write isActive when actually provided — undefined means "don't touch".
+    if (args.isActive !== undefined) {
+      updateSet.isActive = args.isActive;
+    }
+    if (args.columns !== undefined) {
+      if (args.columns.length === 0) {
+        throw new AppError(ErrorCode.CONFLICT, 'A project must have at least one column');
+      }
+      for (const col of args.columns) {
+        if (!col.id || !col.name || col.name.trim() === '') {
+          throw new AppError(
+            ErrorCode.VALIDATION_FAILED,
+            'Each column must have an id and non-empty name',
+          );
+        }
+      }
+      const columnIds = args.columns.map((c) => c.id);
+      if (new Set(columnIds).size !== columnIds.length) {
+        throw new AppError(ErrorCode.VALIDATION_FAILED, 'Column ids must be unique');
+      }
+      // F27: block deleting a column that still has live (non-deleted) tickets.
+      // Probe runs through `tx` so it shares this transaction's snapshot.
+      const oldIds = new Set(project.columns.map((c) => c.id));
+      const newIds = new Set(args.columns.map((c) => c.id));
+      const removed = [...oldIds].filter((id) => !newIds.has(id));
+      for (const colId of removed) {
+        const [row] = await tx
+          .select({ count: sql<number>`count(*)` })
+          .from(tickets)
+          .where(
+            and(
+              eq(tickets.projectId, project.id),
+              eq(tickets.statusColumn, colId),
+              isNull(tickets.deletedAt),
+            ),
+          );
+        if (row && Number(row.count) > 0) {
+          throw new AppError(
+            ErrorCode.CONFLICT,
+            `Cannot delete column: ${row.count} ticket(s) still in this column. Move them first.`,
+          );
+        }
+      }
+      updateSet.columns = args.columns;
+    }
+
+    const [updated] = await tx
+      .update(projects)
+      .set(updateSet)
+      .where(eq(projects.slug, args.slug))
+      .returning();
+    // Project existence was verified above; the UPDATE targets that same row.
+    return updated!;
+  });
 }

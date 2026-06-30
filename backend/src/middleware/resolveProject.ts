@@ -39,6 +39,14 @@ async function authorizeProjectAccess(
   if (isPlatformAdmin) {
     return null; // PA bypass sentinel.
   }
+  // DEL-04: non-revealing deny for deactivated projects. A non-PA caller must
+  // not distinguish a deactivated project from an inaccessible one, so this
+  // throws the byte-identical FORBIDDEN literal used by the membership deny
+  // below. Runs AFTER the PA bypass and BEFORE the membership probe — matching
+  // projectService.getProjectBySlug exactly.
+  if (project.isActive === false) {
+    throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+  }
   const member = await db.transaction((tx) => isProjectMember(tx, project.id, userId));
   if (!member) {
     throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
