@@ -93,4 +93,17 @@ describe('TicketCard', () => {
         expect(screen.getByText('SLYK-101')).toBeInTheDocument();
         expect(screen.queryByLabelText(/^Checklist progress/)).not.toBeInTheDocument();
     });
+
+    // SLYK-06 T5 — card root surface token/contrast className assertions.
+    // The click surface is the <article> (aria-label="Ticket <id>: <title>"),
+    // so select it by its article role + heading-derived accessible name.
+    it('card root carries border-border + elevation ring + bg-card surface', () => {
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
+        // The card <article> inherits role="button" from @hello-pangea/dnd's
+        // dragHandleProps, so select it via the button role + heading-derived name.
+        const card = screen.getByRole('button', { name: /Render board/ });
+        expect(card.className).toContain('border-border');
+        expect(card.className).toContain('ring-');
+        expect(card.className).toContain('bg-card');
+    });
 });

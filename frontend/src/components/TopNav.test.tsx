@@ -98,6 +98,34 @@ function renderTopNavWithProject(slug: string) {
     );
 }
 
+// SLYK-06 T5 — bare-surface token guard. Matches `text-muted` but NOT
+// `text-muted-foreground` (negative lookahead permits a following `-` or word char).
+const BARE_TEXT_MUTED = /\btext-muted\b(?![-\w])/;
+
+// SLYK-06 T5 — render TopNav at an arbitrary project sub-path so any NavLink can
+// be driven active/inactive for className-substring assertions. Registers a splat
+// route so /projects/:slug, /projects/:slug/reports, and /projects/:slug/settings
+// all resolve :slug (driving the scoped NavLink hrefs + the Project Settings gate).
+function renderTopNavAtRoute(path: string) {
+    const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    return render(
+        <QueryClientProvider client={client}>
+            <ThemeProvider>
+                <TooltipProvider>
+                    <MemoryRouter initialEntries={[path]}>
+                        <Routes>
+                            <Route path="/projects/:slug" element={<TopNav />} />
+                            <Route path="/projects/:slug/*" element={<TopNav />} />
+                        </Routes>
+                    </MemoryRouter>
+                </TooltipProvider>
+            </ThemeProvider>
+        </QueryClientProvider>,
+    );
+}
+
 // lucide icons render as <svg>; assert presence by querying the brand container.
 function brandContainer() {
     return screen.getByText('Slykboard').parentElement as HTMLElement;
@@ -619,4 +647,38 @@ describe('TopNav', () => {
         fireEvent.pointerDown(document.body);
         expect(toggle.getAttribute('aria-expanded')).toBe('false');
     });
+
+    // --- SLYK-06 T5 — token/contrast className assertions -----------------------
+
+    it('inactive Reports NavLink uses text-muted-foreground (no bare text-muted)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        // /projects/demo → Board active (end), Reports inactive.
+        renderTopNavWithProject('demo');
+        const reports = screen.getByRole('link', { name: 'Reports' });
+        expect(reports.className).toContain('text-muted-foreground');
+        expect(reports.className).not.toMatch(BARE_TEXT_MUTED);
+    });
+
+    it('active Reports NavLink uses text-primary when on the scoped reports route', () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNavAtRoute('/projects/demo/reports');
+        const reports = screen.getByRole('link', { name: 'Reports' });
+        expect(reports.className).toContain('text-primary');
+    });
+
+    it.each([
+        { name: 'Board', path: '/projects/demo/reports' }, // Board inactive off its end-route
+        { name: 'Reports', path: '/projects/demo' }, // Reports inactive off the reports route
+        { name: 'Project Settings', path: '/projects/demo' }, // admin+project renders it; inactive here
+    ])(
+        'inactive %s NavLink carries text-muted-foreground and NOT bare text-muted',
+        ({ name, path }) => {
+            // platform admin + project present → all three NavLinks render as real <a>.
+            useAuthStore.getState().setUser(fullUser);
+            renderTopNavAtRoute(path);
+            const link = screen.getByRole('link', { name });
+            expect(link.className).toContain('text-muted-foreground');
+            expect(link.className).not.toMatch(BARE_TEXT_MUTED);
+        },
+    );
 });

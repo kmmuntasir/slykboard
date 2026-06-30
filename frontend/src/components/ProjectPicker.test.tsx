@@ -258,6 +258,29 @@ it('does NOT show a Deactivated badge when the project is active', () => {
     expect(screen.queryByText('Deactivated')).not.toBeInTheDocument();
 });
 
+// --- SLYK-06 T5 — trigger icon token/contrast className assertions -----------
+
+it('LOADED trigger FolderKanban icon uses text-muted-foreground (no bare text-muted)', () => {
+    setProjects(); // LOADED → trigger renders the FolderKanban + ChevronDown affordances
+    renderPicker();
+    const trigger = screen.getByLabelText('Select project');
+    const folderIcon = trigger.querySelector('svg.lucide-folder-kanban');
+    expect(folderIcon).not.toBeNull();
+    // svg.className is an SVGAnimatedString — read the class attribute directly.
+    expect(folderIcon!.getAttribute('class')).toContain('text-muted-foreground');
+    expect(folderIcon!.getAttribute('class')).not.toMatch(/\btext-muted\b(?![-\w])/);
+});
+
+it('LOADED trigger ChevronDown caret uses text-muted-foreground (no bare text-muted)', () => {
+    setProjects();
+    renderPicker();
+    const trigger = screen.getByLabelText('Select project');
+    const caret = trigger.querySelector('svg.lucide-chevron-down');
+    expect(caret).not.toBeNull();
+    expect(caret!.getAttribute('class')).toContain('text-muted-foreground');
+    expect(caret!.getAttribute('class')).not.toMatch(/\btext-muted\b(?![-\w])/);
+});
+
 it('does NOT show a Deactivated badge for a non-admin even when inactive', () => {
     const inactive: Project = { ...adminProject, id: 'p3', slug: 'dead', isActive: false };
     vi.mocked(useProjects).mockReturnValue({
