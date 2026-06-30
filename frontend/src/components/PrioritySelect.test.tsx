@@ -11,29 +11,30 @@ describe('PrioritySelect', () => {
 
     it('renders all 5 priority options with display labels', () => {
         render(<PrioritySelect value="LOW" onChange={vi.fn()} />);
-        expect(screen.getAllByRole('option')).toHaveLength(5);
+        // Radix dropdown-menu trigger; open it to surface the menuitems.
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Priority' }), { button: 0 });
+        expect(screen.getAllByRole('menuitem')).toHaveLength(5);
         cases.forEach(({ label }) => {
-            expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
+            expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument();
         });
     });
 
-    it('is accessible via combobox role with "Priority" name', () => {
+    it('is accessible via button role with "Priority" aria-label', () => {
         render(<PrioritySelect value="LOW" onChange={vi.fn()} />);
-        expect(screen.getByRole('combobox', { name: 'Priority' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Priority' })).toBeInTheDocument();
     });
 
-    it('marks the current value as selected', () => {
+    it('shows the current value label in the trigger', () => {
         render(<PrioritySelect value="HIGH" onChange={vi.fn()} />);
-        const highOption = screen.getByRole('option', { name: 'High' });
-        expect(highOption).toHaveProperty('selected', true);
+        const trigger = screen.getByRole('button', { name: 'Priority' });
+        expect(trigger).toHaveTextContent('High');
     });
 
     it('fires onChange with the selected enum value', () => {
         const onChange = vi.fn();
         render(<PrioritySelect value="LOW" onChange={onChange} />);
-        fireEvent.change(screen.getByRole('combobox', { name: 'Priority' }), {
-            target: { value: 'URGENT' },
-        });
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Priority' }), { button: 0 });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Urgent' }));
         expect(onChange).toHaveBeenCalledTimes(1);
         expect(onChange).toHaveBeenCalledWith('URGENT');
     });

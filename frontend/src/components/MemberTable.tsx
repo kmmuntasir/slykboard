@@ -8,7 +8,7 @@ import { Trash2 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { SelectInput } from '@/components/ui/SelectInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import type { Member, MemberRole } from '@/types/member';
 
 export interface MemberTableProps {
@@ -104,24 +104,31 @@ export function MemberTable({
                                 </th>
                                 <td className="px-4 py-3 align-middle">
                                     {canManage ? (
-                                        <SelectInput
-                                            aria-label={`Role for ${member.email}`}
+                                        <Select
                                             value={member.role}
-                                            disabled={selfLockedAdmin}
-                                            onChange={(e) =>
-                                                onRoleChange(
-                                                    member.userId,
-                                                    e.target.value as MemberRole,
-                                                )
+                                            onValueChange={(v) =>
+                                                onRoleChange(member.userId, v as MemberRole)
                                             }
-                                            className="py-1 text-sm"
                                         >
-                                            {ROLE_OPTIONS.map((opt) => (
-                                                <option key={opt.value} value={opt.value}>
-                                                    {opt.label}
-                                                </option>
-                                            ))}
-                                        </SelectInput>
+                                            <SelectTrigger
+                                                aria-label={`Role for ${member.email}`}
+                                                className="py-1 text-sm"
+                                                disabled={selfLockedAdmin}
+                                            >
+                                                <SelectValue placeholder="Role">
+                                                    {roleLabel(member.role)}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {ROLE_OPTIONS.map((opt) => (
+                                                    <SelectItem
+                                                        key={opt.value}
+                                                        value={opt.value}
+                                                        textValue={opt.label}
+                                                    />
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     ) : (
                                         <Badge variant={roleBadgeVariant(member.role)}>
                                             {roleLabel(member.role)}

@@ -3,9 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 
 import { listLabels } from '@/api/labels';
 import { labelKeys } from '@/api/queryKeys';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useUsers } from '@/hooks/useUsers';
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import type { Label } from '@/types/label';
+import { PRIORITY_DISPLAY, type Priority } from '@/types/ticket';
 
 // F26: board filter bar. Reads/writes filter state in useBoardUiStore; the
 // useBoard hook reacts to those values and refires the board query with a
@@ -16,7 +18,16 @@ import type { Label } from '@/types/label';
 // from defocusing the input on every keystroke.
 
 const SEARCH_DEBOUNCE_MS = 300;
-const PRIORITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'] as const;
+const PRIORITIES = Object.keys(PRIORITY_DISPLAY) as Priority[];
+
+/** Resolve a loose priority string (from the store) to its display label,
+ *  or undefined when the value is unset/invalid (SelectValue falls back). */
+function priorityLabel(value: string | null): string {
+    if (value && (PRIORITIES as string[]).includes(value)) {
+        return PRIORITY_DISPLAY[value as Priority];
+    }
+    return '';
+}
 
 interface BoardFiltersProps {
     slug: string;
@@ -71,47 +82,60 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
                 className="min-w-[14rem] flex-1 rounded border border-border p-2 text-sm"
             />
 
-            <select
+            <Select
                 value={assigneeFilter ?? ''}
-                onChange={(e) => setAssigneeFilter(e.target.value || null)}
-                aria-label="Filter by assignee"
-                className="rounded border border-border p-2 text-sm"
+                onValueChange={(v) => setAssigneeFilter(v === '' ? null : v)}
             >
-                <option value="">All assignees</option>
-                {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                        {user.fullName}
-                    </option>
-                ))}
-            </select>
+                <SelectTrigger aria-label="Filter by assignee" className="text-sm">
+                    <SelectValue placeholder="All assignees">
+                        {assigneeFilter
+                            ? users.find((u) => u.id === assigneeFilter)?.fullName ?? ''
+                            : ''}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent searchable>
+                    <SelectItem value="" textValue="All assignees" />
+                    {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id} textValue={user.fullName} />
+                    ))}
+                </SelectContent>
+            </Select>
 
-            <select
+            <Select
                 value={priorityFilter ?? ''}
-                onChange={(e) => setPriorityFilter(e.target.value || null)}
-                aria-label="Filter by priority"
-                className="rounded border border-border p-2 text-sm"
+                onValueChange={(v) => setPriorityFilter(v === '' ? null : v)}
             >
-                <option value="">All priorities</option>
-                {PRIORITY_OPTIONS.map((priority) => (
-                    <option key={priority} value={priority}>
-                        {priority}
-                    </option>
-                ))}
-            </select>
+                <SelectTrigger aria-label="Filter by priority" className="text-sm">
+                    <SelectValue placeholder="All priorities">
+                        {priorityLabel(priorityFilter)}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="" textValue="All priorities" />
+                    {PRIORITIES.map((priority) => (
+                        <SelectItem key={priority} value={priority} textValue={priority}>
+                            {PRIORITY_DISPLAY[priority]}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
 
-            <select
+            <Select
                 value={labelFilter ?? ''}
-                onChange={(e) => setLabelFilter(e.target.value || null)}
-                aria-label="Filter by label"
-                className="rounded border border-border p-2 text-sm"
+                onValueChange={(v) => setLabelFilter(v === '' ? null : v)}
             >
-                <option value="">All labels</option>
-                {labels.map((label) => (
-                    <option key={label.id} value={label.id}>
-                        {label.name}
-                    </option>
-                ))}
-            </select>
+                <SelectTrigger aria-label="Filter by label" className="text-sm">
+                    <SelectValue placeholder="All labels">
+                        {labelFilter ? labels.find((l) => l.id === labelFilter)?.name ?? '' : ''}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="" textValue="All labels" />
+                    {labels.map((label) => (
+                        <SelectItem key={label.id} value={label.id} textValue={label.name} />
+                    ))}
+                </SelectContent>
+            </Select>
 
             <button
                 type="button"

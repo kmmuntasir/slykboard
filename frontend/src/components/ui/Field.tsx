@@ -10,7 +10,7 @@ export interface FieldProps {
     label: string;
     /** Optional id to associate the label with a control via htmlFor. */
     htmlFor?: string;
-    /** The control (TextInput, SelectInput, etc.). */
+    /** The control (TextInput, Select, etc.). */
     children: ReactNode;
     /** Error message; when present, rendered as <p role="alert">. */
     error?: string;

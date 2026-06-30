@@ -25,7 +25,7 @@ import { Modal } from './Modal';
 import { Avatar } from './ui/Avatar';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
-import { SelectInput } from './ui/SelectInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { TextInput } from './ui/TextInput';
 import { useToast } from '@/hooks/useToast';
 import { useLookupMember, useProjectMembers } from '@/hooks/useProjectMembers';
@@ -40,6 +40,10 @@ export interface AddMemberModalProps {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TITLE_ID = 'add-member-title';
 const CONFIRM_TITLE_ID = 'add-member-confirm-title';
+const ROLE_OPTIONS: ReadonlyArray<{ value: MemberRole; label: string }> = [
+    { value: 'MEMBER', label: 'Member' },
+    { value: 'PROJECT_ADMIN', label: 'Project Admin' },
+];
 
 export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
     const toast = useToast();
@@ -281,17 +285,30 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
                             </div>
                         </div>
                         <Field label="Project Role" htmlFor="add-member-role-existing">
-                            <SelectInput
-                                id="add-member-role-existing"
-                                aria-label="Project role"
+                            <Select
                                 value={role}
-                                onChange={(e) => setRole(e.target.value as MemberRole)}
-                                disabled={isPending}
-                                className="w-full"
+                                onValueChange={(v) => setRole(v as MemberRole)}
                             >
-                                <option value="MEMBER">Member</option>
-                                <option value="PROJECT_ADMIN">Project Admin</option>
-                            </SelectInput>
+                                <SelectTrigger
+                                    id="add-member-role-existing"
+                                    aria-label="Project role"
+                                    className="w-full"
+                                    disabled={isPending}
+                                >
+                                    <SelectValue placeholder="Project role">
+                                        {roleLabel(role)}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {ROLE_OPTIONS.map((opt) => (
+                                        <SelectItem
+                                            key={opt.value}
+                                            value={opt.value}
+                                            textValue={opt.label}
+                                        />
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </Field>
                     </div>
                 ) : null}
@@ -329,17 +346,30 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
                             />
                         </Field>
                         <Field label="Project Role" htmlFor="add-member-role-new">
-                            <SelectInput
-                                id="add-member-role-new"
-                                aria-label="Project role"
+                            <Select
                                 value={role}
-                                onChange={(e) => setRole(e.target.value as MemberRole)}
-                                disabled={isPending}
-                                className="w-full"
+                                onValueChange={(v) => setRole(v as MemberRole)}
                             >
-                                <option value="MEMBER">Member</option>
-                                <option value="PROJECT_ADMIN">Project Admin</option>
-                            </SelectInput>
+                                <SelectTrigger
+                                    id="add-member-role-new"
+                                    aria-label="Project role"
+                                    className="w-full"
+                                    disabled={isPending}
+                                >
+                                    <SelectValue placeholder="Project role">
+                                        {roleLabel(role)}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {ROLE_OPTIONS.map((opt) => (
+                                        <SelectItem
+                                            key={opt.value}
+                                            value={opt.value}
+                                            textValue={opt.label}
+                                        />
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </Field>
                     </div>
                 ) : null}

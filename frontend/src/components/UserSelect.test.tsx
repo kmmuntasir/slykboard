@@ -25,6 +25,12 @@ function mockUseUsers(
     } as unknown as UseQueryResult<UserOption[]>;
 }
 
+function openAssignee() {
+    const trigger = screen.getByRole('button', { name: 'Assignee' });
+    fireEvent.pointerDown(trigger, { button: 0 });
+    return trigger;
+}
+
 describe('UserSelect', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -34,16 +40,17 @@ describe('UserSelect', () => {
         vi.mocked(useUsers).mockReturnValue(mockUseUsers());
         render(<UserSelect value={null} onChange={vi.fn()} />);
 
-        expect(screen.getAllByRole('option')).toHaveLength(3);
-        expect(screen.getByRole('option', { name: 'Unassigned' })).toBeInTheDocument();
-        expect(screen.getByRole('option', { name: 'Ada Lovelace' })).toBeInTheDocument();
-        expect(screen.getByRole('option', { name: 'Grace Hopper' })).toBeInTheDocument();
+        openAssignee();
+        expect(screen.getAllByRole('menuitem')).toHaveLength(3);
+        expect(screen.getByRole('menuitem', { name: 'Unassigned' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Ada Lovelace' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Grace Hopper' })).toBeInTheDocument();
     });
 
-    it('is accessible via combobox role with "Assignee" name', () => {
+    it('is accessible via button role with "Assignee" aria-label', () => {
         vi.mocked(useUsers).mockReturnValue(mockUseUsers());
         render(<UserSelect value={null} onChange={vi.fn()} />);
-        expect(screen.getByRole('combobox', { name: 'Assignee' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Assignee' })).toBeInTheDocument();
     });
 
     it('selecting Unassigned fires onChange(null)', () => {
@@ -51,9 +58,8 @@ describe('UserSelect', () => {
         vi.mocked(useUsers).mockReturnValue(mockUseUsers());
         render(<UserSelect value="u1" onChange={onChange} />);
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Assignee' }), {
-            target: { value: '' },
-        });
+        openAssignee();
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Unassigned' }));
         expect(onChange).toHaveBeenCalledTimes(1);
         expect(onChange).toHaveBeenCalledWith(null);
     });
@@ -63,9 +69,8 @@ describe('UserSelect', () => {
         vi.mocked(useUsers).mockReturnValue(mockUseUsers());
         render(<UserSelect value={null} onChange={onChange} />);
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Assignee' }), {
-            target: { value: 'u2' },
-        });
+        openAssignee();
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Grace Hopper' }));
         expect(onChange).toHaveBeenCalledTimes(1);
         expect(onChange).toHaveBeenCalledWith('u2');
     });
@@ -74,6 +79,6 @@ describe('UserSelect', () => {
         vi.mocked(useUsers).mockReturnValue(mockUseUsers({ data: undefined, isLoading: true }));
         render(<UserSelect value={null} onChange={vi.fn()} />);
 
-        expect(screen.getByRole('combobox', { name: 'Assignee' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Assignee' })).toBeDisabled();
     });
 });

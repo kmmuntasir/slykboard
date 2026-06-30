@@ -71,8 +71,8 @@ describe('MemberTable', () => {
             expect(screen.getByText('Project Admin')).toBeInTheDocument();
             expect(screen.getByText('Member')).toBeInTheDocument();
 
-            // No select, no remove.
-            expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+            // No select triggers, no remove buttons.
+            expect(screen.queryAllByRole('button', { name: /Role for /i })).toHaveLength(0);
             expect(screen.queryByRole('button')).toBeNull();
             // Actions column header is omitted when canManage=false.
             expect(screen.queryByText('Actions')).toBeNull();
@@ -80,23 +80,25 @@ describe('MemberTable', () => {
     });
 
     describe('canManage = true (admin)', () => {
-        it('renders the role SelectInput and Remove button for each row', () => {
+        it('renders the role Select and Remove button for each row', () => {
             const members = [
                 makeMember({ userId: 'u-1', email: 'ada@example.com', role: 'MEMBER' }),
                 makeMember({ userId: 'u-2', email: 'bo@example.com', role: 'MEMBER' }),
             ];
             render(<MemberTable {...baseProps} members={members} canManage={true} />);
 
-            expect(screen.getAllByRole('combobox')).toHaveLength(2);
+            expect(screen.getAllByRole('button', { name: /Role for /i })).toHaveLength(2);
             expect(screen.getAllByRole('button', { name: /Remove /i })).toHaveLength(2);
             // aria-labels are descriptive per-row.
             expect(
                 screen.getByRole('button', { name: 'Remove ada@example.com' }),
             ).toBeInTheDocument();
-            expect(screen.getByRole('combobox', { name: 'Role for ada@example.com' })).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Role for ada@example.com' }),
+            ).toBeInTheDocument();
         });
 
-        it('fires onRoleChange with (userId, role) when an admin changes a non-self row', () => {
+        it('fires onRoleChange with (userId, role) when an admin picks a role via the menu', () => {
             const onRoleChange = vi.fn();
             const members = [
                 makeMember({ userId: 'u-1', email: 'ada@example.com', role: 'MEMBER' }),
@@ -111,8 +113,10 @@ describe('MemberTable', () => {
                 />,
             );
 
-            const select = screen.getByRole('combobox', { name: 'Role for ada@example.com' });
-            fireEvent.change(select, { target: { value: 'PROJECT_ADMIN' } });
+            const trigger = screen.getByRole('button', { name: 'Role for ada@example.com' });
+            // Radix dropdown-menu opens on pointerDown.
+            fireEvent.pointerDown(trigger, { button: 0 });
+            fireEvent.click(screen.getByRole('menuitem', { name: 'Project Admin' }));
             expect(onRoleChange).toHaveBeenCalledWith('u-1', 'PROJECT_ADMIN');
         });
 
@@ -152,7 +156,7 @@ describe('MemberTable', () => {
                 />,
             );
 
-            const select = screen.getByRole('combobox', { name: 'Role for me@example.com' });
+            const select = screen.getByRole('button', { name: 'Role for me@example.com' });
             const remove = screen.getByRole('button', { name: 'Remove me@example.com' });
             expect(select).toBeDisabled();
             expect(remove).toBeDisabled();
@@ -175,7 +179,7 @@ describe('MemberTable', () => {
                 />,
             );
 
-            const select = screen.getByRole('combobox', { name: 'Role for me@example.com' });
+            const select = screen.getByRole('button', { name: 'Role for me@example.com' });
             const remove = screen.getByRole('button', { name: 'Remove me@example.com' });
             expect(select).not.toBeDisabled();
             expect(remove).toBeDisabled();
@@ -198,7 +202,7 @@ describe('MemberTable', () => {
                 />,
             );
 
-            const select = screen.getByRole('combobox', { name: 'Role for other@example.com' });
+            const select = screen.getByRole('button', { name: 'Role for other@example.com' });
             const remove = screen.getByRole('button', { name: 'Remove other@example.com' });
             expect(select).not.toBeDisabled();
             expect(remove).not.toBeDisabled();
@@ -235,8 +239,12 @@ describe('MemberTable', () => {
                 makeMember({ userId: 'u-2', email: 'bo@example.com' }),
             ];
             render(<MemberTable {...baseProps} members={members} canManage={true} />);
-            expect(screen.getByRole('combobox', { name: 'Role for ada@example.com' })).toBeInTheDocument();
-            expect(screen.getByRole('combobox', { name: 'Role for bo@example.com' })).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Role for ada@example.com' }),
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Role for bo@example.com' }),
+            ).toBeInTheDocument();
         });
     });
 });

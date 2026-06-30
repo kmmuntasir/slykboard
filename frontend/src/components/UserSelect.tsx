@@ -1,10 +1,11 @@
 import { UserCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useUsers } from '@/hooks/useUsers';
 
 interface UserSelectProps {
     value: string | null;
     onChange: (userId: string | null) => void;
-    /** F44: when true, render only the <select> (label + icon supplied by the
+    /** F44: when true, render only the select (label + icon supplied by the
      *  surrounding <Field>). */
     hideLabel?: boolean;
 }
@@ -13,20 +14,22 @@ export function UserSelect({ value, onChange, hideLabel = false }: UserSelectPro
     const { data: users, isLoading } = useUsers();
 
     const select = (
-        <select
-            aria-label="Assignee"
+        <Select
             value={value ?? ''}
-            onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-            className="w-full rounded border border-border p-2"
-            disabled={isLoading}
+            onValueChange={(v) => onChange(v === '' ? null : v)}
         >
-            <option value="">Unassigned</option>
-            {users?.map((u) => (
-                <option key={u.id} value={u.id}>
-                    {u.fullName}
-                </option>
-            ))}
-        </select>
+            <SelectTrigger aria-label="Assignee" className="w-full" disabled={isLoading}>
+                <SelectValue placeholder="Unassigned">
+                    {value ? users?.find((u) => u.id === value)?.fullName ?? '' : ''}
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent searchable>
+                <SelectItem value="" textValue="Unassigned" />
+                {users?.map((u) => (
+                    <SelectItem key={u.id} value={u.id} textValue={u.fullName} />
+                ))}
+            </SelectContent>
+        </Select>
     );
 
     if (hideLabel) return select;

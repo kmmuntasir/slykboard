@@ -289,9 +289,10 @@ describe('ProjectMembersPage — role change', () => {
 
     it('changing the role select calls useUpdateMemberRole and toasts success', async () => {
         renderPage();
-        fireEvent.change(screen.getByLabelText('Role for alice@x.com'), {
-            target: { value: 'PROJECT_ADMIN' },
-        });
+        // DEL-02 — role picker is now a Radix ui/Select (DropdownMenu-backed).
+        // Open via pointerDown on the trigger, then click the menuitem.
+        fireEvent.pointerDown(screen.getByLabelText('Role for alice@x.com'), { button: 0 });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Project Admin' }));
         await waitFor(() => {
             expect(mutState.updateRole.mutateAsync).toHaveBeenCalledWith({
                 userId: 'u1',
@@ -303,9 +304,11 @@ describe('ProjectMembersPage — role change', () => {
 
     it('does NOT call useUpdateMemberRole when the role is unchanged', async () => {
         renderPage();
-        fireEvent.change(screen.getByLabelText('Role for alice@x.com'), {
-            target: { value: 'MEMBER' }, // same as current
-        });
+        // DEL-02 — handleRoleChange guards: `if (current?.role === role) return;`
+        // (ProjectMembersPage.tsx:88). Re-selecting the already-active role
+        // (MEMBER) opens the menu and the item is clicked, but the handler no-ops.
+        fireEvent.pointerDown(screen.getByLabelText('Role for alice@x.com'), { button: 0 });
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Member' }));
         expect(mutState.updateRole.mutateAsync).not.toHaveBeenCalled();
     });
 });

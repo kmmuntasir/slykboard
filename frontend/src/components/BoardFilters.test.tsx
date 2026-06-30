@@ -51,17 +51,39 @@ describe('BoardFilters', () => {
         render(<BoardFilters slug="SLYK" />, { wrapper: wrapper(newClient()) });
 
         expect(screen.getByPlaceholderText('Search tickets…')).toBeInTheDocument();
-        expect(screen.getByRole('option', { name: 'All assignees' })).toBeInTheDocument();
+        // The three Select triggers render (Radix dropdown-menu buttons).
+        expect(screen.getByRole('button', { name: 'Filter by assignee' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Filter by priority' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Filter by label' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
 
-        expect(await screen.findByRole('option', { name: 'Ada Lovelace' })).toBeInTheDocument();
-        expect(await screen.findByRole('option', { name: 'Alan Turing' })).toBeInTheDocument();
-        expect(await screen.findByRole('option', { name: 'bug' })).toBeInTheDocument();
-        expect(await screen.findByRole('option', { name: 'infra' })).toBeInTheDocument();
+        // Open the assignee picker and assert its menuitems (findByRole waits
+        // for the users query to resolve before surfacing the dynamic items).
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Filter by assignee' }), {
+            button: 0,
+        });
+        expect(screen.getByRole('menuitem', { name: 'All assignees' })).toBeInTheDocument();
+        expect(await screen.findByRole('menuitem', { name: 'Ada Lovelace' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Alan Turing' })).toBeInTheDocument();
+        fireEvent.keyDown(document.body, { key: 'Escape' });
 
-        for (const p of ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'] as const) {
-            expect(screen.getByRole('option', { name: p })).toBeInTheDocument();
+        // Open the priority picker (static data; items render immediately).
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Filter by priority' }), {
+            button: 0,
+        });
+        expect(screen.getByRole('menuitem', { name: 'All priorities' })).toBeInTheDocument();
+        for (const label of ['Low', 'Medium', 'High', 'Urgent', 'Critical']) {
+            expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument();
         }
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+
+        // Open the label picker.
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Filter by label' }), {
+            button: 0,
+        });
+        expect(screen.getByRole('menuitem', { name: 'All labels' })).toBeInTheDocument();
+        expect(await screen.findByRole('menuitem', { name: 'bug' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'infra' })).toBeInTheDocument();
     });
 
     it('search input writes to store.searchQuery (debounced)', async () => {
@@ -80,37 +102,43 @@ describe('BoardFilters', () => {
     it('selecting an assignee writes the user id (or null for All)', async () => {
         render(<BoardFilters slug="SLYK" />, { wrapper: wrapper(newClient()) });
 
-        // wait for the option to exist before driving the change
-        await screen.findByRole('option', { name: 'Alan Turing' });
-        const select = screen.getByLabelText('Filter by assignee');
-        fireEvent.change(select, { target: { value: 'u2' } });
+        const trigger = screen.getByRole('button', { name: 'Filter by assignee' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        // findByRole waits for the users query to resolve before clicking.
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Alan Turing' }));
         expect(useBoardUiStore.getState().assigneeFilter).toBe('u2');
 
-        fireEvent.change(select, { target: { value: '' } });
+        // Reopen and pick "All assignees" → null.
+        fireEvent.pointerDown(trigger, { button: 0 });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'All assignees' }));
         expect(useBoardUiStore.getState().assigneeFilter).toBeNull();
     });
 
     it('selecting a priority writes the literal (or null for All)', () => {
         render(<BoardFilters slug="SLYK" />, { wrapper: wrapper(newClient()) });
 
-        const select = screen.getByLabelText('Filter by priority');
-        fireEvent.change(select, { target: { value: 'HIGH' } });
+        const trigger = screen.getByRole('button', { name: 'Filter by priority' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        // Display labels are Title-Case; the emitted value stays the raw enum.
+        fireEvent.click(screen.getByRole('menuitem', { name: 'High' }));
         expect(useBoardUiStore.getState().priorityFilter).toBe('HIGH');
 
-        fireEvent.change(select, { target: { value: '' } });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'All priorities' }));
         expect(useBoardUiStore.getState().priorityFilter).toBeNull();
     });
 
     it('selecting a label writes the label id (or null for All)', async () => {
         render(<BoardFilters slug="SLYK" />, { wrapper: wrapper(newClient()) });
 
-        // wait for the option to exist before driving the change
-        await screen.findByRole('option', { name: 'bug' });
-        const select = screen.getByLabelText('Filter by label');
-        fireEvent.change(select, { target: { value: 'l1' } });
+        const trigger = screen.getByRole('button', { name: 'Filter by label' });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        // findByRole waits for the labels query to resolve before clicking.
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'bug' }));
         expect(useBoardUiStore.getState().labelFilter).toBe('l1');
 
-        fireEvent.change(select, { target: { value: '' } });
+        fireEvent.pointerDown(trigger, { button: 0 });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'All labels' }));
         expect(useBoardUiStore.getState().labelFilter).toBeNull();
     });
 
