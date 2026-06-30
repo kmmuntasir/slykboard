@@ -29,7 +29,7 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                     {...provided.dragHandleProps}
                     style={provided.draggableProps.style as CSSProperties | undefined}
                     onClick={() => onEdit?.(formatTicketId(projectSlug, ticket.ticketNumber))}
-                    className="cursor-pointer space-y-2 rounded border bg-card p-2 text-sm shadow-sm"
+                    className="cursor-pointer space-y-2 rounded border border-border bg-card p-2 text-sm shadow-sm ring-1 ring-black/5 dark:ring-white/5"
                     aria-label={`Ticket ${ticketId}: ${ticket.title}`}
                 >
                     <header className="flex items-center justify-between gap-2">
