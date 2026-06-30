@@ -115,6 +115,56 @@ describe('RichTextEditor', () => {
         expect(lastCall).toContain('turn me into a heading');
     });
 
+    // T7: pressed-state contract. The toolbar is a Radix ToggleGroup (type="multiple")
+    // whose controlled `value` is derived from editor.isActive(...). Activating a mark
+    // must flip the corresponding item's data-state to "on" AND apply the bg-accent
+    // token (the F32 token the ToggleGroupItem uses for its on-state). This is the
+    // behavior that was entirely missing before the migration (plain buttons, no
+    // active state at all).
+    it('reflects the active mark as data-state=on with the bg-accent token after toggle', async () => {
+        render(<RichTextEditor value="<p>make me bold</p>" onChange={vi.fn()} />);
+
+        // ToggleGroup multiple-mode items render as <button aria-pressed>; accessible
+        // name still resolves from aria-label, so getByRole('button') keeps working.
+        const boldBtn = screen.getByRole('button', { name: 'Bold' });
+        // Before activation the item is off.
+        expect(boldBtn.getAttribute('data-state')).toBe('off');
+
+        // TipTap's toggleBold chain calls .focus(); in jsdom the chain short-circuits
+        // unless the contenteditable holds a live selection (see the heading test
+        // above for the same workaround). Seed a Range over the paragraph text.
+        const editorEl = document.querySelector('.ProseMirror') as HTMLElement;
+        await act(async () => {
+            editorEl.focus();
+            const range = document.createRange();
+            range.selectNodeContents(editorEl);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        });
+        // Radix Toggle/ToggleGroupItem drives its onPressedChange from a native
+        // click, but the button's onPointerDown calls preventDefault to keep focus
+        // on the contenteditable. fireEvent.click alone in jsdom skips the pointer
+        // phase, so the toggle mark (which needs the editor's selection intact AND
+        // the composed onClick to fire) does not apply. Drive a pointerDown first
+        // to mirror a real user interaction. (Block transforms like toggleHeading
+        // are tolerant of a missing pointer phase; inline marks like bold are not.)
+        await act(async () => {
+            fireEvent.pointerDown(boldBtn);
+        });
+        await act(async () => {
+            fireEvent.click(boldBtn);
+        });
+
+        // After the toggle, editor.isActive('bold') is true → activeMarks includes
+        // 'bold' → Radix sets data-state="on" + the ToggleGroupItem on-state token.
+        await waitFor(() => {
+            expect(boldBtn.getAttribute('data-state')).toBe('on');
+        });
+        expect(boldBtn.className).toContain('bg-accent');
+        expect(boldBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('renders the placeholder when value is empty', () => {
         render(<RichTextEditor value="" onChange={vi.fn()} placeholder="Describe the ticket" />);
         expect(screen.getByText('Describe the ticket')).toBeInTheDocument();
