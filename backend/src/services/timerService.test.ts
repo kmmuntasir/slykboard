@@ -29,6 +29,33 @@ const bag = vi.hoisted(() => ({
   dbSelectCallCount: 0,
 }));
 
+// Separate hoisted bag for the startTimer transaction. startTimer drives its
+// own internal tx through `db.transaction(async tx => ...)`, so the terminals
+// below live on a distinct mock tx object (not the caller-supplied tx used by
+// stopTimersForProject). Keeping the bags separate means the existing two
+// stopTimersForProject tests stay UNMODIFIED and green.
+//
+// startTimer issues three statements on its tx:
+//   (a) tx.update(timeEntries).set({ endTime }).where(...).returning()  // auto-stop
+//   (b) tx.select({ id }).from(tickets).where(...).limit(1)             // existence
+//   (c) tx.insert(timeEntries).values({...}).returning()               // new entry
+const startBag = vi.hoisted(() => ({
+  // (a) auto-stop update terminal `.returning()` — resolves to the stopped
+  // rows array (one row when a prior timer existed, empty when none).
+  autoStopReturning: vi.fn(),
+  autoStopSetArg: {} as Record<string, unknown>,
+  autoStopTarget: null as unknown,
+  // (b) ticket existence `.limit(1)` terminal — resolves to rows array.
+  ticketLimit: vi.fn(),
+  // (c) insert `.returning()` terminal — resolves to the inserted rows array.
+  insertReturning: vi.fn(),
+  insertValues: null as unknown,
+  insertTarget: null as unknown,
+  insertCallCount: 0,
+  // The startTx mock object handed to the transaction callback.
+  startTx: null as unknown,
+}));
+
 vi.mock('../db/client', () => {
   const db = {
     // subquery: db.select({ id: tickets.id }).from(tickets).where(...)
@@ -43,11 +70,48 @@ vi.mock('../db/client', () => {
       return chain;
     }),
   };
+
+  // startTimer opens its own transaction and runs auto-stop + existence check
+  // + insert on the tx. Build the mock tx once and hand it to the callback so
+  // tests can wire each terminal independently per-case.
+  const startTx = {
+    // (a) auto-stop: tx.update(timeEntries).set(...).where(...).returning()
+    update: vi.fn((table: unknown) => {
+      startBag.autoStopTarget = table;
+      return {
+        set: (v: Record<string, unknown>) => {
+          startBag.autoStopSetArg = v;
+          return { where: () => ({ returning: () => startBag.autoStopReturning() }) };
+        },
+      };
+    }),
+    // (b) existence: tx.select({ id }).from(tickets).where(...).limit(1)
+    select: vi.fn(() => ({
+      from: () => ({ where: () => ({ limit: () => startBag.ticketLimit() }) }),
+    })),
+    // (c) insert: tx.insert(timeEntries).values({...}).returning()
+    insert: vi.fn((table: unknown) => {
+      startBag.insertTarget = table;
+      startBag.insertCallCount += 1;
+      return {
+        values: (v: unknown) => {
+          startBag.insertValues = v;
+          return { returning: () => startBag.insertReturning() };
+        },
+      };
+    }),
+  };
+  startBag.startTx = startTx;
+
+  (db as Record<string, unknown>).transaction = vi.fn(
+    async (cb: (tx: typeof startTx) => unknown) => cb(startTx),
+  );
+
   return { db };
 });
 
 import { timeEntries } from '../db/schema';
-import { stopTimersForProject } from './timerService';
+import { startTimer, stopTimersForProject } from './timerService';
 
 // Build a fluent tx mock matching the caller's transaction client surface.
 // Mirrors the chained-method style used by projectService.test.ts.
@@ -77,6 +141,17 @@ function resetBag() {
   bag.dbSelectWhere.mockReset();
   bag.dbSelectFromArg = null;
   bag.dbSelectCallCount = 0;
+}
+
+function resetStartBag() {
+  startBag.autoStopReturning.mockReset();
+  startBag.autoStopSetArg = {};
+  startBag.autoStopTarget = null;
+  startBag.ticketLimit.mockReset();
+  startBag.insertReturning.mockReset();
+  startBag.insertValues = null;
+  startBag.insertTarget = null;
+  startBag.insertCallCount = 0;
 }
 
 describe('stopTimersForProject', () => {
@@ -120,5 +195,91 @@ describe('stopTimersForProject', () => {
     expect(bag.dbSelectCallCount).toBe(1);
     expect(bag.txUpdateCallCount).toBe(1);
     expect(bag.dbSelectWhere).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('startTimer', () => {
+  beforeEach(resetStartBag);
+
+  it('returns the prior open timer as autoStoppedEntry (with its cross-ticket id) when one exists', async () => {
+    // (a) auto-stop returns the single stopped row — it belongs to a DIFFERENT
+    // ticket than the one we are starting, modelling the global per-user auto-stop.
+    const stoppedRow = {
+      id: 'te-old',
+      ticketId: 'ticket-other',
+      userId: 'user-1',
+      startTime: new Date(1_700_000_000_000),
+      endTime: null,
+      manualEntryMinutes: null,
+      description: null,
+    };
+    startBag.autoStopReturning.mockResolvedValueOnce([stoppedRow]);
+    // (b) the new ticket exists.
+    startBag.ticketLimit.mockResolvedValueOnce([{ id: 'ticket-1' }]);
+    // (c) the new open timer row.
+    const insertedRow = {
+      id: 'te-new',
+      ticketId: 'ticket-1',
+      userId: 'user-1',
+      startTime: new Date(1_700_000_001_000),
+      endTime: null,
+      manualEntryMinutes: null,
+      description: null,
+    };
+    startBag.insertReturning.mockResolvedValueOnce([insertedRow]);
+
+    const result = await startTimer({ ticketId: 'ticket-1', userId: 'user-1' });
+
+    // autoStoppedEntry carries the cross-ticket row, including its ticketId.
+    expect(result.autoStoppedEntry).toEqual(stoppedRow);
+    expect(result.autoStoppedEntry?.ticketId).toBe('ticket-other');
+
+    // The new entry is the inserted row.
+    expect(result.entry).toEqual(insertedRow);
+
+    // serverNow is an ISO string baseline captured post-commit.
+    expect(result.serverNow).toEqual(expect.any(String));
+    expect(new Date(result.serverNow).toString()).not.toBe('Invalid Date');
+
+    // The auto-stop UPDATE targeted timeEntries and set only endTime (a Date).
+    expect(startBag.autoStopTarget).toBe(timeEntries);
+    expect(startBag.autoStopSetArg).toEqual({ endTime: expect.any(Date) });
+    expect(Object.keys(startBag.autoStopSetArg)).toEqual(['endTime']);
+
+    // Exactly one auto-stop attempt and one insert.
+    expect(startBag.autoStopReturning).toHaveBeenCalledTimes(1);
+    expect(startBag.insertCallCount).toBe(1);
+    expect(startBag.insertTarget).toBe(timeEntries);
+  });
+
+  it('returns autoStoppedEntry === null when no prior open timer exists (auto-stop still attempted once)', async () => {
+    // (a) auto-stop finds no open row — returns an empty array.
+    startBag.autoStopReturning.mockResolvedValueOnce([]);
+    // (b) the new ticket exists.
+    startBag.ticketLimit.mockResolvedValueOnce([{ id: 'ticket-1' }]);
+    // (c) the new open timer row.
+    const insertedRow = {
+      id: 'te-new',
+      ticketId: 'ticket-1',
+      userId: 'user-1',
+      startTime: new Date(1_700_000_002_000),
+      endTime: null,
+      manualEntryMinutes: null,
+      description: null,
+    };
+    startBag.insertReturning.mockResolvedValueOnce([insertedRow]);
+
+    const result = await startTimer({ ticketId: 'ticket-1', userId: 'user-1' });
+
+    // No prior timer → null, not undefined.
+    expect(result.autoStoppedEntry).toBeNull();
+
+    // The new entry is still returned.
+    expect(result.entry).toEqual(insertedRow);
+
+    // Exactly ONE auto-stop UPDATE was attempted (it simply matched no row).
+    expect(startBag.autoStopReturning).toHaveBeenCalledTimes(1);
+    expect(startBag.autoStopTarget).toBe(timeEntries);
+    expect(startBag.insertCallCount).toBe(1);
   });
 });
