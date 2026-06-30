@@ -12,7 +12,7 @@ import type { Project } from '@/types/project';
 // Capture the slug prop the page passes to LabelManager, and share a single
 // assertable mutation mock across renders/tests. Membership state is controlled
 // per-case via membershipState (isProjectAdmin) and membershipLoading.
-const { captured, mockState, updateMut, membershipState } = vi.hoisted(() => ({
+const { captured, mockState, updateMut, membershipState, statusMuts } = vi.hoisted(() => ({
     captured: { slug: '' as string },
     mockState: {
         project: {
@@ -26,6 +26,7 @@ const { captured, mockState, updateMut, membershipState } = vi.hoisted(() => ({
             creatorId: 'u1',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-01T00:00:00.000Z',
+            isActive: true,
         } as Project,
         isAdmin: true,
     },
@@ -37,6 +38,16 @@ const { captured, mockState, updateMut, membershipState } = vi.hoisted(() => ({
     membershipState: {
         isProjectAdmin: false,
         isLoading: false,
+    },
+    statusMuts: {
+        deactivate: {
+            mutate: vi.fn(),
+            isPending: false,
+        },
+        reactivate: {
+            mutate: vi.fn(),
+            isPending: false,
+        },
     },
 }));
 
@@ -70,6 +81,14 @@ vi.mock('@/hooks/useUpdateProject', () => ({
     useUpdateProject: () => updateMut,
 }));
 
+vi.mock('@/hooks/useDeactivateProject', () => ({
+    useDeactivateProject: () => statusMuts.deactivate,
+}));
+
+vi.mock('@/hooks/useReactivateProject', () => ({
+    useReactivateProject: () => statusMuts.reactivate,
+}));
+
 // Single source of truth for the membership hooks. useProjectMembers drives the
 // loading branch; useCurrentProjectMembership drives the project-admin gate.
 vi.mock('@/hooks/useProjectMembers', () => ({
@@ -93,8 +112,13 @@ describe('ProjectSettingsPage', () => {
         updateMut.isPending = false;
         updateMut.error = null;
         mockState.isAdmin = true;
+        mockState.project.isActive = true;
         membershipState.isProjectAdmin = false;
         membershipState.isLoading = false;
+        statusMuts.deactivate.mutate.mockReset();
+        statusMuts.deactivate.isPending = false;
+        statusMuts.reactivate.mutate.mockReset();
+        statusMuts.reactivate.isPending = false;
     });
 
     it('renders the heading + all three sidebar sections', () => {
@@ -228,4 +252,121 @@ describe('ProjectSettingsPage', () => {
             expect(screen.getByRole('button', { name: 'Save Name' })).toBeDisabled();
         },
     );
+});
+
+// SLYK-04 T6: Platform-Admin-only Project Status section (deactivate/reactivate).
+// Gated on isPlatformAdmin (mockState.isAdmin), NOT canManage. The T5 mutation
+// hooks (useDeactivateProject / useReactivateProject) are mocked here.
+describe('ProjectSettingsPage — platform-admin status section', () => {
+    beforeEach(() => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        statusMuts.deactivate.mutate.mockReset();
+        statusMuts.deactivate.isPending = false;
+        statusMuts.reactivate.mutate.mockReset();
+        statusMuts.reactivate.isPending = false;
+    });
+
+    it('a Platform Admin sees the Project Status section + Deactivate project when active', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.getByRole('heading', { name: 'Project Status' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Deactivate project' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reactivate project' })).toBeNull();
+    });
+
+    it('a Platform Admin sees Reactivate project when the project is inactive', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = false;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.getByRole('button', { name: 'Reactivate project' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Deactivate project' })).toBeNull();
+    });
+
+    it('a non-Platform-Admin sees NO status section even when canManage (project admin)', () => {
+        mockState.isAdmin = false;
+        membershipState.isProjectAdmin = true; // canManage true via project admin
+        mockState.project.isActive = true;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.queryByRole('heading', { name: 'Project Status' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Deactivate project' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reactivate project' })).toBeNull();
+    });
+
+    it('clicking Deactivate opens the confirm dialog; confirming fires the mutation', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        renderAt('/projects/SLYK/settings');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Deactivate project' }));
+        // Dialog rendered with the required destructive copy.
+        expect(
+            screen.getByText(/Running timers are stopped and members lose access/i),
+        ).toBeInTheDocument();
+        expect(statusMuts.deactivate.mutate).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+        expect(statusMuts.deactivate.mutate).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancelling the dialog does NOT fire the mutation', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        renderAt('/projects/SLYK/settings');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Deactivate project' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        expect(statusMuts.deactivate.mutate).not.toHaveBeenCalled();
+    });
+
+    it('reactivate confirm fires the reactivate mutation', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = false;
+        renderAt('/projects/SLYK/settings');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reactivate project' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reactivate' }));
+
+        expect(statusMuts.reactivate.mutate).toHaveBeenCalledTimes(1);
+        expect(statusMuts.deactivate.mutate).not.toHaveBeenCalled();
+    });
+
+    it('isPending disables the action button', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        statusMuts.deactivate.isPending = true;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.getByRole('button', { name: 'Deactivate project' })).toBeDisabled();
+    });
+
+    it('isPending disables the confirm button when the dialog is open', () => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        const view = renderAt('/projects/SLYK/settings');
+
+        // Open the dialog (pending still false here so the action button is
+        // clickable), then flip pending and re-render the SAME tree so the
+        // dialog stays open and the confirm button reflects the pending state.
+        fireEvent.click(screen.getByRole('button', { name: 'Deactivate project' }));
+        statusMuts.deactivate.isPending = true;
+        view.rerender(
+            <MemoryRouter initialEntries={['/projects/SLYK/settings']}>
+                <Routes>
+                    <Route
+                        path="/projects/:slug/settings"
+                        element={<ProjectSettingsPage />}
+                    />
+                </Routes>
+            </MemoryRouter>,
+        );
+
+        // ConfirmDialog appends '…' to the confirm label while pending.
+        expect(screen.getByRole('button', { name: /Deactivate…/ })).toBeDisabled();
+    });
 });

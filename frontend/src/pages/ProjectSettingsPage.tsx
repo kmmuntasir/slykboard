@@ -15,11 +15,19 @@ import { useProject } from '@/hooks/useProjects';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useProjectMembers, useCurrentProjectMembership } from '@/hooks/useProjectMembers';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LabelManager } from '@/components/LabelManager';
 import { ProjectColumnsManager } from '@/components/ProjectColumnsManager';
 import { Retry } from '@/components/Retry';
 import { SkeletonLine } from '@/components/Skeleton';
+import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
+import { useDeactivateProject } from '@/hooks/useDeactivateProject';
+import { useReactivateProject } from '@/hooks/useReactivateProject';
+
+// SLYK-04 T6: unique aria title id for the platform-admin status dialog
+// (mirrors the REMOVE_DIALOG_TITLE_ID pattern from ProjectMembersPage).
+const PROJECT_STATUS_DIALOG_TITLE_ID = 'project-status-title';
 
 type SectionId = 'general' | 'members' | 'labels';
 
@@ -111,7 +119,15 @@ function SettingsBody({ slug }: SettingsBodyProps) {
 
                 <div className="flex-1 space-y-6">
                     {active === 'general' &&
-                        renderGeneral(slug, project.name, project.columns, canManage, membershipReady)}
+                        renderGeneral(
+                            slug,
+                            project.name,
+                            project.columns,
+                            project.isActive,
+                            canManage,
+                            membershipReady,
+                            isPlatformAdmin,
+                        )}
                     {active === 'members' && (
                         <section className="space-y-2 rounded border border-border p-4">
                             <h2 className="text-lg font-semibold">Members</h2>
@@ -137,8 +153,10 @@ function renderGeneral(
     slug: string,
     name: string,
     columns: SettingsColumns,
+    isActive: boolean,
     canManage: boolean,
     membershipReady: boolean,
+    isPlatformAdmin: boolean,
 ) {
     if (!membershipReady) {
         return <SkeletonLine className="h-24 w-full" />;
@@ -154,6 +172,11 @@ function renderGeneral(
         <>
             <ProjectNameSection slug={slug} name={name} />
             <ProjectColumnsManager projectSlug={slug} columns={columns} />
+            {/* SLYK-04 T6: Platform-Admin-only status control. Gated on
+                isPlatformAdmin, NOT canManage. A PA always satisfies canManage
+                via the bypass, so this lives inside the management branch but
+                is independently gated so a future gate change can't leak it. */}
+            {isPlatformAdmin && <ProjectStatusSection slug={slug} isActive={isActive} />}
         </>
     );
 }
@@ -227,3 +250,80 @@ function ProjectNameSection({ slug, name }: ProjectNameSectionProps) {
 // Local type alias so renderGeneral's signature can name the columns prop
 // without importing Column here.
 type SettingsColumns = ComponentProps<typeof ProjectColumnsManager>['columns'];
+
+interface ProjectStatusSectionProps {
+    slug: string;
+    isActive: boolean;
+}
+
+// SLYK-04 T6: Platform-Admin-only deactivate/reactivate. Deactivation stops
+// running timers and revokes member access; project data is preserved and the
+// project can be reactivated later. T5's hooks invalidate the detail query on
+// success, so project.isActive flips and this section re-reads automatically.
+function ProjectStatusSection({ slug, isActive }: ProjectStatusSectionProps) {
+    const deactivate = useDeactivateProject(slug);
+    const reactivate = useReactivateProject(slug);
+    const mutation = isActive ? deactivate : reactivate;
+    const [confirmOpen, setConfirmOpen] = useState(false);
+
+    const handleConfirm = () => {
+        mutation.mutate(undefined, {
+            onSuccess: () => setConfirmOpen(false),
+        });
+    };
+
+    return (
+        <section className="space-y-2 rounded border border-border p-4">
+            <h2 className="text-lg font-semibold">Project Status</h2>
+            {isActive ? (
+                <>
+                    <p className="text-sm text-muted-foreground">
+                        Deactivating stops all running timers and removes member access. Project
+                        data is preserved and the project can be reactivated later.
+                    </p>
+                    <Button
+                        variant="destructive"
+                        disabled={mutation.isPending}
+                        onClick={() => setConfirmOpen(true)}
+                    >
+                        Deactivate project
+                    </Button>
+                    <ConfirmDialog
+                        isOpen={confirmOpen}
+                        title="Deactivate project?"
+                        titleId={PROJECT_STATUS_DIALOG_TITLE_ID}
+                        variant="destructive"
+                        confirmLabel="Deactivate"
+                        cancelLabel="Cancel"
+                        pending={mutation.isPending}
+                        message="Running timers are stopped and members lose access immediately. Project data is preserved and the project can be reactivated later."
+                        onConfirm={handleConfirm}
+                        onCancel={() => setConfirmOpen(false)}
+                    />
+                </>
+            ) : (
+                <>
+                    <p className="text-sm text-muted-foreground">
+                        This project is deactivated. Reactivate it to restore member access and
+                        timers.
+                    </p>
+                    <Button disabled={mutation.isPending} onClick={() => setConfirmOpen(true)}>
+                        Reactivate project
+                    </Button>
+                    <ConfirmDialog
+                        isOpen={confirmOpen}
+                        title="Reactivate project?"
+                        titleId={PROJECT_STATUS_DIALOG_TITLE_ID}
+                        variant="default"
+                        confirmLabel="Reactivate"
+                        cancelLabel="Cancel"
+                        pending={mutation.isPending}
+                        message="Members regain access and timers may resume. No project data has been lost."
+                        onConfirm={handleConfirm}
+                        onCancel={() => setConfirmOpen(false)}
+                    />
+                </>
+            )}
+        </section>
+    );
+}
