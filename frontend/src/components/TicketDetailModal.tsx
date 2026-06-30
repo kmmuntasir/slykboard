@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Clock } from 'lucide-react';
 
 import { fetchTicket } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
 import { formatTicketId } from '@/utils/formatTicketId';
 import { formatDate } from '@/utils/formatDate';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import type { UpdateTicketDto } from '@/types/ticket';
+import { Avatar } from './ui/Avatar';
 import { Modal } from './Modal';
 import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
 import { DeleteTicketConfirm } from './DeleteTicketConfirm';
@@ -137,24 +140,30 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 )}
 
                 {/* VIEW HEADER — display ID is the modal title; creator + timestamps read-only */}
-                <dl className="mb-4 space-y-1 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                        {ticket.creator && (
-                            <>
-                                {ticket.creator.avatarUrl && (
-                                    <img
-                                        src={ticket.creator.avatarUrl}
-                                        alt=""
-                                        className="h-5 w-5 rounded-full"
-                                    />
-                                )}
-                                <span>Created by {ticket.creator.fullName}</span>
-                            </>
-                        )}
-                    </div>
-                    <div>Created: {formatDate(ticket.createdAt)}</div>
-                    <div>Updated: {formatDate(ticket.updatedAt)}</div>
-                </dl>
+                <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    <span className="inline-flex min-w-0 items-center gap-1.5">
+                        <Avatar
+                            src={ticket.creator?.avatarUrl ?? null}
+                            name={ticket.creator?.fullName ?? null}
+                            size="sm"
+                        />
+                        <span className="truncate">
+                            Created by {ticket.creator?.fullName ?? 'Unknown'}
+                        </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <Clock size={14} className="shrink-0" />
+                        <time dateTime={ticket.createdAt} title={formatDate(ticket.createdAt)}>
+                            {formatRelativeTime(ticket.createdAt)}
+                        </time>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <Clock size={14} className="shrink-0" />
+                        <time dateTime={ticket.updatedAt} title={formatDate(ticket.updatedAt)}>
+                            {formatRelativeTime(ticket.updatedAt)}
+                        </time>
+                    </span>
+                </div>
 
                 {/* F20 T7: server-authoritative timer controls. Hidden for soft-deleted tickets. */}
                 {!ticket.deletedAt && <TimerControls ticketId={ticket.id} />}
