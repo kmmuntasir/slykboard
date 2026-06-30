@@ -9,7 +9,7 @@
 // Badge instead of a select and no Remove button). Non-member denial arrives as
 // a project-scoped BE 403 and is centralized in apiFetch (bounce to /projects).
 import { useMemo, useState } from 'react';
-import { Navigate, useParams } from 'react-router';
+import { Link, Navigate, useParams } from 'react-router';
 import { ArrowLeft, Search, UserPlus } from 'lucide-react';
 
 import { ApiClientError } from '@/api/client';
@@ -124,13 +124,13 @@ function MembersBody({ slug }: MembersBodyProps) {
     return (
         <div className="mx-auto max-w-3xl space-y-6 p-4">
             <header className="flex flex-wrap items-center gap-3">
-                <a
-                    href={`/projects/${slug}/settings`}
+                <Link
+                    to={`/projects/${slug}/settings`}
                     className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
                     Settings
-                </a>
+                </Link>
                 <h1 className="flex-1 text-2xl font-semibold">Member Management</h1>
                 {canManage && (
                     <Button
