@@ -49,6 +49,8 @@ export interface Ticket {
   assignee: Assignee | null;
   creator: Creator | null; // F16: resolved creator (null if user deleted)
   creatorId: string;
+  // DEL-01: nullable due date (full ISO datetime; null = no due date).
+  dueDate?: string | null;
   createdAt: string; // ISO
   updatedAt: string;
   deletedAt?: string | null; // F17: soft-delete tombstone (absent on board payload; set on detail for soft-deleted)
@@ -61,4 +63,5 @@ export interface UpdateTicketDto {
   assigneeId?: string | null;
   labelIds?: string[]; // F14: replace a ticket's label set
   checklist?: ChecklistItem[]; // F15: replace the checklist array (full-array replace)
+  dueDate?: string | null; // DEL-01: nullable ISO datetime; backend z.string().datetime().nullable().optional()
 }

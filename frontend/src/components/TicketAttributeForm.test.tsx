@@ -63,6 +63,17 @@ vi.mock('./LabelMultiSelect', () => ({
         </div>
     ),
 }));
+// DEL-01 T6: StatusField is a net-new field whose columns-fetch is an
+// implementation detail of the field (it owns useProject). Stub it here so the
+// form test stays focused on the create/edit contract; the field's data path
+// is covered by its own tests.
+vi.mock('./ticket-fields/StatusField', () => ({
+    StatusField: ({ projectSlug }: { projectSlug: string }) => (
+        <select aria-label="Status" data-testid={`status-field-${projectSlug}`}>
+            <option value="">Select column</option>
+        </select>
+    ),
+}));
 
 import { TicketAttributeForm } from './TicketAttributeForm';
 import type { UpdateTicketDto } from '@/types/ticket';
@@ -216,6 +227,9 @@ describe('TicketAttributeForm', () => {
             assigneeId: '11111111-1111-1111-1111-111111111111',
             labelIds: [],
             checklist: [],
+            // DEL-01 T6: the form now carries statusColumn + dueDate (merged defaults).
+            statusColumn: '',
+            dueDate: null,
         });
     });
 
@@ -267,6 +281,9 @@ describe('TicketAttributeForm', () => {
             assigneeId: null,
             labelIds: ['11111111-1111-1111-1111-111111111111'],
             checklist: [],
+            // DEL-01 T6: the form now carries statusColumn + dueDate (merged defaults).
+            statusColumn: '',
+            dueDate: null,
         });
     });
 
@@ -516,7 +533,15 @@ describe('SLYK-14 label row', () => {
     });
 
     // Behavior B — the icon shares the label row inline-left of the caption.
-    it.each(LABELS)(
+    //
+    // DEL-01 T6: Checklist no longer uses an icon-bearing <Field> — the
+    // ChecklistEditor owns its single-line "Checklist <done>/<total>" label row
+    // (change 6), so it's excluded from the icon assertion. The icon-bearing
+    // <Field> fields remain Title/Description/Priority/Assignee/Labels (all
+    // rendered by the real field components, even though the inner selects are
+    // mocked above — the Field wrapper is what carries the icon).
+    const ICON_LABELS = ['Title', 'Description', 'Priority', 'Assignee', 'Labels'] as const;
+    it.each(ICON_LABELS)(
         'the icon shares the label row inline-left of the caption for %s',
         (label) => {
             renderForm();

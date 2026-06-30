@@ -24,6 +24,7 @@ export interface CreateTicketDto {
   assigneeId?: string;
   statusColumn?: string;
   checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
+  dueDate?: string | null; // DEL-01: nullable ISO datetime at create
 }
 
 export function createTicket(slug: string, dto: CreateTicketDto): Promise<Ticket> {

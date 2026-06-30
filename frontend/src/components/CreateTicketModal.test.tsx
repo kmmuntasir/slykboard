@@ -54,6 +54,16 @@ vi.mock('./LabelMultiSelect', () => ({
         </div>
     ),
 }));
+// DEL-01 T6: StatusField owns its columns fetch (useProject); stub it here so
+// the create-modal test stays focused on the create contract. The field's data
+// path is covered by its own tests.
+vi.mock('./ticket-fields/StatusField', () => ({
+    StatusField: () => (
+        <select aria-label="Status">
+            <option value="">Select column</option>
+        </select>
+    ),
+}));
 
 const mutateAsync = vi.fn();
 vi.mock('@/hooks/useCreateTicket', () => ({
