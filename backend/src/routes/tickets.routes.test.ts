@@ -57,6 +57,13 @@ vi.mock('../services/ticketService', () => ({
   deleteTicket: vi.fn(),
 }));
 vi.mock('../services/activityService', () => ({ getTicketActivity: vi.fn() }));
+const timerMock = vi.hoisted(() => ({
+  startTimer: vi.fn(),
+  stopTimer: vi.fn(),
+  getTimeEntries: vi.fn(),
+  addManualEntry: vi.fn(),
+}));
+vi.mock('../services/timerService', () => timerMock);
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
@@ -66,6 +73,7 @@ import { findUserTokenVersion } from '../services/tokenVersion';
 import * as ticketService from '../services/ticketService';
 import * as activityService from '../services/activityService';
 import { UNSORTED_BUCKET_ID } from '../services/boardService';
+import * as timerService from '../services/timerService';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedMoveTicket = vi.mocked(ticketService.moveTicket);
@@ -73,6 +81,7 @@ const mockedGetTicket = vi.mocked(ticketService.getTicket);
 const mockedUpdateTicket = vi.mocked(ticketService.updateTicket);
 const mockedDeleteTicket = vi.mocked(ticketService.deleteTicket);
 const mockedGetTicketActivity = vi.mocked(activityService.getTicketActivity);
+const mockedStartTimer = vi.mocked(timerService.startTimer);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -817,6 +826,68 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedDeleteTicket).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/tickets/:ticketId/timer/start (SLYK-12)', () => {
+  const openEntry = {
+    id: '66666666-6666-4666-8666-666666666666',
+    ticketId: VALID_TICKET_ID,
+    userId: 'u1',
+    startTime: new Date('2026-01-01T00:00:00.000Z'),
+    endTime: null,
+    manualEntryMinutes: null,
+    description: null,
+  };
+
+  it('200 surfaces autoStoppedEntry: null when no prior timer was stopped', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedStartTimer.mockResolvedValue({
+      entry: openEntry as never,
+      serverNow: '2026-01-01T00:00:00.000Z',
+      autoStoppedEntry: null,
+    } as never);
+
+    const res = await request(app)
+      .post(`/api/tickets/${VALID_TICKET_ID}/timer/start`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    // autoStoppedEntry must be present and explicitly null (not omitted).
+    expect(res.body.data).toHaveProperty('autoStoppedEntry', null);
+    expect(res.body.data.entry.id).toBe(openEntry.id);
+    expect(res.body.data.serverNow).toBe('2026-01-01T00:00:00.000Z');
+    expect(mockedStartTimer).toHaveBeenCalledWith({
+      ticketId: VALID_TICKET_ID,
+      userId: 'u1',
+    });
+  });
+
+  it('200 surfaces the full auto-stopped row (incl ticketId) when a prior timer closed', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const stopped = {
+      id: '77777777-7777-4777-8777-777777777777',
+      ticketId: '88888888-8888-4888-8888-888888888888', // cross-ticket
+      userId: 'u1',
+      startTime: new Date('2025-12-31T00:00:00.000Z'),
+      endTime: new Date('2026-01-01T00:00:00.000Z'),
+      manualEntryMinutes: null,
+      description: null,
+    };
+    mockedStartTimer.mockResolvedValue({
+      entry: openEntry as never,
+      serverNow: '2026-01-01T00:00:00.000Z',
+      autoStoppedEntry: stopped as never,
+    } as never);
+
+    const res = await request(app)
+      .post(`/api/tickets/${VALID_TICKET_ID}/timer/start`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.autoStoppedEntry).not.toBeNull();
+    expect(res.body.data.autoStoppedEntry.id).toBe(stopped.id);
+    expect(res.body.data.autoStoppedEntry.ticketId).toBe(stopped.ticketId);
   });
 });
 

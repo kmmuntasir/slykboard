@@ -141,11 +141,16 @@ ticketsRouter.post(
   resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
-    const { entry, serverNow } = await timerService.startTimer({
-      ticketId,
-      userId: req.user!.id,
-    });
-    res.json(success({ entry, serverNow }));
+    // SLYK-12: forward the full service result so autoStoppedEntry surfaces
+    // (null when no prior timer was auto-stopped; the closed row otherwise).
+    res.json(
+      success(
+        await timerService.startTimer({
+          ticketId,
+          userId: req.user!.id,
+        }),
+      ),
+    );
   },
 );
 
