@@ -352,8 +352,6 @@ const ROWS: Row[] = [
   { label: 'PATCH /api/users/:userId/blocked', method: 'patch', path: `/api/users/${USER_ID}/blocked`, allowed: PA_ONLY, body: { blocked: true } },
 
   // --- Reports ---
-  { label: 'GET /api/reports/time (deprecated global)', method: 'get', path: '/api/reports/time', allowed: PA_ONLY },
-  { label: 'GET /api/reports/tickets (deprecated global)', method: 'get', path: '/api/reports/tickets', allowed: PA_ONLY },
   { label: 'GET /api/projects/:slug/reports/time', method: 'get', path: `/api/projects/${SLUG}/reports/time`, allowed: MEMBER_PLUS },
   { label: 'GET /api/projects/:slug/reports/tickets', method: 'get', path: `/api/projects/${SLUG}/reports/tickets`, allowed: MEMBER_PLUS },
 
