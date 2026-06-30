@@ -58,6 +58,26 @@ vi.mock('./LabelMultiSelect', () => ({
 
 vi.mock('@/api/tickets');
 
+// SLYK-11 T4: the Time Tracking tab (forceMount → mounted even when hidden)
+// drives these queries. Mock them so the panel renders deterministically
+// without real network calls (jsdom) or React Query error noise.
+vi.mock('@/api/timer', () => ({
+    startTimer: vi.fn().mockResolvedValue({
+        entry: { id: 'e1' },
+        serverNow: new Date().toISOString(),
+    }),
+    stopTimer: vi.fn().mockResolvedValue({
+        entry: { id: 'e1', startTime: new Date().toISOString(), endTime: new Date().toISOString() },
+        serverNow: new Date().toISOString(),
+    }),
+    fetchActiveTimer: vi.fn().mockResolvedValue({ activeTimer: null }),
+    fetchTimeEntries: vi.fn().mockResolvedValue({ entries: [], totalMs: 0 }),
+    addManualEntry: vi.fn().mockResolvedValue({ id: 'e1' }),
+}));
+vi.mock('@/api/time', () => ({
+    fetchServerTime: vi.fn().mockResolvedValue({ now: new Date().toISOString() }),
+}));
+
 // --- F17 role-gate + delete mutation mocks ---------------------------------
 // useRequirePlatformAdmin() controls the delete-button render; useDeleteTicket is
 // the delete mutation. Both are module-level vi.fn returns so individual tests
@@ -78,7 +98,7 @@ vi.mock('@/hooks/useDeleteTicket', () => ({
 import { TicketDetailModal } from './TicketDetailModal';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
-import { fetchTicket } from '@/api/tickets';
+import { fetchTicket, fetchTicketActivity } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
 import { formatDate } from '@/utils/formatDate';
 import type { Ticket } from '@/types/ticket';
@@ -157,6 +177,10 @@ describe('TicketDetailModal', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Activity tab default: an empty feed. The @/api/tickets auto-mock
+        // returns undefined, which React Query v5 treats as an error; resolve a
+        // real shape so the Activity panel renders its (empty) success state.
+        vi.mocked(fetchTicketActivity).mockResolvedValue({ entries: [] });
         appRoot = document.createElement('main');
         appRoot.id = 'app-root';
         document.body.appendChild(appRoot);
@@ -448,5 +472,266 @@ describe('TicketDetailModal', () => {
         expect((observer?.options as { refetchOnWindowFocus?: boolean }).refetchOnWindowFocus).toBe(
             true,
         );
+    });
+
+    // --- SLYK-11 T4: tabbed modal coverage --------------------------------
+    //
+    // The modal body is split into three Radix tabs (Details / Time Tracking /
+    // Activity). T3 made the Tabs root CONTROLLED and gave every TabsContent
+    // `forceMount` + `hidden` so React Hook Form state (and isDirty) survives
+    // tab switches. These tests lock that contract in place.
+
+    it('renders the correct child content in each tab panel (Details / Time Tracking / Activity)', async () => {
+        vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // --- Details (active by default) ---
+        const details = screen.getByRole('tabpanel', { name: /details/i });
+        // Metadata header.
+        expect(within(details).getByText('Created by Ada Lovelace')).toBeInTheDocument();
+        // Embedded TicketAttributeForm with the title seeded.
+        expect(within(details).getByLabelText('Title')).toHaveValue('Render board');
+        // Comments placeholder (SLYK-13 not yet implemented).
+        expect(within(details).getByText(/coming soon/i)).toBeInTheDocument();
+        // Admin-only delete entry point lives on the Details panel.
+        expect(within(details).getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
+
+        // --- Time Tracking ---
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /time tracking/i }));
+        const time = await screen.findByRole('tabpanel', { name: /time tracking/i });
+        // TimerControls (no active timer → Start affordance).
+        expect(within(time).getByRole('button', { name: 'Start' })).toBeInTheDocument();
+        // TimeLog (total + entries list).
+        expect(within(time).getByText(/total:/i)).toBeInTheDocument();
+        // ManualEntryForm (duration input + submit).
+        expect(within(time).getByRole('button', { name: 'Log Time' })).toBeInTheDocument();
+        expect(within(time).getByLabelText('Duration')).toBeInTheDocument();
+
+        // --- Activity ---
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        const activity = await screen.findByRole('tabpanel', { name: /activity/i });
+        expect(within(activity).getByText('Activity')).toBeInTheDocument();
+    });
+
+    // (b) RHF unmount-reset regression guard. This is the single most important
+    // test: it MUST fail if T3 had omitted `forceMount` (switching away would
+    // unmount the Details panel → RHF form instance destroyed → edited values
+    // reset to defaults on remount). Table-driven across the four attribute
+    // fields so every editable input is covered.
+    //
+    // NOTE on scope: this table asserts VALUE PRESERVATION (the forceMount
+    // contract) for all four fields. The companion `isDirty` survival is
+    // covered by the dedicated test below using the `title` field: only `title`
+    // is registered with RHF (`register('title')`), so only it flips `isDirty`.
+    // `description`/`priority`/`assigneeId` are written via `setValue(...)` in
+    // TicketAttributeForm WITHOUT `{ shouldDirty: true }`, so the source does
+    // not mark the form dirty for those edits (pre-existing source behavior;
+    // out of scope for this test-only task). Value preservation is the
+    // forceMount regression that MUST hold for every field.
+    const FIELD_PRESERVATION_CASES: Array<{
+        name: string;
+        ticket?: Ticket;
+        edit: () => void;
+        assertPreserved: () => void;
+    }> = [
+        {
+            name: 'title',
+            edit: () => {
+                fireEvent.change(screen.getByLabelText('Title'), {
+                    target: { value: 'Tab-safe title' },
+                });
+            },
+            assertPreserved: () => {
+                expect(screen.getByLabelText('Title')).toHaveValue('Tab-safe title');
+            },
+        },
+        {
+            name: 'description',
+            edit: () => {
+                // Scoped: ManualEntryForm also exposes an aria-label='Description'
+                // input on the (forceMount, hidden) Time Tracking panel, so target
+                // the editor inside the visible Details panel specifically.
+                const details = screen.getByRole('tabpanel', { name: /details/i });
+                fireEvent.change(within(details).getByLabelText('Description'), {
+                    target: { value: '<p>tab-safe</p>' },
+                });
+            },
+            assertPreserved: () => {
+                const details = screen.getByRole('tabpanel', { name: /details/i });
+                expect(within(details).getByLabelText('Description')).toHaveValue(
+                    '<p>tab-safe</p>',
+                );
+            },
+        },
+        {
+            name: 'priority',
+            edit: () => {
+                fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'LOW' } });
+            },
+            assertPreserved: () => {
+                expect(screen.getByLabelText('Priority')).toHaveValue('LOW');
+            },
+        },
+        {
+            name: 'assignee',
+            // Seed an assignee so the Unassigned option is a real change → dirty.
+            ticket: makeTicket({
+                assignee: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: null },
+            }),
+            edit: () => {
+                fireEvent.change(screen.getByLabelText('Assignee'), { target: { value: '' } });
+            },
+            assertPreserved: () => {
+                expect(screen.getByLabelText('Assignee')).toHaveValue('');
+            },
+        },
+    ];
+
+    it.each(FIELD_PRESERVATION_CASES)(
+        'preserves edited $name value across Details → Time Tracking → Details (forceMount guard)',
+        async ({ ticket, edit, assertPreserved }) => {
+            renderModal({ ticket });
+            await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+            // Details is active — edit the field.
+            edit();
+            // Let RHF flush the new value.
+            await waitFor(() => assertPreserved());
+
+            // Switch AWAY to Time Tracking. Without forceMount this unmounts
+            // the Details panel (and the RHF form with it) → value lost.
+            fireEvent.mouseDown(screen.getByRole('tab', { name: /time tracking/i }));
+            await waitFor(() =>
+                expect(screen.getByRole('tab', { name: /time tracking/i })).toHaveAttribute(
+                    'data-state',
+                    'active',
+                ),
+            );
+
+            // Switch back to Details.
+            fireEvent.mouseDown(screen.getByRole('tab', { name: /details/i }));
+            await waitFor(() =>
+                expect(screen.getByRole('tab', { name: /details/i })).toHaveAttribute(
+                    'data-state',
+                    'active',
+                ),
+            );
+
+            // The edited value survived the round-trip. (This is the assertion
+            // that fails if T3 had omitted forceMount — for ALL four fields.)
+            assertPreserved();
+        },
+    );
+
+    // (b-cont) isDirty survival across the same round-trip. Uses the `title`
+    // field — the only field registered with RHF, hence the only edit the
+    // source currently marks dirty (see NOTE above). Proves the unsaved-changes
+    // guard trio (useBlocker/isDirty + requestClose + blockBackdropClose)
+    // stays armed after switching tabs and back.
+    it('keeps isDirty true across Details → Time Tracking → Details (title edit)', async () => {
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Edit the registered title field → form becomes dirty.
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Tab-safe title' } });
+        await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Tab-safe title'));
+
+        // Round-trip through Time Tracking and back.
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /time tracking/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /time tracking/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /details/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /details/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
+
+        // Value preserved …
+        expect(screen.getByLabelText('Title')).toHaveValue('Tab-safe title');
+        // … AND isDirty still true → close surfaces the discard confirm.
+        fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+        expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument();
+    });
+
+    // (c) The active tab is controlled state in the component, so a background
+    // detail-query refetch (drift reconciliation) must not reset it.
+    it('keeps the active tab across a detail-query refetch while the modal is open', async () => {
+        const { client } = renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Move off the default Details tab.
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
+
+        // Trigger the drift-refetch path (same key the component polls).
+        await client.refetchQueries({ queryKey: ticketKeys.detail(TICKET_ID) });
+
+        // Active tab unchanged after the refetch re-render.
+        expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+            'data-state',
+            'active',
+        );
+        expect(screen.getByRole('tab', { name: /details/i })).not.toHaveAttribute(
+            'data-state',
+            'active',
+        );
+    });
+
+    // (d) Soft-deleted tickets are archived: the form is read-only and the
+    // Time Tracking panel renders no controls (content gated behind
+    // !ticket.deletedAt).
+    it('soft-deleted ticket: Time Tracking controls are hidden and the Details form is read-only', async () => {
+        renderModal({ ticket: makeTicket({ deletedAt: '2026-06-24T00:00:00.000Z' }) });
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Details form is read-only: the <fieldset disabled> disables every
+        // input and the submit button is hidden (footer shows Close).
+        expect(screen.getByLabelText('Title')).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+        // Read-only description renders the sanitized HTML (not the editor).
+        expect(screen.getByText('steps')).toBeInTheDocument();
+
+        // Time Tracking panel: activating it renders NO timer/log/manual
+        // controls — they are all gated behind !ticket.deletedAt.
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /time tracking/i }));
+        const time = await screen.findByRole('tabpanel', { name: /time tracking/i });
+        expect(within(time).queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+        expect(within(time).queryByRole('button', { name: 'Log Time' })).not.toBeInTheDocument();
+    });
+
+    // (e) isDirty survives a tab switch (forceMount), so a close attempt issued
+    // WHILE on the Time Tracking tab still routes through the discard guard.
+    it('dirty Details + active Time Tracking tab: close attempt surfaces ConfirmDiscardDialog', async () => {
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Edit on Details → dirty.
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Edited' } });
+        await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Edited'));
+
+        // Switch to Time Tracking (form stays mounted via forceMount → isDirty lives).
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /time tracking/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /time tracking/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
+
+        // Close while on the Time Tracking tab → guard engages.
+        fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+        expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument();
     });
 });
