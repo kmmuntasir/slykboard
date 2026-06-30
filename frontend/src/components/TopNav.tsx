@@ -6,6 +6,7 @@ import {
     LayoutGrid,
     BarChart3,
     Settings,
+    User,
     LogOut,
     Sun,
     Monitor,
@@ -16,6 +17,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { logout } from '@/api/auth';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
+import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
 import { cn } from '@/components/ui/cn';
 import { Avatar } from '@/components/ui/Avatar';
@@ -51,10 +53,6 @@ const PUBLIC_NAV_LINKS: readonly NavLinkItem[] = [
     // F49: Reports target is project-scoped; the `to` here is nominal — the
     // render loop builds the real href from the resolved projectSlug.
     { to: '/projects/:slug/reports', label: 'Reports', end: false, icon: BarChart3 },
-] as const;
-
-const ADMIN_NAV_LINKS: readonly NavLinkItem[] = [
-    { to: '/settings', label: 'Settings', end: false, icon: Settings },
 ] as const;
 
 // D11 — visible focusable selector (borrows the pattern from useModalA11y.ts:20-21).
@@ -109,6 +107,12 @@ export function TopNav() {
     const lastSelectedSlug = useProjectStore((s) => s.lastSelectedSlug);
     const projectSlug = params.slug ?? lastSelectedSlug;
     const hasProject = projectSlug != null;
+    // SLYK-03 T4 — Project Admin gate for the project-scoped 'Project Settings'
+    // nav item. useCurrentProjectMembership requires a slug; guard the call so it
+    // is never invoked with undefined (React hooks can't be conditional, so pass
+    // a stable empty-string fallback when no project is selected — the render
+    // gate below hides the item entirely in that case).
+    const { isProjectAdmin } = useCurrentProjectMembership(projectSlug ?? '');
     // F40 — single source of truth for theme. Both the navbar segmented control
     // and the profile-menu mirror read this same Context (D3/D5: no local state).
     const { theme, setTheme } = useTheme();
@@ -234,23 +238,31 @@ export function TopNav() {
                     </li>
                 );
             })}
-            {isAdmin &&
-                ADMIN_NAV_LINKS.map((link) => {
-                    const Icon = link.icon;
-                    return (
-                        <li key={link.to}>
-                            <NavLink
-                                to={link.to}
-                                end={link.end}
-                                onClick={() => setOpen(false)}
-                                className={navLinkClass}
-                            >
-                                <Icon className="h-4 w-4" aria-hidden="true" />
-                                <span>{link.label}</span>
-                            </NavLink>
-                        </li>
-                    );
-                })}
+            {/* SLYK-03 T4 — project-scoped 'Project Settings' nav item.
+                Visibility gate: Platform Admin OR Project Admin of the selected
+                project. No-project decision: Project Admin is meaningless without
+                a project context, so HIDE entirely (no disabled affordance) when
+                no project is selected. Flash-avoidance: useCurrentProjectMembership
+                exposes no loading flag — isProjectAdmin is false until the roster
+                resolves. Default-HIDE: render ONLY for Platform Admins (sync, via
+                useRequirePlatformAdmin) OR an explicitly-resolved Project Admin.
+                Never render on the unresolved/undefined state. */}
+            {(() => {
+                if (!hasProject) return null;
+                if (!isAdmin && isProjectAdmin !== true) return null;
+                return (
+                    <li>
+                        <NavLink
+                            to={`/projects/${projectSlug}/settings`}
+                            onClick={() => setOpen(false)}
+                            className={navLinkClass}
+                        >
+                            <Settings className="h-4 w-4" aria-hidden="true" />
+                            <span>Project Settings</span>
+                        </NavLink>
+                    </li>
+                );
+            })()}
         </ul>
     );
 
@@ -313,6 +325,20 @@ export function TopNav() {
                     <Moon className="h-4 w-4" aria-hidden="true" />
                     <span>Dark</span>
                     {theme === 'dark' && <Check className="ml-auto h-4 w-4" aria-hidden="true" />}
+                </DropdownItem>
+                <DropdownSeparator />
+                {/* SLYK-03 T4 — platform-admin-only entry to global /settings. */}
+                {isAdmin && (
+                    <DropdownItem onSelect={() => navigate('/settings')}>
+                        <Settings className="h-4 w-4" aria-hidden="true" />
+                        <span>Settings</span>
+                    </DropdownItem>
+                )}
+                <DropdownSeparator />
+                {/* SLYK-03 T4 — per-user Account Settings (everyone). */}
+                <DropdownItem onSelect={() => navigate('/account')}>
+                    <User className="h-4 w-4" aria-hidden="true" />
+                    <span>Account Settings</span>
                 </DropdownItem>
                 <DropdownSeparator />
                 <DropdownItem variant="destructive" onSelect={handleSignOut}>

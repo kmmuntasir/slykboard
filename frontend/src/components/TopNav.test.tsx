@@ -26,6 +26,18 @@ vi.mock('@/hooks/useProjects', () => ({
     }),
 }));
 
+// SLYK-03 T4 — membership hooks drive the project-scoped 'Project Settings'
+// visibility gate. useProjectMembers backs the (loading) roster;
+// useCurrentProjectMembership drives the Project Admin check. Both are controlled
+// per-case via membershipState (isProjectAdmin).
+const { membershipState } = vi.hoisted(() => ({
+    membershipState: { isProjectAdmin: false },
+}));
+vi.mock('@/hooks/useProjectMembers', () => ({
+    useProjectMembers: () => ({ isLoading: false }),
+    useCurrentProjectMembership: () => ({ isProjectAdmin: membershipState.isProjectAdmin }),
+}));
+
 vi.mock('react-router', async (importOriginal) => {
     const actual = await importOriginal<typeof import('react-router')>();
     return { ...actual, useNavigate: () => navigateMock };
@@ -101,6 +113,7 @@ describe('TopNav', () => {
         logoutMock.mockReset();
         navigateMock.mockReset();
         broadcastLogoutMock.mockReset();
+        membershipState.isProjectAdmin = false;
     });
 
     it('renders avatar img when avatarUrl is set', () => {
@@ -296,18 +309,109 @@ describe('TopNav', () => {
         expect(screen.getByRole('button', { name: 'Account menu' })).toBeInTheDocument();
     });
 
-    it('renders Settings link when role is ADMIN', () => {
+    // --- SLYK-03 T4 — project-scoped 'Project Settings' nav gate ------------------
+
+    it('Project Settings: visible to Platform Admin with a selected project', () => {
+        useAuthStore.getState().setUser(fullUser);
+        membershipState.isProjectAdmin = false;
+        renderTopNavWithProject('demo');
+
+        expect(screen.getByRole('link', { name: 'Project Settings' })).toHaveAttribute(
+            'href',
+            '/projects/demo/settings',
+        );
+    });
+
+    it('Project Settings: visible to a Project Admin of the selected project', () => {
+        useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
+        membershipState.isProjectAdmin = true;
+        renderTopNavWithProject('demo');
+
+        expect(screen.getByRole('link', { name: 'Project Settings' })).toHaveAttribute(
+            'href',
+            '/projects/demo/settings',
+        );
+    });
+
+    it('Project Settings: hidden from a Project Member of the selected project', () => {
+        useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
+        membershipState.isProjectAdmin = false;
+        renderTopNavWithProject('demo');
+
+        expect(screen.queryByRole('link', { name: 'Project Settings' })).toBeNull();
+    });
+
+    it('Project Settings: hidden when no project is selected (Platform Admin)', () => {
+        useAuthStore.getState().setUser(fullUser);
+        membershipState.isProjectAdmin = false;
+        renderTopNav();
+
+        // No project ⇒ Project Admin is meaningless ⇒ HIDE entirely.
+        expect(screen.queryByRole('link', { name: 'Project Settings' })).toBeNull();
+    });
+
+    it('Project Settings: NOT rendered while membership resolves (non-platform-admin) — no flash', () => {
+        // useCurrentProjectMembership exposes no loading flag; isProjectAdmin is
+        // false until the roster resolves. Default-HIDE prevents a flash.
+        useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
+        membershipState.isProjectAdmin = false;
+        renderTopNavWithProject('demo');
+
+        expect(screen.queryByRole('link', { name: 'Project Settings' })).toBeNull();
+    });
+
+    // --- SLYK-03 T4 — profile-menu entries (/settings, /account) -----------------
+
+    it('profile menu: Platform Admin sees Settings + Account Settings', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
-        expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+
+        expect(screen.getByRole('menuitem', { name: 'Settings' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Account Settings' })).toBeInTheDocument();
     });
 
-    it('hides Settings link when role is MEMBER', () => {
+    it('profile menu: non-admin sees Account Settings but NOT Settings', () => {
         useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
         renderTopNav();
 
-        expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+
+        expect(screen.queryByRole('menuitem', { name: 'Settings' })).toBeNull();
+        expect(screen.getByRole('menuitem', { name: 'Account Settings' })).toBeInTheDocument();
+    });
+
+    it('profile menu: Settings navigates to /settings (Platform Admin)', async () => {
+        useAuthStore.getState().setUser(fullUser);
+        renderTopNav();
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }));
+        });
+
+        expect(navigateMock).toHaveBeenCalledWith('/settings');
+    });
+
+    it('profile menu: Account Settings navigates to /account', async () => {
+        useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
+        renderTopNav();
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
+            button: 0,
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('menuitem', { name: 'Account Settings' }));
+        });
+
+        expect(navigateMock).toHaveBeenCalledWith('/account');
     });
 
     it('project-present: Board + Reports enabled + routed (F49 unblocks Reports)', () => {
@@ -337,7 +441,8 @@ describe('TopNav', () => {
             'href',
             '/projects/demo/reports',
         );
-        expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+        // SLYK-03 T4 — Project Settings is gated; a plain Member does not see it.
+        expect(screen.queryByRole('link', { name: 'Project Settings' })).toBeNull();
     });
 
     // --- F42 project-aware nav ---------------------------------------------------
@@ -379,15 +484,7 @@ describe('TopNav', () => {
         expect(screen.getAllByText('Select a project first').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('project-less: Settings stays an enabled link (independent of project scope)', () => {
-        useAuthStore.getState().setUser(fullUser);
-        renderTopNav();
-
-        const settings = screen.getByRole('link', { name: 'Settings' });
-        expect(settings).not.toHaveAttribute('aria-disabled');
-    });
-
-    // F49 — the F42 "Reports coming soon" tooltip is gone; Reports is an enabled
+// F49 — the F42 "Reports coming soon" tooltip is gone; Reports is an enabled
     // link with a project present. Assert no "coming soon" surface remains.
     it('project-present: no "Reports coming soon" tooltip (F49 unblocks Reports)', () => {
         useAuthStore.getState().setUser(fullUser);
