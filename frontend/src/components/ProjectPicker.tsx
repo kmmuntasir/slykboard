@@ -12,6 +12,7 @@ import {
     DropdownSeparator,
     DropdownGroup,
 } from '@/components/ui/Dropdown';
+import { Badge } from '@/components/ui/Badge';
 import type { Project } from '@/types/project';
 
 // F38 — Project picker rebuild. Kills the 3 bugs at the old :19/:24/:27:
@@ -161,6 +162,11 @@ export function ProjectPicker() {
                                     <span className={cn('truncate', TRIGGER_MAX_W)} title={p.name}>
                                         {p.name}
                                     </span>
+                                    {!p.isActive && isAdmin && (
+                                        <Badge variant="warning" className="shrink-0">
+                                            Deactivated
+                                        </Badge>
+                                    )}
                                     {isSelected && (
                                         <Check
                                             className="ml-auto h-4 w-4 shrink-0 text-primary"

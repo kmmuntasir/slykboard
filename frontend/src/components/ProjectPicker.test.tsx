@@ -33,6 +33,7 @@ const adminProject: Project = {
     creatorId: 'u1',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+    isActive: true,
 };
 
 const secondProject: Project = {
@@ -230,4 +231,44 @@ it('"+ Create project" footer navigates to /projects', () => {
     fireEvent.pointerDown(screen.getByLabelText('Select project'), { button: 0 });
     fireEvent.click(screen.getByText('+ Create project'));
     expect(navigateMock).toHaveBeenCalledWith('/projects');
+});
+
+// --- SLYK-04: Deactivated badge (admin-only, inactive projects) -------------
+
+it('shows a Deactivated badge for an inactive project when ADMIN', () => {
+    const inactive: Project = { ...adminProject, id: 'p3', slug: 'dead', isActive: false };
+    vi.mocked(useProjects).mockReturnValue({
+        data: [inactive],
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useProjects>);
+    vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
+    renderPicker();
+    fireEvent.pointerDown(screen.getByLabelText('Select project'), { button: 0 });
+    expect(screen.getByText('Deactivated')).toBeInTheDocument();
+});
+
+it('does NOT show a Deactivated badge when the project is active', () => {
+    setProjects(); // both projects isActive:true
+    vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
+    renderPicker();
+    fireEvent.pointerDown(screen.getByLabelText('Select project'), { button: 0 });
+    expect(screen.queryByText('Deactivated')).not.toBeInTheDocument();
+});
+
+it('does NOT show a Deactivated badge for a non-admin even when inactive', () => {
+    const inactive: Project = { ...adminProject, id: 'p3', slug: 'dead', isActive: false };
+    vi.mocked(useProjects).mockReturnValue({
+        data: [inactive],
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useProjects>);
+    vi.mocked(useRequirePlatformAdmin).mockReturnValue(false);
+    renderPicker();
+    fireEvent.pointerDown(screen.getByLabelText('Select project'), { button: 0 });
+    expect(screen.queryByText('Deactivated')).not.toBeInTheDocument();
 });

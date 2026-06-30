@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useProjectStore } from '@/stores/useProjectStore';
 import { ApiClientError } from '@/api/client';
 import type { Project } from '@/types/project';
 
@@ -38,6 +39,7 @@ const projectMock: Project = {
     creatorId: 'u1',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+    isActive: true,
 };
 
 const otherMock: Project = {
@@ -48,6 +50,7 @@ const otherMock: Project = {
     creatorId: 'u1',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+    isActive: true,
 };
 
 function renderPage() {
@@ -67,6 +70,7 @@ describe('ProjectsPage', () => {
     beforeEach(() => {
         localStorage.clear();
         useAuthStore.getState().clear();
+        useProjectStore.getState().clear();
         navigateMock.mockReset();
         mockState.projectsValue = {
             data: [],
@@ -213,5 +217,112 @@ describe('ProjectsPage', () => {
         expect(screen.getByText('Projects unavailable')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /retry/i }));
         expect(refetch).toHaveBeenCalledTimes(1);
+    });
+
+    // --- SLYK-04: Deactivated badge, member empty-state, reconcile effect -----
+
+    it('shows a Deactivated badge for an inactive project when ADMIN', () => {
+        const inactive: Project = { ...projectMock, isActive: false };
+        mockState.projectsValue = {
+            data: [inactive],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        expect(screen.getByText('Deactivated')).toBeInTheDocument();
+    });
+
+    it('does NOT show a Deactivated badge for a non-admin even when inactive', () => {
+        const inactive: Project = { ...projectMock, isActive: false };
+        useAuthStore.getState().setUser({
+            token: 't',
+            id: 'u1',
+            email: 'e@x',
+            name: 'Test',
+            isPlatformAdmin: false,
+            displayName: null,
+            avatarUrl: null,
+            blocked: false,
+        });
+        mockState.projectsValue = {
+            data: [inactive],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        expect(screen.queryByText('Deactivated')).toBeNull();
+    });
+
+    it('member empty-state shows "Contact an Admin" copy with NO action button', () => {
+        useAuthStore.getState().setUser({
+            token: 't',
+            id: 'u1',
+            email: 'e@x',
+            name: 'Test',
+            isPlatformAdmin: false,
+            displayName: null,
+            avatarUrl: null,
+            blocked: false,
+        });
+        mockState.projectsValue = {
+            data: [],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        const status = screen.getByRole('status');
+        expect(within(status).getByText('You have no Projects')).toBeInTheDocument();
+        expect(
+            within(status).getByText('Contact an Admin to get access to a project.'),
+        ).toBeInTheDocument();
+        // No Create action for members.
+        expect(within(status).queryByRole('button')).toBeNull();
+    });
+
+    it('admin empty list still shows the Create-project CTA', () => {
+        mockState.projectsValue = {
+            data: [],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        const status = screen.getByRole('status');
+        expect(within(status).getByText('No projects yet')).toBeInTheDocument();
+        expect(within(status).getByRole('button', { name: 'Create project' })).toBeInTheDocument();
+    });
+
+    it('reconcile effect clears a stale lastSelectedSlug exactly once', () => {
+        useProjectStore.getState().setLastSelectedSlug('gone');
+        mockState.projectsValue = {
+            data: [projectMock],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        // Stale slug not in the loaded list → cleared.
+        expect(useProjectStore.getState().lastSelectedSlug).toBeNull();
+    });
+
+    it('reconcile effect does NOT clear a valid lastSelectedSlug', () => {
+        useProjectStore.getState().setLastSelectedSlug('SLYK');
+        mockState.projectsValue = {
+            data: [projectMock],
+            isLoading: false,
+            error: undefined,
+            refetch: vi.fn(),
+        };
+        renderPage();
+
+        expect(useProjectStore.getState().lastSelectedSlug).toBe('SLYK');
     });
 });
