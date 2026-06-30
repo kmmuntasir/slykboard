@@ -338,15 +338,34 @@ describe('removeMember', () => {
 
   it('deletes the membership row', async () => {
     bag.dbDeleteReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
-    await expect(removeMember(PROJECT_ID, USER_ID)).resolves.toBeUndefined();
+    await expect(removeMember(PROJECT_ID, USER_ID, 'user-other')).resolves.toBeUndefined();
   });
 
   it('throws NOT_FOUND (non-revealing "User not found") when no membership exists', async () => {
     bag.dbDeleteReturning.mockResolvedValueOnce([]); // 0 rows affected
-    await expect(removeMember(PROJECT_ID, USER_ID)).rejects.toMatchObject({
+    await expect(removeMember(PROJECT_ID, USER_ID, 'user-other')).rejects.toMatchObject({
       code: ErrorCode.NOT_FOUND,
       message: 'User not found',
     });
+  });
+});
+
+// SLYK-05: self-removal guard — removeMember must reject before touching the DB
+// when the acting user is the same as the target user.
+describe('removeMember — self-removal guard (SLYK-05)', () => {
+  beforeEach(resetBag);
+
+  it('rejects FORBIDDEN when userId === actingUserId', async () => {
+    await expect(removeMember(PROJECT_ID, USER_ID, USER_ID)).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN,
+      message: 'You cannot remove yourself from a project',
+    });
+    expect(bag.dbDeleteReturning).not.toHaveBeenCalled();
+  });
+
+  it('regression: a different acting id still deletes the row', async () => {
+    bag.dbDeleteReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
+    await expect(removeMember(PROJECT_ID, USER_ID, 'user-other')).resolves.toBeUndefined();
   });
 });
 
@@ -381,16 +400,36 @@ describe('setMemberRole', () => {
 
   it.each(['PROJECT_ADMIN', 'MEMBER'] as const)('sets the tier to %s on an existing member', async (role) => {
     bag.dbUpdateReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
-    await setMemberRole(PROJECT_ID, USER_ID, role);
+    await setMemberRole(PROJECT_ID, USER_ID, role, 'user-other');
     expect(bag.dbUpdateSetArg.role).toBe(role);
   });
 
   it('throws NOT_FOUND "User not found" when demoting a non-member (no silent create)', async () => {
     bag.dbUpdateReturning.mockResolvedValueOnce([]);
-    await expect(setMemberRole(PROJECT_ID, USER_ID, 'MEMBER')).rejects.toMatchObject({
+    await expect(setMemberRole(PROJECT_ID, USER_ID, 'MEMBER', 'user-other')).rejects.toMatchObject({
       code: ErrorCode.NOT_FOUND,
       message: 'User not found',
     });
+  });
+});
+
+// SLYK-05: self role-change guard — setMemberRole must reject before touching
+// the DB when the acting user is changing their own role.
+describe('setMemberRole — self role-change guard (SLYK-05)', () => {
+  beforeEach(resetBag);
+
+  it.each(['PROJECT_ADMIN', 'MEMBER'] as const)('rejects FORBIDDEN when changing own role to %s', async (role) => {
+    await expect(setMemberRole(PROJECT_ID, USER_ID, role, USER_ID)).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN,
+      message: 'You cannot change your own role',
+    });
+    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+  });
+
+  it('regression: a different acting id still updates the role', async () => {
+    bag.dbUpdateReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
+    await setMemberRole(PROJECT_ID, USER_ID, 'MEMBER', 'user-other');
+    expect(bag.dbUpdateSetArg.role).toBe('MEMBER');
   });
 });
 
