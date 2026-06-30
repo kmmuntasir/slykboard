@@ -58,6 +58,15 @@ export const memberUserIdParamSchema = slugParamSchema.extend({
     userId: z.uuid(),
 });
 
+// GET /:slug/members/lookup query — read-only email probe powering the
+// Add-Member modal auto-search. Admins-only; 200 in both found/not-found
+// branches so the client branches on the response shape, never exceptions.
+// Reuses the project slug param shape so an invalid slug is a 400.
+export const lookupMemberSchema = {
+    params: slugParamSchema,
+    query: z.object({ email: z.email() }),
+};
+
 export type MemberEmailBody = z.infer<typeof memberEmailSchema>;
 export type CreateMemberBody = z.infer<typeof createMemberSchema>;
 export type UpdateMemberRoleBody = z.infer<typeof updateMemberRoleSchema>;

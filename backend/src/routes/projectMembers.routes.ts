@@ -10,6 +10,7 @@ import {
     addMemberBody,
     memberUserIdParamSchema,
     updateMemberRoleSchema,
+    lookupMemberSchema,
 } from './projectMembers.schema';
 import * as membershipService from '../services/membershipService';
 import { findUserByEmail, findUserById } from '../services/userService';
@@ -35,6 +36,40 @@ import { ErrorCode } from '../utils/envelope';
 // (non-revealing w.r.t. project existence). Role updates are idempotent —
 // setting the same role still returns 200.
 export const projectMembersRouter = Router();
+
+// GET /:slug/members/lookup — read-only email probe for the Add-Member modal.
+// Admins-only (PA or PROJECT_ADMIN). 200 in both branches (found / not-found)
+// so the client branches on the response shape, never on exceptions. The
+// payload is minimal — tokenVersion / googleId / blocked are NEVER surfaced
+// (anti-oracle + privacy). Mounted ABOVE the roster route so the literal
+// `/lookup` segment isn't shadowed by the `/:slug/members` prefix.
+projectMembersRouter.get(
+    '/:slug/members/lookup',
+    authenticate,
+    validateRequest(lookupMemberSchema),
+    requireProjectMember(),
+    requireProjectAdmin(),
+    async (req, res) => {
+        const { email } = req.query as { email: string };
+        const user = await findUserByEmail(email);
+        if (!user) {
+            res.json(success({ exists: false }));
+            return;
+        }
+        res.json(
+            success({
+                exists: true,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    fullName: user.fullName,
+                    displayName: user.displayName,
+                    isPlatformAdmin: user.isPlatformAdmin,
+                },
+            }),
+        );
+    },
+);
 
 // GET /:slug/members — read-only roster. Any member (MEMBER tier included) and
 // Platform Admins see the full list.
