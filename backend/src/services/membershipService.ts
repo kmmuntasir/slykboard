@@ -146,7 +146,14 @@ export async function addMember(
 // 5. Delete a membership. Throws NOT_FOUND when no row exists (zero rows affected).
 //    Non-revealing by design — the message is the generic 'User not found' so it
 //    does not leak whether the project itself exists.
-export async function removeMember(projectId: string, userId: string): Promise<void> {
+export async function removeMember(
+  projectId: string,
+  userId: string,
+  actingUserId: string,
+): Promise<void> {
+  if (userId === actingUserId) {
+    throw new AppError(ErrorCode.FORBIDDEN, 'You cannot remove yourself from a project');
+  }
   const deleted = await db
     .delete(projectMembers)
     .where(
@@ -184,7 +191,11 @@ export async function setMemberRole(
   projectId: string,
   userId: string,
   role: ProjectMemberRole,
+  actingUserId: string,
 ): Promise<void> {
+  if (userId === actingUserId) {
+    throw new AppError(ErrorCode.FORBIDDEN, 'You cannot change your own role');
+  }
   const updated = await db
     .update(projectMembers)
     .set({ role })
