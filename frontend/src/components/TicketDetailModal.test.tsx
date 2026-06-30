@@ -80,6 +80,7 @@ import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
+import { formatDate } from '@/utils/formatDate';
 import type { Ticket } from '@/types/ticket';
 
 // --- Fixtures ---------------------------------------------------------------
@@ -190,14 +191,31 @@ describe('TicketDetailModal', () => {
         expect(avatar).not.toBeNull();
     });
 
-    it('renders Created/Updated timestamp rows', async () => {
+    it('renders two inline <time> elements with clock icons', async () => {
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
-        // formatDate renders both rows with a leading label.
-        const rows = screen.getAllByText(/^(Created|Updated):/);
-        expect(rows).toHaveLength(2);
-        expect(rows[0]!.textContent).toMatch(/^Created:/);
-        expect(rows[1]!.textContent).toMatch(/^Updated:/);
+        const times = document.querySelectorAll('time[dateTime]');
+        expect(times).toHaveLength(2);
+        // First <time> is the createdAt timestamp from the makeTicket fixture.
+        expect(times[0]!.getAttribute('dateTime')).toBe('2026-06-01T00:00:00.000Z');
+        expect(times[0]!.getAttribute('title')).toBe(formatDate('2026-06-01T00:00:00.000Z'));
+        // Second <time> is the updatedAt timestamp.
+        expect(times[1]!.getAttribute('dateTime')).toBe('2026-06-02T00:00:00.000Z');
+        expect(times[1]!.getAttribute('title')).toBe(formatDate('2026-06-02T00:00:00.000Z'));
+        // Each <time> is preceded by a Clock (lucide) icon.
+        expect(document.querySelectorAll('svg.lucide-clock').length).toBe(2);
+    });
+
+    it('renders Created by Unknown and Unassigned avatar when creator is null', async () => {
+        renderModal({ ticket: makeTicket({ creator: null }) });
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.getByText('Created by Unknown')).toBeInTheDocument();
+        // Avatar (no src, no name) renders aria-label='Unassigned'.
+        expect(document.querySelector('[aria-label="Unassigned"]')).not.toBeNull();
+        // No creator avatar <img> renders.
+        expect(document.querySelector('img[src="https://example.com/a.png"]')).toBeNull();
+        // Timestamps are unaffected by the missing creator.
+        expect(document.querySelectorAll('time[dateTime]')).toHaveLength(2);
     });
 
     it('renders the embedded TicketAttributeForm with the title seeded', async () => {
