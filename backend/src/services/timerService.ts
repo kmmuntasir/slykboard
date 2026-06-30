@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
 import { tickets, timeEntries, users } from '../db/schema';
 import { AppError } from '../utils/appError';
@@ -121,6 +121,25 @@ export async function stopTimerForTicket(tx: Tx, ticketId: string): Promise<void
     .update(timeEntries)
     .set({ endTime: new Date() })
     .where(and(eq(timeEntries.ticketId, ticketId), isNull(timeEntries.endTime)));
+}
+
+// F20: close every running timer on any ticket belonging to a project. Runs
+// inside the caller's transaction; a single UPDATE keyed by an IN-subquery
+// over the project's tickets closes all open rows in one statement regardless
+// of how many are running (no N+1, no per-ticket loop).
+export async function stopTimersForProject(tx: Tx, projectId: string): Promise<void> {
+  await tx
+    .update(timeEntries)
+    .set({ endTime: new Date() })
+    .where(
+      and(
+        isNull(timeEntries.endTime),
+        inArray(
+          timeEntries.ticketId,
+          db.select({ id: tickets.id }).from(tickets).where(eq(tickets.projectId, projectId)),
+        ),
+      ),
+    );
 }
 
 // F20: time-tracking log. All TimeEntries for a ticket, reverse-chrono, with
