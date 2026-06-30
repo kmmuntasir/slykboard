@@ -110,6 +110,7 @@ describe('Modal', () => {
             { size: 'md', expected: 'max-w-lg' },
             { size: 'lg', expected: 'max-w-2xl' },
             { size: 'xl', expected: 'max-w-4xl' },
+            { size: 'full', expected: 'max-w-[min(95vw,1400px)]' },
         ] as const;
 
         sizeCases.forEach(({ size, expected }) => {
