@@ -29,12 +29,13 @@ vi.mock('../services/tokenVersion', () => ({
 vi.mock('../services/userService', () => ({
   listUsers: vi.fn(),
   setUserBlocked: vi.fn(),
+  setPlatformAdmin: vi.fn(),
 }));
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
 import { findUserTokenVersion } from '../services/tokenVersion';
-import { listUsers, setUserBlocked } from '../services/userService';
+import { listUsers, setUserBlocked, setPlatformAdmin } from '../services/userService';
 import type { UserOption } from '../services/userService';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
@@ -42,6 +43,7 @@ import { ErrorCode } from '../utils/envelope';
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedListUsers = vi.mocked(listUsers);
 const mockedSetBlocked = vi.mocked(setUserBlocked);
+const mockedSetPlatformAdmin = vi.mocked(setPlatformAdmin);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -64,7 +66,7 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
     expect(mockedListUsers).not.toHaveBeenCalled();
   });
 
-  it('returns 200 + array of users with valid Bearer', async () => {
+  it('returns 200 + array of users with valid PA Bearer', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedListUsers.mockResolvedValue([
       {
@@ -80,7 +82,7 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -126,13 +128,13 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
     }
   });
 
-  it('returns [] when no users exist', async () => {
+  it('returns [] when no users exist (PA)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedListUsers.mockResolvedValue([]);
 
     const res = await request(app)
       .get('/api/users')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([]);
@@ -179,15 +181,16 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
     expect(res.body.data.map((u: { id: string }) => u.id)).toEqual(['u-a', 'u-b', 'u-c']);
   });
 
-  it('works for MEMBER (no role gate)', async () => {
+  it('returns 403 FORBIDDEN for a non-PA member (listUsers NOT called)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedListUsers.mockResolvedValue([]);
 
     const res = await request(app)
       .get('/api/users')
       .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedListUsers).not.toHaveBeenCalled();
   });
 });
 
@@ -304,6 +307,127 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
       .patch('/api/users/u-ghost/blocked')
       .set('Authorization', `Bearer ${await tokenFor(true)}`)
       .send({ blocked: true });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('usersRouter — PATCH /api/users/:userId/isPlatformAdmin (SLYK-01 Task K)', () => {
+  it('returns 200 + updated user for a PA promoting a member', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetPlatformAdmin.mockResolvedValue({
+      id: 'u-target',
+      googleId: 'g1',
+      email: 't@x.com',
+      fullName: 'Target',
+      displayName: null,
+      avatarUrl: null,
+      isPlatformAdmin: true,
+      tokenVersion: 3,
+      blocked: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof setPlatformAdmin>>);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isPlatformAdmin: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.isPlatformAdmin).toBe(true);
+    expect(mockedSetPlatformAdmin).toHaveBeenCalledWith('u-target', true);
+  });
+
+  it('returns 200 for a PA demoting a user', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetPlatformAdmin.mockResolvedValue({
+      id: 'u-target',
+      isPlatformAdmin: false,
+    } as unknown as Awaited<ReturnType<typeof setPlatformAdmin>>);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isPlatformAdmin: false });
+
+    expect(res.status).toBe(200);
+    expect(mockedSetPlatformAdmin).toHaveBeenCalledWith('u-target', false);
+  });
+
+  it('returns 403 FORBIDDEN for a non-PA member (setPlatformAdmin NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ isPlatformAdmin: true });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedSetPlatformAdmin).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer', async () => {
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .send({ isPlatformAdmin: true });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedSetPlatformAdmin).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on non-boolean isPlatformAdmin', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isPlatformAdmin: 'yes' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedSetPlatformAdmin).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on missing isPlatformAdmin', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedSetPlatformAdmin).not.toHaveBeenCalled();
+  });
+
+  it('propagates CONFLICT (409) when demoting the last platform admin', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetPlatformAdmin.mockRejectedValue(
+      new AppError(ErrorCode.CONFLICT, 'Cannot remove the last platform admin'),
+    );
+
+    const res = await request(app)
+      .patch('/api/users/u-target/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isPlatformAdmin: false });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+  });
+
+  it('propagates NOT_FOUND (404) when target user absent', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetPlatformAdmin.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'User not found'));
+
+    const res = await request(app)
+      .patch('/api/users/u-ghost/isPlatformAdmin')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ isPlatformAdmin: true });
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');

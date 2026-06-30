@@ -21,13 +21,3 @@ export function requirePlatformAdmin(): Middleware {
     next();
   };
 }
-
-// SLYK-01 Task I — TEMPORARY compat alias. The file was renamed from
-// `requireRole.ts`; projects.routes.ts (owned by Task K) still imports
-// `requireRole`. The alias preserves the old call shape (`requireRole('ADMIN')`)
-// so the build stays green until Task K sweeps that call site to
-// `requirePlatformAdmin()`. Legacy role args are accepted and IGNORED — every
-// gate is a platform-admin gate. REMOVED in Task K.
-export function requireRole(..._legacyRoles: unknown[]): Middleware {
-  return requirePlatformAdmin();
-}

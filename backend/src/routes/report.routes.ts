@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requirePlatformAdmin } from '../middleware/requirePlatformAdmin';
 import { requireProjectMember } from '../middleware/requireProjectMember';
 import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
@@ -61,13 +62,14 @@ projectReportsRouter.get(
 // ----------------------------------------------------------------------------
 // F23/F24 (DEPRECATED per F48 D2): global report routes — /api/reports/{time,tickets}.
 // Still mounted and functional for one release to avoid breaking the live FE
-// (F49 not yet landed) and any external consumers. Each handler logs a
-// [DEPRECATED] warning. Removal is filed as a follow-up; F49's redirect lands
-// regardless. Behaviour is unchanged: no projectId filter (global aggregation).
+// (F49 not yet landed) and any external consumers. SLYK-01 Task K (resolved
+// decision): gated to Platform Admin within SLYK-01. Report scoping refactor is
+// deferred to SLYK-16 (out of scope). Each handler logs a [DEPRECATED] warning.
+// Behaviour is unchanged: no projectId filter (global aggregation).
 // ----------------------------------------------------------------------------
 export const reportRouter = Router();
 
-reportRouter.get('/time', authenticate, async (req, res) => {
+reportRouter.get('/time', authenticate, requirePlatformAdmin(), async (req, res) => {
   console.warn(
     '[DEPRECATED] Global /reports/time route used — use /projects/:slug/reports/time instead.',
   );
@@ -76,7 +78,7 @@ reportRouter.get('/time', authenticate, async (req, res) => {
   res.json(success(report));
 });
 
-reportRouter.get('/tickets', authenticate, async (req, res) => {
+reportRouter.get('/tickets', authenticate, requirePlatformAdmin(), async (req, res) => {
   console.warn(
     '[DEPRECATED] Global /reports/tickets route used — use /projects/:slug/reports/tickets instead.',
   );

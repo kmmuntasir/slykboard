@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { requireRole } from '../middleware/requireRole';
+import { requireProjectMember } from '../middleware/requireProjectMember';
+import { requireProjectAdmin } from '../middleware/requireProjectAdmin';
+import { resolveLabelProject } from '../middleware/resolveProject';
 import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
 import { slugParam, labelIdParam, createLabelBody, updateLabelBody } from './labels.schema';
@@ -14,6 +16,7 @@ projectLabelsRouter.get(
   '/:slug/labels',
   authenticate,
   validateRequest({ params: slugParam }),
+  requireProjectMember(),
   async (req, res) => {
     const { slug } = req.params as { slug: string };
     const rows = await listLabels(slug);
@@ -24,8 +27,9 @@ projectLabelsRouter.get(
 projectLabelsRouter.post(
   '/:slug/labels',
   authenticate,
-  requireRole(),
   validateRequest({ params: slugParam, body: createLabelBody }),
+  requireProjectMember(),
+  requireProjectAdmin(),
   async (req, res) => {
     const { slug } = req.params as { slug: string };
     const body = req.body as { name: string; color: string };
@@ -40,8 +44,9 @@ export const labelsRouter = Router();
 labelsRouter.patch(
   '/:id',
   authenticate,
-  requireRole(),
   validateRequest({ params: labelIdParam, body: updateLabelBody }),
+  resolveLabelProject(),
+  requireProjectAdmin(),
   async (req, res) => {
     const { id } = req.params as { id: string };
     const patch = req.body as { name?: string; color?: string };
@@ -53,8 +58,9 @@ labelsRouter.patch(
 labelsRouter.delete(
   '/:id',
   authenticate,
-  requireRole(),
   validateRequest({ params: labelIdParam }),
+  resolveLabelProject(),
+  requireProjectAdmin(),
   async (req, res) => {
     const { id } = req.params as { id: string };
     const removed = await deleteLabel(id);

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { requireRole } from '../middleware/requireRole';
+import { requireProjectAdmin } from '../middleware/requireProjectAdmin';
+import { resolveTicketProject } from '../middleware/resolveProject';
 import { validateRequest } from '../middleware/validateRequest';
 import { success, ErrorCode } from '../utils/envelope';
 import { AppError } from '../utils/appError';
@@ -21,10 +22,14 @@ export const ticketsRouter = Router();
 // F17 — admin-only soft delete. Returns 204 (no body).
 
 // F13 — ticket detail: returns description for edit form + F16 modal.
+// SLYK-01 Task K: resolveTicketProject resolves the ticket → its project →
+// membership (non-revealing FORBIDDEN for non-member; NOT_FOUND only when the
+// ticket row itself is absent).
 ticketsRouter.get(
   '/:ticketId',
   authenticate,
   validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const ticket = await ticketService.getTicket(ticketId);
@@ -40,6 +45,7 @@ ticketsRouter.get(
   '/:ticketId/activity',
   authenticate,
   validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const entries = await activityService.getTicketActivity(ticketId);
@@ -56,6 +62,7 @@ ticketsRouter.patch(
   '/:ticketId',
   authenticate,
   validateRequest({ params: ticketIdParam, body: updateTicketBody }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const body = req.body as UpdateTicketBody;
@@ -108,12 +115,16 @@ ticketsRouter.patch(
   },
 );
 
-// F17 — admin-only soft delete: sets deletedAt, hides ticket from reads.
+// F17 / SLYK-01 Task K (resolved decision): ticket soft-delete is Project Admin
+// OR Platform Admin. resolveTicketProject resolves+authorizes the ticket's
+// project (non-revealing FORBIDDEN for non-members); requireProjectAdmin then
+// enforces the PROJECT_ADMIN/PA tier.
 ticketsRouter.delete(
   '/:ticketId',
   authenticate,
-  requireRole(),
   validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
+  requireProjectAdmin(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     await ticketService.deleteTicket(ticketId);
@@ -127,6 +138,7 @@ ticketsRouter.post(
   '/:ticketId/timer/start',
   authenticate,
   validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const { entry, serverNow } = await timerService.startTimer({
@@ -141,6 +153,7 @@ ticketsRouter.post(
   '/:ticketId/timer/stop',
   authenticate,
   validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const entry = await timerService.stopTimer({
@@ -158,6 +171,7 @@ ticketsRouter.get(
   '/:ticketId/timer/entries',
   authenticate,
   validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const result = await timerService.getTimeEntries(ticketId);
@@ -171,6 +185,7 @@ ticketsRouter.post(
   '/:ticketId/timer/manual',
   authenticate,
   validateRequest({ params: ticketIdParam, body: manualEntryBody }),
+  resolveTicketProject(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
     const body = req.body as ManualEntryBody;

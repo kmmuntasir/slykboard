@@ -4,7 +4,8 @@ import { success, ErrorCode } from '../utils/envelope';
 import { AppError } from '../utils/appError';
 import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
-import { requireRole } from '../middleware/requireRole';
+import { requirePlatformAdmin } from '../middleware/requirePlatformAdmin';
+import { requireProjectMember } from '../middleware/requireProjectMember';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
 import * as ticketService from '../services/ticketService';
@@ -22,33 +23,34 @@ import { projectMembersRouter } from './projectMembers.routes';
 
 export const projectsRouter = Router();
 
-// F08: any authenticated user can list projects (D-ProjectMembers: no membership yet).
-projectsRouter.get('/', authenticate, async (_req, res) => {
-  const rows = await projectService.listProjects();
+// SLYK-01 Task J/K: membership-scoped listing. A Platform Admin sees every
+// project; a Member sees only projects where they have a project_members row.
+projectsRouter.get('/', authenticate, async (req, res) => {
+  const rows = await projectService.listProjects(req.user!.id, req.user!.isPlatformAdmin);
   res.json(success(rows));
 });
 
-// F08: any authenticated user can fetch a project by slug.
+// SLYK-01 Task K: requireProjectMember resolves + authorizes in one step via
+// the non-revealing getProjectBySlug(slug, uid, pa) contract — unknown slug and
+// non-member are indistinguishable (both throw the identical FORBIDDEN). The
+// handler reads the pre-resolved req.project; no separate 404 path exists.
 projectsRouter.get(
   '/:slug',
   authenticate,
   validateRequest({ params: slugParamSchema }),
+  requireProjectMember(),
   async (req, res) => {
-    const slug = req.params.slug as string;
-    const project = await projectService.getProjectBySlug(slug);
-    if (!project) {
-      throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`);
-    }
-    res.json(success(project));
+    res.json(success(req.project));
   },
 );
 
-// F09 D-Slug-Route: spec's GET /projects/:id/board → :slug (project URL identifier).
-// Any authenticated user (D-ProjectMembers: no membership yet).
+// F09 D-Slug-Route: spec's GET /projects/:id/board → :slug (project URL
+// identifier). SLYK-01 Task K: membership-gated by requireProjectMember.
 projectsRouter.get(
   '/:slug/board',
   authenticate,
   validateRequest({ params: slugParamSchema }),
+  requireProjectMember(),
   async (req, res) => {
     const slug = req.params.slug as string;
     const filters = {
@@ -63,11 +65,12 @@ projectsRouter.get(
 );
 
 // F12 D6: nested POST /:slug/tickets — binds slug, mirrors GET /:slug/board.
-// Any authenticated user (REQ-3.3). TODO(F17): per-column permission check.
+// SLYK-01 Task K: any project member may create tickets (REQ-3.3).
 projectsRouter.post(
   '/:slug/tickets',
   authenticate,
   validateRequest({ params: slugParamSchema, body: createTicketBody }),
+  requireProjectMember(),
   async (req, res) => {
     const { slug } = req.params as z.infer<typeof slugParamSchema>;
     const body = req.body as z.infer<typeof createTicketBody>;
@@ -82,16 +85,17 @@ projectsRouter.post(
 
 // F30 D-Display-Id-Lookup: human-readable ticket detail route
 // GET /api/projects/:slug/tickets/:displayId (e.g. /api/projects/SLYK/tickets/SLYK-4).
-// Any authenticated user (matches GET /:slug/board, D-ProjectMembers: no membership yet).
-// D5: a malformed displayId (e.g. 'SLYK-abc') is a 404, NOT a 400 — Zod only
-// checks non-emptiness; parseTicketDisplayId does the format check and returns
-// null → NOT_FOUND. D3: a prefix mismatch (path slug ≠ displayId slug, e.g.
-// /SLYK/.../PX-4) is also null → NOT_FOUND. Both happen BEFORE the service is
-// called, so a malformed ref never touches the DB.
+// SLYK-01 Task K: membership-gated by requireProjectMember (matches GET
+// /:slug/board). D5: a malformed displayId (e.g. 'SLYK-abc') is a 404, NOT a
+// 400 — Zod only checks non-emptiness; parseTicketDisplayId does the format
+// check and returns null → NOT_FOUND. D3: a prefix mismatch (path slug ≠
+// displayId slug, e.g. /SLYK/.../PX-4) is also null → NOT_FOUND. Both happen
+// BEFORE the service is called, so a malformed ref never touches the DB.
 projectsRouter.get(
   '/:slug/tickets/:displayId',
   authenticate,
   validateRequest({ params: ticketDisplayIdParamSchema }),
+  requireProjectMember(),
   async (req, res) => {
     const { slug, displayId } = req.params as z.infer<typeof ticketDisplayIdParamSchema>;
     const parsed = parseTicketDisplayId(displayId, slug);
@@ -106,11 +110,11 @@ projectsRouter.get(
   },
 );
 
-// F08 D-Who-Creates: ADMIN-only. First mount of requireRole (F07 shipped it unmounted).
+// SLYK-01 Task K (resolved decision): project creation is Platform-Admin only.
 projectsRouter.post(
   '/',
   authenticate,
-  requireRole('ADMIN'),
+  requirePlatformAdmin(),
   validateRequest({ body: createProjectBodySchema }),
   async (req, res) => {
     const project = await projectService.createProject({
@@ -123,12 +127,13 @@ projectsRouter.post(
   },
 );
 
-// F27 T1: rename project + manage columns (admin-only). Slug is NOT editable.
-// Service blocks removing a column that still holds live (non-deleted) tickets.
+// SLYK-01 Task K (resolved decision): project rename/columns is Platform-Admin
+// ONLY (no Project Admin rename). Slug is NOT editable. Service blocks removing
+// a column that still holds live (non-deleted) tickets.
 projectsRouter.patch(
   '/:slug',
   authenticate,
-  requireRole('ADMIN'),
+  requirePlatformAdmin(),
   validateRequest({ params: slugParamSchema, body: updateProjectBodySchema }),
   async (req, res) => {
     const { slug } = req.params as z.infer<typeof slugParamSchema>;
