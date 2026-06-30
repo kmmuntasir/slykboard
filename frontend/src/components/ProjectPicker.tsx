@@ -73,7 +73,7 @@ export function ProjectPicker() {
         triggerBody = (
             <>
                 <span className="h-4 w-4 animate-pulse rounded-sm bg-muted" />
-                <span className="truncate text-muted">Loading…</span>
+                <span className="truncate text-muted-foreground">Loading…</span>
             </>
         );
     } else if (isError) {
@@ -86,15 +86,15 @@ export function ProjectPicker() {
     } else if (!projects || projects.length === 0) {
         triggerBody = (
             <>
-                <FolderKanban className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
-                <span className="truncate text-muted">No projects yet</span>
+                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="truncate text-muted-foreground">No projects yet</span>
             </>
         );
     } else {
         triggerBody = (
             <>
                 {selected && <ColorDot slug={selected.slug} />}
-                <FolderKanban className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className={cn('truncate', TRIGGER_MAX_W)} title={triggerLabel}>
                     {triggerLabel}
                 </span>
@@ -116,7 +116,7 @@ export function ProjectPicker() {
                     )}
                 >
                     {triggerBody}
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 </button>
             </DropdownTrigger>
 
@@ -156,7 +156,7 @@ export function ProjectPicker() {
                                 >
                                     <ColorDot slug={p.slug} />
                                     <FolderKanban
-                                        className="h-4 w-4 shrink-0 text-muted"
+                                        className="h-4 w-4 shrink-0 text-muted-foreground"
                                         aria-hidden="true"
                                     />
                                     <span className={cn('truncate', TRIGGER_MAX_W)} title={p.name}>
