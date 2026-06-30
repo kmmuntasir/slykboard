@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router';
 import { useLabels } from '@/hooks/useLabels';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
+import { useCreateLabel } from '@/hooks/useLabelMutations';
+import { useToast } from '@/hooks/useToast';
 import { LabelChip } from './LabelChip';
 import { Retry } from './Retry';
 import { EmptyState } from './EmptyState';
 import { SkeletonLine } from './Skeleton';
 import { Checkbox } from '@/components/ui/Checkbox';
 import type { Label } from '@/types/label';
+
+// D16 / F14 T9: neutral gray default mirroring LabelManager.DEFAULT_COLOR so
+// inline-created labels match the catalog's create surface.
+const DEFAULT_LABEL_COLOR = '#6B7280';
 
 // F14 T7: native multi-select popover (no cmdk/Radix dep).
 // Trigger shows selected chips; popover lists all project labels with
@@ -27,10 +32,39 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
     const isPlatformAdmin = useRequirePlatformAdmin();
     const { isProjectAdmin } = useCurrentProjectMembership(projectSlug);
     const canManageLabels = isPlatformAdmin || isProjectAdmin;
-    const navigate = useNavigate();
+    const createLabelMut = useCreateLabel(projectSlug);
+    const toast = useToast();
 
     const [open, setOpen] = useState(false);
+    // Search filters the visible label list AND drives the inline "Create Label"
+    // row for admins (T4). Empty string = no filter.
+    const [search, setSearch] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Create-row visibility: an admin typing a non-empty query that no existing
+    // label matches (case-insensitive) gets an inline Create option. Members
+    // never see it.
+    const trimmedSearch = search.trim();
+    const lowerSearch = trimmedSearch.toLowerCase();
+    const hasExactMatch =
+        trimmedSearch !== '' &&
+        labels.some((l: Label) => l.name.toLowerCase() === lowerSearch);
+    const showCreateRow = canManageLabels && trimmedSearch !== '' && !hasExactMatch;
+
+    async function handleCreate() {
+        if (!showCreateRow || createLabelMut.isPending) return;
+        const name = trimmedSearch;
+        try {
+            const created = await createLabelMut.mutateAsync({
+                name,
+                color: DEFAULT_LABEL_COLOR,
+            });
+            onChange([...value, created.id]);
+            setSearch('');
+        } catch {
+            toast.error('Failed to create label');
+        }
+    }
 
     // Close on outside click. Only attached while open so closed state is inert.
     useEffect(() => {
@@ -101,44 +135,77 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                     aria-label="Available labels"
                     className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded border border-border bg-card shadow-lg"
                 >
-                    {labels.length === 0 ? (
-                        <EmptyState
-                            title="No labels yet"
-                            description={
-                                canManageLabels
-                                    ? 'Create labels to organize tickets.'
-                                    : 'Ask a project admin to create labels.'
-                            }
-                            action={
-                                canManageLabels
-                                    ? {
-                                          label: 'Create labels',
-                                          onClick: () =>
-                                              navigate(`/projects/${projectSlug}/settings`),
-                                      }
-                                    : undefined
-                            }
+                    <div className="sticky top-0 border-b border-border bg-card p-2">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search labels"
+                            aria-label="Search labels"
+                            className="w-full rounded border border-border p-1 text-sm"
                         />
-                    ) : (
-                        labels.map((l: Label) => (
-                            <label
-                                key={l.id}
-                                className="flex cursor-pointer items-center gap-2 p-2 hover:bg-accent"
-                            >
-                                <Checkbox
-                                    checked={value.includes(l.id)}
-                                    onCheckedChange={() => toggle(l.id)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    aria-label={l.name}
+                    </div>
+
+                    {(() => {
+                        const filtered = labels.filter((l: Label) =>
+                            l.name.toLowerCase().includes(lowerSearch),
+                        );
+                        const showEmpty =
+                            filtered.length === 0 && !showCreateRow;
+
+                        if (showEmpty) {
+                            return (
+                                <EmptyState
+                                    title="No labels yet"
+                                    description={
+                                        canManageLabels
+                                            ? 'Create labels to organize tickets.'
+                                            : 'Ask a project admin to create labels.'
+                                    }
                                 />
-                                <span
-                                    className="inline-block h-3 w-3 rounded-full"
-                                    style={{ backgroundColor: l.color }}
-                                />
-                                <span className="text-sm">{l.name}</span>
-                            </label>
-                        ))
-                    )}
+                            );
+                        }
+
+                        return (
+                            <>
+                                {filtered.map((l: Label) => (
+                                    <label
+                                        key={l.id}
+                                        className="flex cursor-pointer items-center gap-2 p-2 hover:bg-accent"
+                                    >
+                                        <Checkbox
+                                            checked={value.includes(l.id)}
+                                            onCheckedChange={() => toggle(l.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            aria-label={l.name}
+                                        />
+                                        <span
+                                            className="inline-block h-3 w-3 rounded-full"
+                                            style={{ backgroundColor: l.color }}
+                                        />
+                                        <span className="text-sm">{l.name}</span>
+                                    </label>
+                                ))}
+                                {showCreateRow && (
+                                    <button
+                                        type="button"
+                                        onClick={handleCreate}
+                                        disabled={createLabelMut.isPending}
+                                        className="flex w-full items-center gap-2 border-t border-border p-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className="inline-block h-3 w-3 rounded-full"
+                                            style={{ backgroundColor: DEFAULT_LABEL_COLOR }}
+                                        />
+                                        <span>
+                                            Create Label &lsquo;{trimmedSearch}&rsquo;
+                                        </span>
+                                    </button>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             )}
         </div>

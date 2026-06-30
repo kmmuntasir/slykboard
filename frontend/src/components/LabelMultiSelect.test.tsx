@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { useLabels } from '@/hooks/useLabels';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
@@ -21,11 +21,25 @@ vi.mock('@/hooks/useProjectMembers', () => ({
     useCurrentProjectMembership: vi.fn(() => ({ membership: undefined, isProjectAdmin: false })),
 }));
 
-const navigateMock = vi.fn();
-vi.mock('react-router', async () => {
-    const actual = await vi.importActual<typeof import('react-router')>('react-router');
-    return { ...actual, useNavigate: () => navigateMock };
-});
+// T4: create-label mutation + toast funnel are mocked so tests can assert the
+// inline Create row calls createLabel and onChange without hitting the API.
+// vi.hoisted keeps the mock fns referenceable inside the hoisted vi.mock
+// factories.
+const { createLabelMock, toastErrorMock } = vi.hoisted(() => ({
+    createLabelMock: vi.fn(),
+    toastErrorMock: vi.fn(),
+}));
+
+vi.mock('@/hooks/useLabelMutations', () => ({
+    useCreateLabel: () => ({
+        mutateAsync: createLabelMock,
+        isPending: false,
+    }),
+}));
+vi.mock('@/hooks/useToast', () => ({
+    useToast: () => ({ error: toastErrorMock }),
+    toast: { error: toastErrorMock },
+}));
 
 // --- Fixtures ---------------------------------------------------------------
 
@@ -89,6 +103,9 @@ describe('LabelMultiSelect', () => {
         vi.clearAllMocks();
         // Default to a plain Member role; role-aware tests override per-case.
         setRole({ isPlatformAdmin: false, isProjectAdmin: false });
+        createLabelMock.mockReset();
+        createLabelMock.mockResolvedValue({ id: 'new-label', name: 'New', color: '#6B7280' });
+        toastErrorMock.mockReset();
     });
 
     // --- Trigger / open behavior --------------------------------------------
@@ -225,21 +242,20 @@ describe('LabelMultiSelect', () => {
 
     // --- Role-aware EmptyState (B2-2) ---------------------------------------
 
+    // T4 removed the navigate-to-settings "Create labels" CTA. Admins with no
+    // search and no labels now see a plain hint; the inline Create row only
+    // appears when they type a new name (see T4 create-row tests below).
     it.each([
         ['platform-admin', { isPlatformAdmin: true, isProjectAdmin: false }],
         ['project-admin', { isPlatformAdmin: false, isProjectAdmin: true }],
-    ])('shows a "Create labels" CTA for %s and navigates to settings on click', (_role, role) => {
+    ])('shows a hint-only empty state (no navigate CTA) for %s', (_role, role) => {
         setRole(role);
         vi.mocked(useLabels).mockReturnValue(mockUseLabels({ data: [] }));
         renderSelect({ projectSlug: 'acme' });
         fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
 
-        const cta = screen.getByRole('button', { name: 'Create labels' });
-        expect(cta).toBeInTheDocument();
-
-        fireEvent.click(cta);
-        expect(navigateMock).toHaveBeenCalledTimes(1);
-        expect(navigateMock).toHaveBeenCalledWith('/projects/acme/settings');
+        expect(screen.getByText('No labels yet')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Create labels' })).toBeNull();
     });
 
     it('shows a hint-only empty state (no "Create labels" CTA) for a plain Member', () => {
@@ -251,6 +267,58 @@ describe('LabelMultiSelect', () => {
         // Member gets the hint copy but never a management CTA.
         expect(screen.getByText('Ask a project admin to create labels.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Create labels' })).toBeNull();
+    });
+
+    // --- T4: inline Create Label row ---------------------------------------
+
+    it('admin typing a new name shows a "Create Label" row and selecting it creates + selects', async () => {
+        setRole({ isPlatformAdmin: true, isProjectAdmin: false });
+        vi.mocked(useLabels).mockReturnValue(mockUseLabels());
+        const onChange = vi.fn();
+        renderSelect({ projectSlug: 'acme', value: [], onChange });
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+
+        const search = screen.getByRole('textbox', { name: 'Search labels' });
+        fireEvent.change(search, { target: { value: 'New' } });
+
+        const createRow = screen.getByRole('button', { name: /Create Label .New./ });
+        expect(createRow).toBeInTheDocument();
+
+        fireEvent.click(createRow);
+        await waitFor(() => {
+            expect(createLabelMock).toHaveBeenCalledTimes(1);
+        });
+        expect(createLabelMock).toHaveBeenCalledWith({
+            name: 'New',
+            color: '#6B7280',
+        });
+        await waitFor(() => {
+            expect(onChange).toHaveBeenCalledWith(['new-label']);
+        });
+    });
+
+    it('admin typing an exact existing-label name shows NO Create row', () => {
+        setRole({ isPlatformAdmin: true, isProjectAdmin: false });
+        vi.mocked(useLabels).mockReturnValue(mockUseLabels());
+        renderSelect();
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search labels' }), {
+            target: { value: 'Bug' },
+        });
+        expect(screen.queryByRole('button', { name: /Create Label/ })).toBeNull();
+    });
+
+    it('Member typing a new name shows NO Create row', () => {
+        setRole({ isPlatformAdmin: false, isProjectAdmin: false });
+        vi.mocked(useLabels).mockReturnValue(mockUseLabels());
+        renderSelect();
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search labels' }), {
+            target: { value: 'New' },
+        });
+        expect(screen.queryByRole('button', { name: /Create Label/ })).toBeNull();
     });
 
     // --- SLYK-14 B2-5: duplicate-caption regression -------------------------
