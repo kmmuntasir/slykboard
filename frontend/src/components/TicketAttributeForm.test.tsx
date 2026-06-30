@@ -437,3 +437,54 @@ describe('F44 two-column layout', () => {
         expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
     });
 });
+
+describe('SLYK-14 label row', () => {
+    const LABELS = ['Title', 'Description', 'Priority', 'Assignee', 'Labels', 'Checklist'] as const;
+
+    function renderForm() {
+        render(
+            <TicketAttributeForm
+                mode="create"
+                projectSlug={PROJECT_SLUG}
+                defaultValues={baseDefaults}
+                onSubmit={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+    }
+
+    // Behavior A — each field renders exactly one caption.
+    it.each(LABELS)('each field renders exactly one caption for %s', (label) => {
+        renderForm();
+        expect(screen.getAllByText(label).length).toBe(1);
+    });
+
+    // Behavior B — the icon shares the label row inline-left of the caption.
+    it.each(LABELS)(
+        'the icon shares the label row inline-left of the caption for %s',
+        (label) => {
+            renderForm();
+            // The caption span is the label-bearing element rendered by Field.
+            const caption = screen.getByText(label);
+            const span = caption.closest('span')!;
+
+            // Caption span carries the Field label-row classes.
+            expect(span.classList.contains('flex')).toBe(true);
+            expect(span.classList.contains('items-center')).toBe(true);
+
+            // Exactly one lucide <svg> sits on the label row.
+            const svgs = span.querySelectorAll('svg');
+            expect(svgs.length).toBe(1);
+
+            // The <svg> PRECEDES the caption text node in DOM order.
+            const svg = svgs[0]!;
+            const textNode = Array.from(span.childNodes).find(
+                (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes(label),
+            );
+            expect(textNode).toBeTruthy();
+            // DOCUMENT_POSITION_FOLLOWING => textNode follows svg (svg precedes text).
+            const position = svg.compareDocumentPosition(textNode!);
+            expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        },
+    );
+});

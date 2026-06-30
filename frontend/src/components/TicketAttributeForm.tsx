@@ -93,10 +93,7 @@ export function TicketAttributeForm({
             >
                 {/* LEFT 2/3 — Title + Description (+ optional Activity). */}
                 <div className="space-y-4 lg:col-span-2">
-                    <Field label="Title" error={errors.title?.message}>
-                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                            <AlignLeft size={14} />
-                        </span>
+                    <Field label="Title" error={errors.title?.message} icon={<AlignLeft size={14} />}>
                         <input
                             type="text"
                             aria-label="Title"
@@ -105,10 +102,7 @@ export function TicketAttributeForm({
                         />
                     </Field>
 
-                    <Field label="Description" error={errors.description?.message}>
-                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                            <AlignLeft size={14} />
-                        </span>
+                    <Field label="Description" error={errors.description?.message} icon={<AlignLeft size={14} />}>
                         {readOnly ? (
                             // F17: read-only view of the archived (sanitized) description.
                             <div
@@ -127,10 +121,7 @@ export function TicketAttributeForm({
                 {/* RIGHT 1/3 — Priority / Assignee / Labels / Checklist.
                     Scrolls independently for long checklists (PRD edge case). */}
                 <div className="space-y-4 lg:col-span-1 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
-                    <Field label="Priority" error={errors.priority?.message}>
-                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                            <Flag size={14} />
-                        </span>
+                    <Field label="Priority" error={errors.priority?.message} icon={<Flag size={14} />}>
                         <PrioritySelect
                             hideLabel
                             value={watch('priority')}
@@ -138,10 +129,7 @@ export function TicketAttributeForm({
                         />
                     </Field>
 
-                    <Field label="Assignee" error={errors.assigneeId?.message}>
-                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                            <UserCircle size={14} />
-                        </span>
+                    <Field label="Assignee" error={errors.assigneeId?.message} icon={<UserCircle size={14} />}>
                         <UserSelect
                             hideLabel
                             value={watch('assigneeId') ?? null}
@@ -149,10 +137,7 @@ export function TicketAttributeForm({
                         />
                     </Field>
 
-                    <Field label="Labels">
-                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                            <Tags size={14} />
-                        </span>
+                    <Field label="Labels" icon={<Tags size={14} />}>
                         <LabelMultiSelect
                             projectSlug={projectSlug}
                             value={watch('labelIds')}
@@ -160,10 +145,7 @@ export function TicketAttributeForm({
                         />
                     </Field>
 
-                    <Field label="Checklist">
-                        <span className="mb-1 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                            <ListChecks size={14} />
-                        </span>
+                    <Field label="Checklist" icon={<ListChecks size={14} />}>
                         <ChecklistEditor
                             hideLabel
                             dense // D2: compact rows for the narrow right-column sidebar
