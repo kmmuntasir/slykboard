@@ -54,6 +54,7 @@ usersRouter.patch(
     const updated = await setUserBlocked({
       targetUserId: userId,
       blocked: req.body.blocked,
+      actingUserId: req.user!.id,
     });
     res.json(success(updated));
   },
