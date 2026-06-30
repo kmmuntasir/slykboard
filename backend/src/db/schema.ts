@@ -247,6 +247,9 @@ export const activityActionEnum = pgEnum('ActivityAction', [
   'ASSIGNEE_CHANGED',
   'LABELS_CHANGED', // F18-added per features.md deltas table
   'CONTENT_UPDATED',
+  // SLYK-13: comment lifecycle events appended last.
+  'COMMENT_EDITED',
+  'COMMENT_DELETED',
 ]);
 
 // PRD §8.5 — ActivityLogs. user_id nullable + ON DELETE SET NULL preserves audit
@@ -296,3 +299,28 @@ export const timeEntries = pgTable(
       .where(sql`${table.endTime} IS NULL`),
   }),
 );
+
+// SLYK-13: ticket comments. ticket_id ON DELETE CASCADE (owned by ticket);
+// author_id nullable + ON DELETE SET NULL preserves comment history when an
+// author is deleted — matches the activityLogs/timeEntries idiom.
+export const comments = pgTable(
+  'Comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ticketId: uuid('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    ticketIdx: index('comments_ticket_id_idx').on(table.ticketId),
+  }),
+);
+
+export type CommentRow = typeof comments.$inferSelect;
