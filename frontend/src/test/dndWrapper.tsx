@@ -11,11 +11,14 @@ import { TooltipProvider } from '@/components/ui/Tooltip';
 //
 // TooltipProvider is mounted app-wide in main.tsx (production); mount it here too
 // — TicketCard renders AssigneeAvatar, whose Radix Tooltip throws without it.
-export function renderInDnd(ui: ReactElement) {
+export function renderInDnd(
+    ui: ReactElement,
+    { type = 'CARD', droppableId = 'test-col' }: { type?: string; droppableId?: string } = {},
+) {
     return render(
         <TooltipProvider>
             <DragDropContext onDragEnd={() => {}}>
-                <Droppable droppableId="test-col" type="CARD" direction="vertical">
+                <Droppable droppableId={droppableId} type={type} direction="vertical">
                     {(provided) => (
                         <div ref={provided.innerRef} {...provided.droppableProps}>
                             {ui}
