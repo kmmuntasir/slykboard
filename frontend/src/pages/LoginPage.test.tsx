@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { useGoogleLogin } from '@react-oauth/google';
 import { LoginPage } from './LoginPage';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ApiClientError } from '@/api/client';
 import type { AuthResponse } from '@/api/auth';
@@ -51,15 +52,18 @@ function renderLogin(initialEntries: Parameters<typeof MemoryRouter>[0]['initial
     return render(
         // F40 — LoginPage now mounts <ThemeToggle /> (calls useTheme); must be inside
         // <ThemeProvider> or every test throws "must be used within ThemeProvider".
-        <ThemeProvider>
-            <MemoryRouter initialEntries={initialEntries}>
-                <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/" element={<div>home</div>} />
-                    <Route path="/reports" element={<div>reports</div>} />
-                </Routes>
-            </MemoryRouter>
-        </ThemeProvider>,
+        // DEL-02 — ThemeToggle now uses <Tooltip>; must be inside <TooltipProvider>.
+        <TooltipProvider>
+            <ThemeProvider>
+                <MemoryRouter initialEntries={initialEntries}>
+                    <Routes>
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/" element={<div>home</div>} />
+                        <Route path="/reports" element={<div>reports</div>} />
+                    </Routes>
+                </MemoryRouter>
+            </ThemeProvider>
+        </TooltipProvider>,
     );
 }
 

@@ -1,7 +1,10 @@
 import { Moon, Monitor, Sun } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { ThemePreference } from '@/utils/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/components/ui/cn';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/ToggleGroup';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip';
 
 type ThemeValue = 'light' | 'system' | 'dark';
 
@@ -22,41 +25,41 @@ const THEME_OPTIONS: readonly ThemeOption[] = [
  * useTheme: active segment reflects `theme`, click calls `setTheme`. F34 owns
  * .dark + localStorage + matchMedia side effects; this component is a pure
  * consumer (no local state, no direct DOM).
+ *
+ * DEL-02 — migrated from hand-rolled segmented control to ui/ToggleGroup
+ * (Radix). Single mode CAN deselect to '' on click of the active item; themes
+ * must always be set, so `onValueChange` guards falsy values. Each item is also
+ * wrapped in a ui/Tooltip (belt-and-suspenders label hint) with aria-label kept
+ * for SR users.
  */
 export function ThemeToggle({ className }: { className?: string }) {
     const { theme, setTheme } = useTheme();
 
     return (
-        <div
-            role="group"
+        <ToggleGroup
+            type="single"
+            value={theme}
+            onValueChange={(value) => {
+                // Radix single-mode allows deselect → ''. Theme must ALWAYS be set;
+                // ignore the empty value so setTheme('') is never called. Radix types
+                // value as `string`; narrow to ThemePreference before calling setTheme.
+                if (value === 'light' || value === 'system' || value === 'dark') {
+                    setTheme(value);
+                }
+            }}
             aria-label="Theme"
-            className={cn(
-                'flex items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5',
-                className,
-            )}
+            className={className}
         >
-            {THEME_OPTIONS.map(({ value, label, Icon }) => {
-                const isActive = theme === value;
-                return (
-                    <button
-                        key={value}
-                        type="button"
-                        aria-pressed={isActive}
-                        aria-label={label}
-                        title={label}
-                        onClick={() => setTheme(value)}
-                        className={cn(
-                            'inline-flex h-7 w-7 items-center justify-center rounded-sm transition-colors',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                            isActive
-                                ? 'bg-accent text-accent-foreground'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                        )}
-                    >
-                        <Icon className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                );
-            })}
-        </div>
+            {THEME_OPTIONS.map(({ value, label, Icon }) => (
+                <Tooltip key={value}>
+                    <TooltipTrigger asChild>
+                        <ToggleGroupItem value={value} aria-label={label}>
+                            <Icon className="h-4 w-4" aria-hidden="true" />
+                        </ToggleGroupItem>
+                    </TooltipTrigger>
+                    <TooltipContent>{label}</TooltipContent>
+                </Tooltip>
+            ))}
+        </ToggleGroup>
     );
 }

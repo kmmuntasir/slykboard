@@ -43,6 +43,7 @@ export const ToggleGroupItem = forwardRef<
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 'focus-visible:ring-offset-2',
                 'data-[state=on]:bg-accent data-[state=on]:text-accent-foreground',
+                'aria-[checked=true]:bg-accent aria-[checked=true]:text-accent-foreground',
                 'data-[state=disabled]:cursor-not-allowed data-[state=disabled]:opacity-50',
                 className,
             )}

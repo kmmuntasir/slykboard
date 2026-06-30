@@ -286,20 +286,20 @@ describe('TopNav', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
-        expect(screen.getByRole('group', { name: 'Theme' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Light' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Dark' })).toBeInTheDocument();
+        expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'Light' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'System' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'Dark' })).toBeInTheDocument();
     });
 
     it('clicking the Dark segment adds .dark to <html>', () => {
         useAuthStore.getState().setUser(fullUser);
         renderTopNav();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
         expect(document.documentElement.classList.contains('dark')).toBe(true);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
         expect(document.documentElement.classList.contains('dark')).toBe(false);
     });
 
@@ -321,7 +321,7 @@ describe('TopNav', () => {
         renderTopNav();
 
         // Set dark via the navbar segment, open the menu, assert the Dark item is checked.
-        fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
         fireEvent.pointerDown(screen.getByRole('button', { name: 'Account menu' }), {
             button: 0,
         });
