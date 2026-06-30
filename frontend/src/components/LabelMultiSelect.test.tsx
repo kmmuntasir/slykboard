@@ -252,4 +252,17 @@ describe('LabelMultiSelect', () => {
         expect(screen.getByText('Ask a project admin to create labels.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Create labels' })).toBeNull();
     });
+
+    // --- SLYK-14 B2-5: duplicate-caption regression -------------------------
+    // B1-2 removed the hardcoded `<span>...Labels</span>` caption from
+    // LabelMultiSelect's own DOM. In isolation (no wrapping Field) the text
+    // 'Labels' must appear ZERO times as a caption span, while the trigger
+    // button still resolves by accessible name.
+    it('does not render a duplicate "Labels" caption span (B1-2 regression)', () => {
+        vi.mocked(useLabels).mockReturnValue(mockUseLabels());
+        const { container } = renderSelect();
+        const labelSpans = container.querySelectorAll('span');
+        const matching = Array.from(labelSpans).filter((s) => s.textContent === 'Labels');
+        expect(matching).toHaveLength(0);
+    });
 });
