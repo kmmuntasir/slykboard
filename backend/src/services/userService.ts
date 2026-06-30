@@ -172,18 +172,45 @@ export async function listUsers(): Promise<UserOption[]> {
 export async function setUserBlocked({
   targetUserId,
   blocked,
+  actingUserId,
 }: {
   targetUserId: string;
   blocked: boolean;
+  actingUserId: string;
 }): Promise<UserRow> {
+  // 1. SELF-DEACTIVATION GUARD — FIRST, before no-op short-circuit
+  if (blocked === true && targetUserId === actingUserId) {
+    throw new AppError(ErrorCode.FORBIDDEN, 'You cannot deactivate yourself');
+  }
+  // 2. PRE-FETCH existing row
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, targetUserId))
+    .limit(1);
+  if (!existing) {
+    throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+  }
+  // 3. NO-OP SHORT-CIRCUIT — return row without last-PA guard or token bump
+  if (existing.blocked === blocked) {
+    return existing;
+  }
+  // 4. LAST-PA-ON-BLOCK GUARD (CONFLICT)
+  if (blocked === true && existing.isPlatformAdmin === true) {
+    const countRows = await db
+      .select({ count: count() })
+      .from(users)
+      .where(eq(users.isPlatformAdmin, true));
+    const paCount = countRows[0]?.count ?? 0;
+    if (paCount <= 1) {
+      throw new AppError(ErrorCode.CONFLICT, 'Cannot remove the last platform admin');
+    }
+  }
   const [updated] = await db
     .update(users)
     .set({ blocked })
     .where(eq(users.id, targetUserId))
     .returning();
-  if (!updated) {
-    throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
-  }
   await bumpTokenVersion(targetUserId);
-  return updated;
+  return updated!;
 }
