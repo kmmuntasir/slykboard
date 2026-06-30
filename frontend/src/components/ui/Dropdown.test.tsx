@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { Sun, Monitor, LogOut, Check } from 'lucide-react';
+import type { ReactNode } from 'react';
 import {
     Dropdown,
     DropdownTrigger,
@@ -105,5 +107,42 @@ describe('Dropdown', () => {
         // (the sideOffset=4 default is exercised by the component wiring above).
         const menu = screen.getByRole('menu');
         expect(menu).toBeInTheDocument();
+    });
+
+    it('item base class carries gap-2 across child compositions (SLYK-07)', () => {
+        const cases: Array<{ name: string; children: ReactNode; variant?: 'destructive' }> = [
+            {
+                name: 'icon + span',
+                children: [<Sun key="i" className="h-4 w-4" />, <span key="t">Light</span>],
+            },
+            {
+                name: 'icon + span + trailing Check',
+                children: [
+                    <Monitor key="i" className="h-4 w-4" />,
+                    <span key="t">System</span>,
+                    <Check key="c" className="ml-auto h-4 w-4" />,
+                ],
+            },
+            { name: 'span only', children: <span>Plain text</span> },
+            {
+                name: 'destructive icon + span',
+                children: [<LogOut key="i" className="h-4 w-4" />, <span key="t">Sign out</span>],
+                variant: 'destructive',
+            },
+        ];
+        for (const { name, children, variant } of cases) {
+            const { unmount } = render(
+                <Dropdown>
+                    <DropdownTrigger>Open</DropdownTrigger>
+                    <DropdownContent>
+                        <DropdownItem variant={variant}>{children}</DropdownItem>
+                    </DropdownContent>
+                </Dropdown>,
+            );
+            fireEvent.pointerDown(screen.getByRole('button', { name: 'Open' }), { button: 0 });
+            const item = screen.getByRole('menuitem');
+            expect(item.className, `case: ${name}`).toContain('gap-2');
+            unmount();
+        }
     });
 });
