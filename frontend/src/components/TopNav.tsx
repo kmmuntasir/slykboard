@@ -204,7 +204,7 @@ export function TopNav() {
     const navLinkClass = ({ isActive }: { isActive: boolean }) =>
         cn(
             'flex items-center gap-1.5 text-sm',
-            isActive ? 'text-primary' : 'text-muted hover:text-foreground',
+            isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
         );
 
     const navItems = (
