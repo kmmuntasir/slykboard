@@ -16,12 +16,21 @@ export interface FieldProps {
     error?: string;
     /** Optional className for the wrapping <label>. */
     className?: string;
+    /** Optional icon rendered inline-left of the label text (on the same line). */
+    icon?: ReactNode;
 }
 
-export function Field({ label, htmlFor, children, error, className }: FieldProps) {
+export function Field({ label, htmlFor, children, error, className, icon }: FieldProps) {
     return (
         <label htmlFor={htmlFor} className={cn('block', className)}>
-            <span className="mb-1 block text-sm font-medium">{label}</span>
+            {icon ? (
+                <span className="mb-1 flex items-center gap-1.5 text-sm font-medium">
+                    {icon}
+                    {label}
+                </span>
+            ) : (
+                <span className="mb-1 block text-sm font-medium">{label}</span>
+            )}
             {children}
             {error ? (
                 <p role="alert" className="mt-1 text-sm text-destructive">
