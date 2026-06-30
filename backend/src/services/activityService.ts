@@ -14,7 +14,9 @@ export type EnrichedActionType =
   | 'PRIORITY_CHANGED'
   | 'ASSIGNEE_CHANGED'
   | 'LABELS_CHANGED'
-  | 'CONTENT_UPDATED';
+  | 'CONTENT_UPDATED'
+  | 'COMMENT_EDITED'
+  | 'COMMENT_DELETED';
 
 export interface ActivityActor {
   id: string;
@@ -120,6 +122,10 @@ export function enrichActivityRows(
         return { ...base, message: row.newValue };
       case 'CONTENT_UPDATED':
         return { ...base, message: row.newValue };
+      // SLYK-13: comment lifecycle events. Privacy — never surface comment
+      // content in from/to/message; return base (all null).
+      case 'COMMENT_EDITED':
+      case 'COMMENT_DELETED':
       case 'CREATED':
       default:
         return base;
