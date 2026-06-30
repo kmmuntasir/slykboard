@@ -692,7 +692,7 @@ describe('TicketDetailModal', () => {
     // (d) Soft-deleted tickets are archived: the form is read-only and the
     // Time Tracking panel renders no controls (content gated behind
     // !ticket.deletedAt).
-    it('soft-deleted ticket: Time Tracking controls are hidden and the Details form is read-only', async () => {
+    it('soft-deleted ticket: Time Tracking tab trigger is disabled, panel controls are hidden, and the Details form is read-only', async () => {
         renderModal({ ticket: makeTicket({ deletedAt: '2026-06-24T00:00:00.000Z' }) });
         await screen.findByRole('dialog', { name: 'SLYK-101' });
 
@@ -703,12 +703,38 @@ describe('TicketDetailModal', () => {
         // Read-only description renders the sanitized HTML (not the editor).
         expect(screen.getByText('steps')).toBeInTheDocument();
 
-        // Time Tracking panel: activating it renders NO timer/log/manual
-        // controls — they are all gated behind !ticket.deletedAt.
-        fireEvent.mouseDown(screen.getByRole('tab', { name: /time tracking/i }));
-        const time = await screen.findByRole('tabpanel', { name: /time tracking/i });
-        expect(within(time).queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
-        expect(within(time).queryByRole('button', { name: 'Log Time' })).not.toBeInTheDocument();
+        // SLYK-11 gap-fix: the Time Tracking tab TRIGGER itself is disabled at
+        // the tablist level (not just the panel content gated behind
+        // !ticket.deletedAt). Radix Tabs marks a disabled trigger with BOTH
+        // the `data-disabled` attribute and the native `disabled` attribute
+        // (aria-disabled is intentionally NOT set so the trigger stays in the
+        // tab sequence for roving-tabindex announcements).
+        const timeTrackingTab = screen.getByRole('tab', { name: /time tracking/i });
+        expect(timeTrackingTab).toHaveAttribute('data-disabled');
+        expect((timeTrackingTab as HTMLButtonElement).disabled).toBe(true);
+        // The trigger is disabled, so activating it is a no-op — confirm a
+        // pointer interaction does NOT switch the active tab to it.
+        fireEvent.mouseDown(timeTrackingTab);
+        expect(timeTrackingTab).not.toHaveAttribute('data-state', 'active');
+        expect(screen.getByRole('tab', { name: /details/i })).toHaveAttribute(
+            'data-state',
+            'active',
+        );
+        // The companion (non-soft-deleted) triggers are NOT disabled.
+        expect(screen.getByRole('tab', { name: /details/i })).not.toHaveAttribute(
+            'data-disabled',
+        );
+        expect(screen.getByRole('tab', { name: /activity/i })).not.toHaveAttribute(
+            'data-disabled',
+        );
+
+        // Time Tracking panel content: the timer/log/manual controls are all
+        // gated behind !ticket.deletedAt, so they simply don't render anywhere
+        // in the modal body for a soft-deleted ticket (regardless of whether the
+        // now-disabled trigger could be activated).
+        expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Log Time' })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Duration')).not.toBeInTheDocument();
     });
 
     // (e) isDirty survives a tab switch (forceMount), so a close attempt issued
@@ -733,5 +759,20 @@ describe('TicketDetailModal', () => {
         // Close while on the Time Tracking tab → guard engages.
         fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
         expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument();
+    });
+
+    // (f) SLYK-11 gap-fix acceptance: on a live (non-soft-deleted) ticket the
+    // Time Tracking trigger is ENABLED (no data-disabled / not disabled) and
+    // activates normally.
+    it('live ticket: the Time Tracking tab trigger is enabled and activates on click', async () => {
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        const timeTrackingTab = screen.getByRole('tab', { name: /time tracking/i });
+        expect(timeTrackingTab).not.toHaveAttribute('data-disabled');
+        expect((timeTrackingTab as HTMLButtonElement).disabled).toBe(false);
+
+        fireEvent.mouseDown(timeTrackingTab);
+        await waitFor(() => expect(timeTrackingTab).toHaveAttribute('data-state', 'active'));
     });
 });

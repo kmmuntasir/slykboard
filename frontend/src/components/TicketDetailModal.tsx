@@ -160,7 +160,9 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
                     <TabsList>
                         <TabsTrigger value="details">Details</TabsTrigger>
-                        <TabsTrigger value="time-tracking">Time Tracking</TabsTrigger>
+                        <TabsTrigger value="time-tracking" disabled={!!ticket.deletedAt}>
+                            Time Tracking
+                        </TabsTrigger>
                         <TabsTrigger value="activity">Activity</TabsTrigger>
                     </TabsList>
 
