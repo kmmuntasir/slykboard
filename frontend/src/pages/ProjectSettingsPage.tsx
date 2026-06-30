@@ -1,15 +1,34 @@
-// F14 T9 / F27: project-scoped settings page at /projects/:slug/settings.
-// Hosts the project rename + column management surfaces (admin-only) and the
-// LabelManager. Project-scoped data gets a project-scoped URL.
-import { useState } from 'react';
+// F14 T9 / F27 / SLYK-03 T2: project-scoped settings page at
+// /projects/:slug/settings. Two-column layout — a left in-page section sidebar
+// (General / Members / Labels) drives the right content pane. Management
+// controls (rename, columns, labels) are gated on the broadened
+// (Platform Admin OR Project Admin) gate via useCurrentProjectMembership; the
+// members pane is a navigation <Link>, not an embed of the members page.
+//
+// Loading correctness: useCurrentProjectMembership exposes no loading flag, so
+// membership loading is read separately from useProjectMembers(slug). Until it
+// resolves, management UI is suppressed (read-only / skeleton) so it never
+// flashes then hides for a non-admin.
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useProject } from '@/hooks/useProjects';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
+import { useProjectMembers, useCurrentProjectMembership } from '@/hooks/useProjectMembers';
 import { LabelManager } from '@/components/LabelManager';
 import { ProjectColumnsManager } from '@/components/ProjectColumnsManager';
 import { Retry } from '@/components/Retry';
-import { SkeletonBlock, SkeletonLine } from '@/components/Skeleton';
+import { SkeletonLine } from '@/components/Skeleton';
+import { cn } from '@/components/ui/cn';
+
+type SectionId = 'general' | 'members' | 'labels';
+
+// The section registry — the single extension point for the in-page sidebar.
+const SECTIONS: { id: SectionId; label: string }[] = [
+    { id: 'general', label: 'General' },
+    { id: 'members', label: 'Members' },
+    { id: 'labels', label: 'Labels' },
+];
 
 export function ProjectSettingsPage() {
     const { slug } = useParams<{ slug: string }>();
@@ -27,14 +46,19 @@ interface SettingsBodyProps {
 
 function SettingsBody({ slug }: SettingsBodyProps) {
     const { data: project, isLoading, error, refetch } = useProject(slug);
-    const isAdmin = useRequirePlatformAdmin();
+    const isPlatformAdmin = useRequirePlatformAdmin();
+    const { isProjectAdmin } = useCurrentProjectMembership(slug);
+    // Membership has no dedicated loading flag on useCurrentProjectMembership;
+    // read it from the underlying roster query so management UI never flashes.
+    const { isLoading: membershipLoading } = useProjectMembers(slug);
+
+    const [active, setActive] = useState<SectionId>('general');
 
     if (isLoading) {
         return (
             <div className="space-y-3 p-4">
                 <SkeletonLine className="h-6 w-40" />
                 <SkeletonLine className="h-4 w-full" />
-                <SkeletonBlock />
             </div>
         );
     }
@@ -49,32 +73,111 @@ function SettingsBody({ slug }: SettingsBodyProps) {
         return <div className="p-4">Project not found.</div>;
     }
 
+    // Broadened gate: Platform Admin OR Project Admin. A Platform Admin who is
+    // not a real member still manages via the bypass, so the platform-admin
+    // source short-circuits the membership-loading wait.
+    const canManage = isPlatformAdmin || isProjectAdmin;
+    const membershipReady = isPlatformAdmin || !membershipLoading;
+
     return (
-        <div className="mx-auto max-w-2xl space-y-6 p-4">
-            <h1 className="text-xl font-bold">Project Settings</h1>
+        <div className="p-4">
+            <h1 className="mb-4 text-xl font-bold">Project Settings</h1>
 
-            {isAdmin && (
-                <>
-                    <ProjectNameSection slug={slug} name={project.name} />
-                    <ProjectColumnsManager projectSlug={slug} columns={project.columns} />
-                </>
-            )}
+            <div className="flex gap-6">
+                <nav aria-label="Project settings sections" className="w-48 shrink-0">
+                    <ul className="space-y-1">
+                        {SECTIONS.map((section) => {
+                            const isActive = active === section.id;
+                            return (
+                                <li key={section.id}>
+                                    <button
+                                        type="button"
+                                        aria-current={isActive ? 'page' : undefined}
+                                        onClick={() => setActive(section.id)}
+                                        className={cn(
+                                            'block w-full rounded px-3 py-2 text-left text-sm',
+                                            isActive
+                                                ? 'bg-muted font-medium text-foreground'
+                                                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                                        )}
+                                    >
+                                        {section.label}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </nav>
 
-            <LabelManager projectSlug={slug} />
-
-            <section className="space-y-2 rounded border border-border p-4">
-                <h2 className="text-lg font-semibold">Members</h2>
-                <p className="text-sm text-muted-foreground">
-                    Manage who can access this project and their roles.
-                </p>
-                <Link
-                    to={`/projects/${slug}/members`}
-                    className="inline-block rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                    Manage members
-                </Link>
-            </section>
+                <div className="flex-1 space-y-6">
+                    {active === 'general' &&
+                        renderGeneral(slug, project.name, project.columns, canManage, membershipReady)}
+                    {active === 'members' && (
+                        <section className="space-y-2 rounded border border-border p-4">
+                            <h2 className="text-lg font-semibold">Members</h2>
+                            <p className="text-sm text-muted-foreground">
+                                Manage who can access this project and their roles.
+                            </p>
+                            <Link
+                                to={`/projects/${slug}/members`}
+                                className="inline-block rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                            >
+                                Manage members
+                            </Link>
+                        </section>
+                    )}
+                    {active === 'labels' && renderLabels(slug, canManage, membershipReady)}
+                </div>
+            </div>
         </div>
+    );
+}
+
+function renderGeneral(
+    slug: string,
+    name: string,
+    columns: SettingsColumns,
+    canManage: boolean,
+    membershipReady: boolean,
+) {
+    if (!membershipReady) {
+        return <SkeletonLine className="h-24 w-full" />;
+    }
+    if (!canManage) {
+        return (
+            <ReadOnlyNote>
+                You need admin access to rename this project or edit its columns.
+            </ReadOnlyNote>
+        );
+    }
+    return (
+        <>
+            <ProjectNameSection slug={slug} name={name} />
+            <ProjectColumnsManager projectSlug={slug} columns={columns} />
+        </>
+    );
+}
+
+function renderLabels(slug: string, canManage: boolean, membershipReady: boolean) {
+    if (!membershipReady) {
+        return <SkeletonLine className="h-24 w-full" />;
+    }
+    if (!canManage) {
+        return <ReadOnlyNote>You need admin access to manage labels.</ReadOnlyNote>;
+    }
+    return <LabelManager projectSlug={slug} />;
+}
+
+interface ReadOnlyNoteProps {
+    children: ReactNode;
+}
+
+function ReadOnlyNote({ children }: ReadOnlyNoteProps) {
+    return (
+        <section className="space-y-1 rounded border border-border p-4">
+            <h2 className="text-lg font-semibold">Read-only</h2>
+            <p className="text-sm text-muted-foreground">{children}</p>
+        </section>
     );
 }
 
@@ -120,3 +223,7 @@ function ProjectNameSection({ slug, name }: ProjectNameSectionProps) {
         </section>
     );
 }
+
+// Local type alias so renderGeneral's signature can name the columns prop
+// without importing Column here.
+type SettingsColumns = ComponentProps<typeof ProjectColumnsManager>['columns'];

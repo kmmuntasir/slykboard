@@ -1,8 +1,8 @@
-// F14 T9 / F27: ProjectSettingsPage test.
-// Renders LabelManager with the slug extracted from the route via MemoryRouter.
-// Mocks the project + mutation hooks so no QueryClientProvider is needed.
-// Also covers the admin-only ProjectNameSection rename behavior: pre-fill,
-// edit, trimmed Save, disabled-on-empty, and the isAdmin gate.
+// F14 T9 / F27 / SLYK-03 T2: ProjectSettingsPage test.
+// Two-column settings page — sidebar (General/Members/Labels) drives the right
+// content pane. Management UI is gated on the broadened (Platform Admin OR
+// Project Admin) gate via useCurrentProjectMembership; membership loading is
+// read separately from useProjectMembers so management UI never flashes.
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -10,8 +10,9 @@ import { ProjectSettingsPage } from './ProjectSettingsPage';
 import type { Project } from '@/types/project';
 
 // Capture the slug prop the page passes to LabelManager, and share a single
-// assertable mutation mock across renders/tests.
-const { captured, mockState, updateMut } = vi.hoisted(() => ({
+// assertable mutation mock across renders/tests. Membership state is controlled
+// per-case via membershipState (isProjectAdmin) and membershipLoading.
+const { captured, mockState, updateMut, membershipState } = vi.hoisted(() => ({
     captured: { slug: '' as string },
     mockState: {
         project: {
@@ -32,6 +33,10 @@ const { captured, mockState, updateMut } = vi.hoisted(() => ({
         mutateAsync: vi.fn(),
         isPending: false,
         error: null as Error | null,
+    },
+    membershipState: {
+        isProjectAdmin: false,
+        isLoading: false,
     },
 }));
 
@@ -65,6 +70,13 @@ vi.mock('@/hooks/useUpdateProject', () => ({
     useUpdateProject: () => updateMut,
 }));
 
+// Single source of truth for the membership hooks. useProjectMembers drives the
+// loading branch; useCurrentProjectMembership drives the project-admin gate.
+vi.mock('@/hooks/useProjectMembers', () => ({
+    useProjectMembers: () => ({ isLoading: membershipState.isLoading }),
+    useCurrentProjectMembership: () => ({ isProjectAdmin: membershipState.isProjectAdmin }),
+}));
+
 function renderAt(path: string) {
     return render(
         <MemoryRouter initialEntries={[path]}>
@@ -81,41 +93,110 @@ describe('ProjectSettingsPage', () => {
         updateMut.isPending = false;
         updateMut.error = null;
         mockState.isAdmin = true;
+        membershipState.isProjectAdmin = false;
+        membershipState.isLoading = false;
     });
 
-    it('renders the heading + LabelManager', () => {
+    it('renders the heading + all three sidebar sections', () => {
         renderAt('/projects/SLYK/settings');
 
         expect(screen.getByRole('heading', { name: 'Project Settings' })).toBeInTheDocument();
-        expect(screen.getByTestId('label-manager')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'General' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Members' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument();
     });
 
-    it('threads the slug from the route into LabelManager', () => {
-        renderAt('/projects/ACME/settings');
-
-        expect(captured.slug).toBe('ACME');
-        expect(screen.getByText('LabelManager for ACME')).toBeInTheDocument();
-    });
-
-    it('renders the columns manager when admin', () => {
+    it('defaults to the General section with name + columns visible (admin)', () => {
         renderAt('/projects/SLYK/settings');
 
+        // General is active and marked aria-current.
+        const general = screen.getByRole('button', { name: 'General' });
+        expect(general).toHaveAttribute('aria-current', 'page');
+
+        expect(screen.getByLabelText('Project name')).toBeInTheDocument();
         expect(screen.getByTestId('columns-manager')).toBeInTheDocument();
     });
 
-    it('hides admin-only sections for non-admins', () => {
-        mockState.isAdmin = false;
+    it("clicking 'Members' switches to the Members pane (Link, not embed)", () => {
         renderAt('/projects/SLYK/settings');
 
+        fireEvent.click(screen.getByRole('button', { name: 'Members' }));
+
+        // The navigation link to the members page is shown.
+        const link = screen.getByRole('link', { name: 'Manage members' });
+        expect(link).toHaveAttribute('href', '/projects/SLYK/members');
+        // No manager surfaces bleed through into this pane.
         expect(screen.queryByTestId('columns-manager')).toBeNull();
-        mockState.isAdmin = true;
+        expect(screen.queryByTestId('label-manager')).toBeNull();
+    });
+
+    it("clicking 'Labels' shows LabelManager and threads the route slug", () => {
+        captured.slug = '';
+        renderAt('/projects/ACME/settings');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+
+        expect(screen.getByTestId('label-manager')).toBeInTheDocument();
+        expect(captured.slug).toBe('ACME');
+    });
+
+    it('gate (canManage) shows management UI for a project admin', () => {
+        // Platform-admin false, project-admin true → canManage true.
+        mockState.isAdmin = false;
+        membershipState.isProjectAdmin = true;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.getByLabelText('Project name')).toBeInTheDocument();
+        expect(screen.getByTestId('columns-manager')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+        expect(screen.getByTestId('label-manager')).toBeInTheDocument();
+    });
+
+    it('gate hides management UI for a non-admin (read-only), but nav still works', () => {
+        mockState.isAdmin = false;
+        membershipState.isProjectAdmin = false;
+        renderAt('/projects/SLYK/settings');
+
+        // Management controls are suppressed; section is read-only.
+        expect(screen.queryByLabelText('Project name')).toBeNull();
+        expect(screen.queryByTestId('columns-manager')).toBeNull();
+        expect(screen.getByText(/admin access to rename/i)).toBeInTheDocument();
+
+        // Labels also read-only.
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+        expect(screen.queryByTestId('label-manager')).toBeNull();
+
+        // But navigation across all three sections still works.
+        fireEvent.click(screen.getByRole('button', { name: 'Members' }));
+        expect(screen.getByRole('link', { name: 'Manage members' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'General' }));
+        expect(screen.getByRole('button', { name: 'General' })).toHaveAttribute(
+            'aria-current',
+            'page',
+        );
+    });
+
+    it('does not flash management UI while membership is loading', () => {
+        // Platform-admin false with membership still loading → no management UI,
+        // no read-only note yet (still resolving).
+        mockState.isAdmin = false;
+        membershipState.isProjectAdmin = false;
+        membershipState.isLoading = true;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.queryByLabelText('Project name')).toBeNull();
+        expect(screen.queryByTestId('columns-manager')).toBeNull();
+        expect(screen.queryByText(/admin access/i)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
+        expect(screen.queryByTestId('label-manager')).toBeNull();
     });
 
     it('renders the name input pre-filled with the project name (admin)', () => {
         renderAt('/projects/SLYK/settings');
 
         const input = screen.getByLabelText('Project name') as HTMLInputElement;
-        expect(input).toBeInTheDocument();
         expect(input.value).toBe(mockState.project.name);
 
         fireEvent.change(input, { target: { value: 'New Name' } });
@@ -147,17 +228,4 @@ describe('ProjectSettingsPage', () => {
             expect(screen.getByRole('button', { name: 'Save Name' })).toBeDisabled();
         },
     );
-
-    it('renders the name section for admins', () => {
-        renderAt('/projects/SLYK/settings');
-
-        expect(screen.getByLabelText('Project name')).toBeInTheDocument();
-    });
-
-    it('hides the name section for non-admins', () => {
-        mockState.isAdmin = false;
-        renderAt('/projects/SLYK/settings');
-
-        expect(screen.queryByLabelText('Project name')).toBeNull();
-    });
 });
