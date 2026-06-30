@@ -6,6 +6,7 @@ import type {
   CreatedMember,
   MemberRoleUpdateResult,
   MemberRemoveResult,
+  LookupResult,
 } from '@/types/member';
 
 // SLYK-01 Task N — typed client for the project member-management endpoints
@@ -69,4 +70,14 @@ export function removeMember(slug: string, userId: string): Promise<MemberRemove
   return apiFetch<MemberRemoveResult>(`/projects/${slug}/members/${userId}`, {
     method: 'DELETE',
   });
+}
+
+// SLYK-02 T4 — GET /projects/:slug/members/lookup — read-only email probe for
+// the Add-Member modal auto-search. Admins-only server-side. Returns 200 in both
+// branches (found / not-found) so callers branch on the response shape, never on
+// a thrown error. `email` is URL-encoded as a query param.
+export function lookupMember(slug: string, email: string): Promise<LookupResult> {
+  return apiFetch<LookupResult>(
+    `/projects/${slug}/members/lookup?email=${encodeURIComponent(email)}`,
+  );
 }

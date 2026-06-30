@@ -6,12 +6,20 @@ import {
     createAndAddMember,
     updateMemberRole,
     removeMember,
+    lookupMember,
 } from '@/api/members';
 import { memberKeys, projectKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useDebouncedValue } from './useDebouncedValue';
 import type { Member, MemberRole } from '@/types/member';
 
 const STALE_TIME_MS = 30 * 1000; // 30s — matches the app's board polling cadence.
+
+// SLYK-02 T4 — lookup debounce + validity gate. The query is enabled ONLY for
+// a syntactically valid email so partial/invalid typing never hits the network.
+const LOOKUP_DEBOUNCE_MS = 300;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOOKUP_STALE_TIME_MS = 15 * 1000;
 
 // SLYK-01 Task N — TanStack Query hooks for the project member-management API.
 // Mutations invalidate the roster (and the project detail cache, since membership
@@ -89,4 +97,23 @@ function invalidateMembership(queryClient: ReturnType<typeof useQueryClient>, sl
     void queryClient.invalidateQueries({ queryKey: memberKeys.forProject(slug) });
     // Membership changes affect project access visibility — refresh project detail.
     void queryClient.invalidateQueries({ queryKey: projectKeys.detail(slug) });
+}
+
+// SLYK-02 T4 — debounced read-only email lookup powering the Add-Member modal's
+// auto-search. The email is debounced (LOOKUP_DEBOUNCE_MS) and the query is
+// enabled ONLY once the debounced value is a valid email, so partial/invalid
+// typing never fires a request. retry:false so a 4xx (e.g. 403 access denial)
+// never auto-retries. Query errors are NOT globally toasted (only mutations are
+// — lib/queryClient.ts), so inline handling in the modal stays clean. Keyed on
+// [slug, debouncedEmail] so React Query discards stale lookups as the user types.
+export function useLookupMember(slug: string, email: string) {
+    const debouncedEmail = useDebouncedValue(email.trim(), LOOKUP_DEBOUNCE_MS);
+    const enabled = EMAIL_PATTERN.test(debouncedEmail);
+    return useQuery({
+        queryKey: memberKeys.lookup(slug, debouncedEmail),
+        queryFn: () => lookupMember(slug, debouncedEmail),
+        enabled,
+        staleTime: LOOKUP_STALE_TIME_MS,
+        retry: false,
+    });
 }

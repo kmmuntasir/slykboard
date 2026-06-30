@@ -40,6 +40,11 @@ export const timerKeys = {
 export const memberKeys = {
   all: ['project-members'] as const,
   forProject: (slug: string) => [...memberKeys.all, slug] as const,
+  // SLYK-02 T4: per-(slug, email) member lookup cache key for the Add-Member
+  // modal auto-search. `email` is a key segment so React Query naturally discards
+  // stale lookups as the user types.
+  lookup: (slug: string, email: string) =>
+    [...memberKeys.forProject(slug), 'lookup', email] as const,
 };
 
 // F49: project-scoped report cache keys. `slug` is a key segment so cache does

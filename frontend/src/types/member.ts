@@ -54,3 +54,19 @@ export interface MemberRoleUpdateResult {
 export interface MemberRemoveResult {
   userId: string;
 }
+
+// SLYK-02 T4 — GET /projects/:slug/members/lookup result. The endpoint returns
+// 200 in both branches; `user` is present only when `exists` is true. `user`
+// carries the minimal non-revealing payload (no tokenVersion/googleId/blocked).
+export interface LookupUser {
+  id: string;
+  email: string;
+  fullName: string;
+  displayName: string | null;
+  isPlatformAdmin: boolean;
+}
+
+export interface LookupResult {
+  exists: boolean;
+  user?: LookupUser;
+}
