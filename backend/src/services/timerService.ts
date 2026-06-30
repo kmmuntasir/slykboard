@@ -28,16 +28,20 @@ function isUniqueViolation(err: unknown): boolean {
 export async function startTimer(args: {
   ticketId: string;
   userId: string;
-}): Promise<{ entry: TimeEntry; serverNow: string }> {
+}): Promise<{ entry: TimeEntry; serverNow: string; autoStoppedEntry: TimeEntry | null }> {
   const { ticketId, userId } = args;
 
   return db
     .transaction(async (tx) => {
-      // (a) Auto-stop the user's prior open timer (user-scoped, global — any ticket).
-      await tx
+      // (a) Auto-stop the user's prior open timer (user-scoped, global — any
+      // ticket). SLYK-12: capture the stopped row via .returning() so callers
+      // can refresh the affected ticket's history list.
+      const [stopped] = await tx
         .update(timeEntries)
         .set({ endTime: new Date() })
-        .where(and(eq(timeEntries.userId, userId), isNull(timeEntries.endTime)));
+        .where(and(eq(timeEntries.userId, userId), isNull(timeEntries.endTime)))
+        .returning();
+      const autoStoppedEntry: TimeEntry | null = stopped ?? null;
 
       // (b) Verify the ticket exists (and is not soft-deleted) before inserting.
       const ticketRows = await tx
@@ -56,7 +60,7 @@ export async function startTimer(args: {
         .insert(timeEntries)
         .values({ userId, ticketId, startTime: new Date() })
         .returning();
-      return inserted!;
+      return { entry: inserted!, autoStoppedEntry };
     })
     .catch((err: unknown) => {
       if (isUniqueViolation(err)) {
@@ -64,7 +68,11 @@ export async function startTimer(args: {
       }
       throw err;
     })
-    .then((entry) => ({ entry, serverNow: new Date().toISOString() }));
+    .then(({ entry, autoStoppedEntry }) => ({
+      entry,
+      autoStoppedEntry,
+      serverNow: new Date().toISOString(),
+    }));
 }
 
 // F20 §9.5: stop the active timer on a ticket. Admin may stop any; a Member may
