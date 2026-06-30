@@ -5,11 +5,11 @@ import { RequireAuth } from '@/components/RequireAuth';
 import { RequirePlatformAdmin } from '@/components/RequirePlatformAdmin';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 import { BoardPage, TicketDetailRoute } from '@/pages/BoardPage';
+import { ComingSoonPage } from '@/pages/ComingSoonPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { ProjectSettingsPage } from '@/pages/ProjectSettingsPage';
 import { ProjectMembersPage } from '@/pages/ProjectMembersPage';
 import { ReportsPage } from '@/pages/ReportsPage';
-import { SettingsPage } from '@/pages/SettingsPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
@@ -110,8 +110,13 @@ export const router = createBrowserRouter([
                                     {
                                         path: '/settings',
                                         element: <RequirePlatformAdmin />,
-                                        children: [{ index: true, element: <SettingsPage /> }],
+                                        children: [
+                                            { index: true, element: <ComingSoonPage title='Settings' /> },
+                                        ],
                                     },
+                                    // SLYK-03: account settings placeholder — authenticated only,
+                                    // no platform-admin guard. Real implementation to follow.
+                                    { path: '/account', element: <ComingSoonPage title='Account Settings' /> },
                                     // SLYK-F28: dedicated 403 page, reachable directly.
                                     { path: '/forbidden', element: <ForbiddenPage /> },
                                     { path: '*', element: <NotFoundPage /> },
