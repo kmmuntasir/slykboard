@@ -12,6 +12,7 @@ export interface TimeEntry {
 export interface StartTimerResponse {
   entry: TimeEntry;
   serverNow: string;
+  autoStoppedEntry?: TimeEntry | null;
 }
 
 export interface StopTimerResponse {
