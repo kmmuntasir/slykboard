@@ -7,10 +7,14 @@ import { success } from '../utils/envelope';
 import { slugParamSchema } from './projects.schema';
 import {
     createMemberSchema,
+    addMemberBody,
     memberUserIdParamSchema,
     updateMemberRoleSchema,
 } from './projectMembers.schema';
 import * as membershipService from '../services/membershipService';
+import { findUserByEmail, findUserById } from '../services/userService';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
 
 // SLYK-01 Task L — project member-management routes. Bare-mounted on
 // projectsRouter (mirrors projectLabelsRouter / projectReportsRouter) so the
@@ -42,6 +46,42 @@ projectMembersRouter.get(
     async (req, res) => {
         const members = await membershipService.listProjectMembers(req.project!.id);
         res.json(success(members));
+    },
+);
+
+// POST /:slug/members — add an EXISTING platform user to the project (resolved
+// by userId directly or by email via userService.findUserByEmail). Distinct from
+// POST /:slug/members/new, which provisions a brand-new user. Member-not-found
+// surfaces as NOT_FOUND 'User not found' (non-revealing w.r.t. project existence).
+// addExistingMember is idempotent on the composite-PK unique violation — adding an
+// existing member updates their role and returns the row.
+projectMembersRouter.post(
+    '/:slug/members',
+    authenticate,
+    validateRequest({ params: slugParamSchema, body: addMemberBody }),
+    requireProjectMember(),
+    requireProjectAdmin(),
+    async (req, res) => {
+        const body = req.body as {
+            email?: string;
+            userId?: string;
+            role?: 'PROJECT_ADMIN' | 'MEMBER';
+        };
+        // Resolve the target user. Direct lookup by userId takes the fast path;
+        // email lookup falls back to userService.findUserByEmail. Either way a
+        // missing user surfaces the non-revealing NOT_FOUND 'User not found'.
+        const target = body.userId
+            ? await findUserById(body.userId)
+            : await findUserByEmail(body.email!);
+        if (!target) {
+            throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+        }
+        const membership = await membershipService.addExistingMember(
+            req.project!.id,
+            target.id,
+            body.role,
+        );
+        res.status(201).json(success(membership));
     },
 );
 

@@ -34,6 +34,16 @@ export type ProjectMemberRow = {
   createdAt: Date;
 };
 
+// Membership row shape returned by addExistingMember (POST /:slug/members — add an
+// EXISTING user to a project). Mirrors the `membership` sub-object of CreatedMember
+// so both add paths surface the same shape to the frontend.
+export type MembershipRow = {
+  projectId: string;
+  userId: string;
+  role: ProjectMemberRole;
+  createdAt: Date;
+};
+
 // Result of createAndAddMember — the freshly inserted user + their membership row.
 export type CreatedMember = {
   user: {
@@ -184,6 +194,51 @@ export async function setMemberRole(
   if (updated.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
   }
+}
+
+// 6c. Add an EXISTING platform user to a project (POST /:slug/members — the
+// add-existing path, complementing createAndAddMember which provisions a brand-new
+// user). Idempotent on the 23505 unique-violation exactly like addMember: if the
+// user is already a member, the existing row's role is updated and returned (net
+// effect is an idempotent upsert of the role). Returns the membership row in the
+// same shape as createAndAddMember's `membership` sub-object.
+export async function addExistingMember(
+  projectId: string,
+  userId: string,
+  role: ProjectMemberRole = 'MEMBER',
+): Promise<MembershipRow> {
+  const columns = {
+    projectId: projectMembers.projectId,
+    userId: projectMembers.userId,
+    role: projectMembers.role,
+    createdAt: projectMembers.createdAt,
+  };
+
+  return db.transaction(async (tx) => {
+    try {
+      const [inserted] = await tx
+        .insert(projectMembers)
+        .values({ projectId, userId, role })
+        .returning(columns);
+      if (inserted) return inserted;
+    } catch (cause) {
+      // 23505 = unique_violation on the composite PK (projectId, userId) — the
+      // membership already exists. Idempotent upsert: update the role on the
+      // existing row and return it. Any other error is rethrown.
+      const code = (cause as { code?: string })?.code;
+      if (code !== PG_UNIQUE_VIOLATION) throw cause;
+      const [updated] = await tx
+        .update(projectMembers)
+        .set({ role })
+        .where(
+          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+        )
+        .returning(columns);
+      if (updated) return updated;
+    }
+    // Defense in depth — returning() is empty only on a catastrophic driver error.
+    throw new AppError(ErrorCode.INTERNAL_ERROR, 'Failed to add member');
+  });
 }
 
 // 7. Provisioning path for Member Management. ONE db.transaction: domain-gate the

@@ -34,6 +34,24 @@ export const updateMemberRoleSchema = z.object({
     role: memberRoleSchema,
 });
 
+// POST /:slug/members body — add an EXISTING platform user to the project
+// (distinct from POST /:slug/members/new which provisions a brand-new user).
+// Caller supplies EITHER an email OR a userId, plus an optional target role
+// (defaults to 'MEMBER' in the service when omitted). The refine guards enforce
+// the mutual exclusivity + presence invariants at the edge.
+export const addMemberBody = z
+    .object({
+        email: z.email().optional(),
+        userId: z.uuid().optional(),
+        role: memberRoleSchema.optional(),
+    })
+    .refine((b) => Boolean(b.email) || Boolean(b.userId), {
+        message: 'Provide either email or userId',
+    })
+    .refine((b) => !(b.email && b.userId), {
+        message: 'Provide email OR userId, not both',
+    });
+
 // :slug + :userId path params for PATCH/DELETE member routes. Reuses the
 // project slug param shape so an invalid slug is a 400 (not a 404/403).
 export const memberUserIdParamSchema = slugParamSchema.extend({
@@ -44,3 +62,4 @@ export type MemberEmailBody = z.infer<typeof memberEmailSchema>;
 export type CreateMemberBody = z.infer<typeof createMemberSchema>;
 export type UpdateMemberRoleBody = z.infer<typeof updateMemberRoleSchema>;
 export type MemberUserIdParam = z.infer<typeof memberUserIdParamSchema>;
+export type AddMemberBody = z.infer<typeof addMemberBody>;
