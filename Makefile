@@ -158,18 +158,20 @@ env-force: ## Add missing keys from .env.example into .env (preserves existing v
 	@echo "  merged missing keys into backend/.env + frontend/.env (existing values preserved)"
 	@echo "\n\033[33mIf JWT_SECRET was added, fill GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in backend/.env\nand VITE_GOOGLE_CLIENT_ID in frontend/.env, then \`make dev\`.\033[0m"
 
-bootstrap: ## Fresh-clone bootstrap: node check -> install -> env -> DB -> migrate
-	@echo "\n\033[1m[1/6] Node version\033[0m"
+bootstrap: ## Fresh-clone bootstrap: node check -> install -> env -> DB -> migrate -> seed PA
+	@echo "\n\033[1m[1/7] Node version\033[0m"
 	@$(MAKE) --no-print-directory check-node
-	@echo "\n\033[1m[2/6] Install dependencies\033[0m"
+	@echo "\n\033[1m[2/7] Install dependencies\033[0m"
 	npm install
-	@echo "\n\033[1m[3/6] Environment files\033[0m"
+	@echo "\n\033[1m[3/7] Environment files\033[0m"
 	@$(MAKE) --no-print-directory env
-	@echo "\n\033[1m[4/6] Start Postgres (docker)\033[0m"
+	@echo "\n\033[1m[4/7] Start Postgres (docker)\033[0m"
 	docker compose up -d --wait
-	@echo "\n\033[1m[5/6] Apply migrations\033[0m"
+	@echo "\n\033[1m[5/7] Apply migrations\033[0m"
 	$(MAKE) --no-print-directory migrate
-	@echo "\n\033[1m[6/6] Done\033[0m"
+	@echo "\n\033[1m[6/7] Seed bootstrap Platform Admin\033[0m"
+	cd backend && npx tsx src/db/bootstrap-admin.ts
+	@echo "\n\033[1m[7/7] Done\033[0m"
 	@echo "\n\033[32mSlykboard ready. Run \`make dev\` to start.\033[0m\n"
 
 # --- Help ---------------------------------------------------------------------

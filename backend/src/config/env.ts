@@ -3,6 +3,7 @@ import 'dotenv/config';
 export interface Config {
   port: number;
   frontendUrl: string;
+  frontendUrls: string[];
   nodeEnv: string;
   databaseUrl: string;
   directDatabaseUrl: string;
@@ -55,6 +56,7 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(envSource.PORT ?? 3000),
     frontendUrl: envSource.FRONTEND_URL,
+    frontendUrls: envSource.FRONTEND_URL.split(',').map((u) => u.trim()).filter(Boolean),
     nodeEnv,
     databaseUrl: envSource.DATABASE_URL,
     jwtSecret: envSource.JWT_SECRET,

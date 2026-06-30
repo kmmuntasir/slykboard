@@ -14,7 +14,6 @@ import { notFound } from './middleware/notFound';
 import { errorHandler } from './middleware/errorMiddleware';
 import { pingRouter } from './middleware/pingRoute';
 import { authRouter } from './routes/auth.routes';
-import { ensureBootstrapAdmin } from './services/bootstrapService';
 import { projectsRouter } from './routes/projects.routes';
 import { ticketsRouter } from './routes/tickets.routes';
 import { timerRouter } from './routes/timer.routes';
@@ -31,7 +30,7 @@ app.use(helmet());
 // 2. CORS — locked to FRONTEND_URL (D8). credentials:true enables future HttpOnly cookies.
 app.use(
   cors({
-    origin: env.frontendUrl,
+    origin: env.frontendUrls,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -125,13 +124,6 @@ async function start(): Promise<void> {
       logger.error({ err }, '[slykboard-backend] migrations failed on boot');
       process.exit(1);
     }
-  }
-
-  try {
-    await ensureBootstrapAdmin();
-  } catch (err) {
-    logger.error({ err }, '[slykboard-backend] bootstrap admin failed on boot');
-    process.exit(1);
   }
 
   const server = app.listen(env.port, () => {
