@@ -4,9 +4,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { decodeJwt } from 'jose';
 import type { AuthResponse } from '@/api/auth';
 import { fetchMe, logout as logoutApi } from '@/api/auth';
-import { registerLogoutHandlers } from '@/api/client';
+import { registerLogoutHandlers, registerForbiddenHandler } from '@/api/client';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
+import { toast } from '@/hooks/useToast';
 import type { AuthUser } from '@/stores/useAuthStore';
 
 const REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // refresh if <5min to expiry
@@ -70,6 +71,28 @@ export function useAuthSync(): void {
       },
     });
   }, [clear, navigate, queryClient, setUser]);
+
+  // SLYK-01 Task N: register the centralized non-revealing 403 handler. The
+  // low-level client invokes this on a project-access-denial FORBIDDEN (the
+  // byte-identical 'You do not have access to this project') before rejecting the
+  // caller's promise. We surface the server's verbatim message (single toast
+  // surface) and bounce to the project chooser. Lives here (not in client.ts) to
+  // keep the low-level client free of router/sonator deps, mirroring the 401
+  // handler registration above. Fallback to window.location if navigate throws
+  // (e.g. called outside a mounted router context).
+  useEffect(() => {
+    registerForbiddenHandler({
+      onProjectAccessDenied: (message: string) => {
+        toast.error(message);
+        try {
+          navigate('/projects', { replace: true });
+        } catch {
+          window.location.assign('/projects');
+        }
+      },
+    });
+    return () => registerForbiddenHandler(null);
+  }, [navigate]);
 
   // Near-expiry proactive refresh. Runs the check once on mount and on each poll —
   // this is the single session-confirmation path, so a token with hours left skips

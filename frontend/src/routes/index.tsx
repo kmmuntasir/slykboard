@@ -7,6 +7,7 @@ import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 import { BoardPage, TicketDetailRoute } from '@/pages/BoardPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { ProjectSettingsPage } from '@/pages/ProjectSettingsPage';
+import { ProjectMembersPage } from '@/pages/ProjectMembersPage';
 import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -86,6 +87,15 @@ export const router = createBrowserRouter([
                                     {
                                         path: '/projects/:slug/settings',
                                         element: <ProjectSettingsPage />,
+                                    },
+                                    // SLYK-01 Task N: project member management.
+                                    // Same RequireAuth + AppLayout wrapper as the
+                                    // other /projects/:slug routes; non-member
+                                    // denial is centralized in apiFetch (403 →
+                                    // /projects).
+                                    {
+                                        path: '/projects/:slug/members',
+                                        element: <ProjectMembersPage />,
                                     },
                                     // F49: Reports is project-scoped. Non-member
                                     // denial is handled in-page (D7: redirect

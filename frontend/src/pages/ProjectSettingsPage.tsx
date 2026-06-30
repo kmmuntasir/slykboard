@@ -2,7 +2,7 @@
 // Hosts the project rename + column management surfaces (admin-only) and the
 // LabelManager. Project-scoped data gets a project-scoped URL.
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { useProject } from '@/hooks/useProjects';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
@@ -61,6 +61,19 @@ function SettingsBody({ slug }: SettingsBodyProps) {
             )}
 
             <LabelManager projectSlug={slug} />
+
+            <section className="space-y-2 rounded border border-border p-4">
+                <h2 className="text-lg font-semibold">Members</h2>
+                <p className="text-sm text-muted-foreground">
+                    Manage who can access this project and their roles.
+                </p>
+                <Link
+                    to={`/projects/${slug}/members`}
+                    className="inline-block rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                    Manage members
+                </Link>
+            </section>
         </div>
     );
 }

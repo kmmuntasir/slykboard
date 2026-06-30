@@ -35,6 +35,13 @@ export const timerKeys = {
   entries: (id: string) => [...timerKeys.all, 'entries', id] as const,
 };
 
+// SLYK-01 Task N: project-scoped member roster cache key. `slug` is a key
+// segment so the roster cache does not leak across projects on switch.
+export const memberKeys = {
+  all: ['project-members'] as const,
+  forProject: (slug: string) => [...memberKeys.all, slug] as const,
+};
+
 // F49: project-scoped report cache keys. `slug` is a key segment so cache does
 // not leak across projects on switch (stale-cross-project-data edge case).
 export const reportKeys = {

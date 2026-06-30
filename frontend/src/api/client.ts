@@ -35,6 +35,32 @@ export function registerLogoutHandlers(handlers: LogoutHandlers): void {
   logoutHandlers = handlers;
 }
 
+// SLYK-01 Task N: centralized non-revealing 403 handler. A project-access denial
+// (requireProjectMember / requireProjectAdmin / resolveProject) is byte-identical
+// FORBIDDEN 'You do not have access to this project' (anti-oracle: unknown slug
+// and non-member are indistinguishable). Registered by useAuthSync (which has the
+// router's navigate + the toast surface) so the low-level client stays free of
+// router/sonator imports. The client invokes this BEFORE rejecting the caller's
+// promise; the caller still sees an ApiClientError so query/mutation handlers
+// resolve normally. This does NOT touch the 401 refresh cycle — 403 is an
+// authorization failure, not an authentication one.
+const PROJECT_ACCESS_DENIED_MESSAGE = 'You do not have access to this project';
+
+interface ForbiddenHandler {
+  onProjectAccessDenied: (message: string) => void;
+}
+let forbiddenHandler: ForbiddenHandler | null = null;
+export function registerForbiddenHandler(handler: ForbiddenHandler | null): void {
+  forbiddenHandler = handler;
+}
+
+// Project-scoped request path (/api is the apiFetch prefix; `path` here is the
+// suffix passed to apiFetch, e.g. '/projects/:slug/members'). Matches any
+// /projects/:slug... route so member/label/report/board denials all funnel here.
+function isProjectScopedPath(path: string): boolean {
+  return /^\/projects\/[^/]+/.test(path);
+}
+
 // F07 T2 (H2): coalesced refresh — N concurrent 401s await ONE refresh promise.
 // On success every waiter retries once; on failure the first loser triggers a
 // single logout() and all throw. logoutFired resets per refresh cycle so a later
@@ -110,12 +136,25 @@ export async function apiFetch<T>(path: string, init?: FetchInit): Promise<T> {
       // Non-JSON error (e.g. proxy 502). Synthesize a generic body.
     }
     const code = body?.error?.code ?? 'INTERNAL_ERROR';
-    throw new ApiClientError(
-      body?.error?.message ?? `Request failed: ${response.status}`,
-      response.status,
-      code,
-      body?.error?.details,
-    );
+    const message = body?.error?.message ?? `Request failed: ${response.status}`;
+
+    // SLYK-01 Task N: central non-revealing 403 redirect. ONLY the byte-identical
+    // project-access-denial message triggers the bounce — other project-scoped
+    // 403s (wrong-domain email on member create, platform-admin-required) carry
+    // different messages and MUST propagate so callers surface them inline. This
+    // runs AFTER the 401 interceptor (unchanged) and never invokes the refresh
+    // cycle; 403 ≠ 401.
+    if (
+      response.status === 403 &&
+      code === 'FORBIDDEN' &&
+      message === PROJECT_ACCESS_DENIED_MESSAGE &&
+      isProjectScopedPath(path) &&
+      forbiddenHandler
+    ) {
+      forbiddenHandler.onProjectAccessDenied(message);
+    }
+
+    throw new ApiClientError(message, response.status, code, body?.error?.details);
   }
 
   // F17 D10: 204 No Content has an empty body — do NOT JSON-parse.
