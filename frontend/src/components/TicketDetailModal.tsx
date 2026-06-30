@@ -214,7 +214,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 titleId="ticket-detail-title"
                 title={modalTitle}
                 blockBackdropClose={isDirty}
-                size="xl"
+                size="full"
             >
                 {modalBody}
             </Modal>
