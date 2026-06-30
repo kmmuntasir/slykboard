@@ -23,6 +23,20 @@ function mockUseLabels(overrides: Partial<UseQueryResult<Label[]>> = {}): UseQue
     } as unknown as UseQueryResult<Label[]>;
 }
 
+// SLYK-08 B1-3: error-state fixture for the (not-yet-live) FE-1 error branch.
+// useLabels (TanStack Query) exposes isError + refetch; the production
+// component currently discards them, so these cases stay SKIPPED until the
+// branch is implemented.
+function mockUseLabelsError(): UseQueryResult<Label[]> {
+    return {
+        data: undefined,
+        isLoading: false,
+        error: new Error('Failed to load labels'),
+        isError: true,
+        refetch: vi.fn(),
+    } as unknown as UseQueryResult<Label[]>;
+}
+
 describe('LabelMultiSelect', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -96,6 +110,34 @@ describe('LabelMultiSelect', () => {
 
     it('disables the trigger while labels are loading', () => {
         vi.mocked(useLabels).mockReturnValue(mockUseLabels({ data: undefined, isLoading: true }));
+        render(<LabelMultiSelect projectSlug="proj" value={[]} onChange={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Labels' })).toBeDisabled();
+    });
+
+    // SLYK-08 B1-3: FE-1 error-state regression guards. Pre-staged as
+    // skipped/todo because the production component does not yet expose the
+    // isError/refetch branch. Flip to `it(...)` once FE-1 lands.
+    it.skip('renders a distinct error message (not "No labels defined")', () => {
+        vi.mocked(useLabels).mockReturnValue(mockUseLabelsError());
+        render(<LabelMultiSelect projectSlug="proj" value={[]} onChange={vi.fn()} />);
+        const message = screen.queryByText(/fail|error/i);
+        expect(message).not.toBeNull();
+        expect(message?.textContent).not.toBe('No labels defined');
+    });
+
+    it.skip('exposes a retry control wired to refetch', () => {
+        const refetch = vi.fn();
+        vi.mocked(useLabels).mockReturnValue({
+            ...mockUseLabelsError(),
+            refetch,
+        });
+        render(<LabelMultiSelect projectSlug="proj" value={[]} onChange={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: /retry|try again/i }));
+        expect(refetch).toHaveBeenCalledTimes(1);
+    });
+
+    it.skip('disables the trigger while isError', () => {
+        vi.mocked(useLabels).mockReturnValue(mockUseLabelsError());
         render(<LabelMultiSelect projectSlug="proj" value={[]} onChange={vi.fn()} />);
         expect(screen.getByRole('button', { name: 'Labels' })).toBeDisabled();
     });
