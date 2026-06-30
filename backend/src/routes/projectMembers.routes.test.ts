@@ -39,12 +39,20 @@ vi.mock('../db/client', () => ({
 const membershipMock = vi.hoisted(() => ({
   isProjectMember: vi.fn(),
   getMemberRole: vi.fn(),
+  // The roster route calls listProjectMembers; mock so unrelated suites stay green.
+  listProjectMembers: vi.fn(),
+  // SLYK-05 Task-10: DELETE/PATCH member routes call these. Mocked per-test so
+  // the real middleware/handler chain runs without a live DB. Cleared by the
+  // suite-wide vi.clearAllMocks() in beforeEach like the rest of the bag.
+  removeMember: vi.fn(),
+  setMemberRole: vi.fn(),
 }));
 vi.mock('../services/membershipService', () => ({
   isProjectMember: membershipMock.isProjectMember,
   getMemberRole: membershipMock.getMemberRole,
-  // The roster route calls listProjectMembers; mock so unrelated suites stay green.
-  listProjectMembers: vi.fn(),
+  listProjectMembers: membershipMock.listProjectMembers,
+  removeMember: membershipMock.removeMember,
+  setMemberRole: membershipMock.setMemberRole,
 }));
 // requireProjectMember imports getProjectBySlug from projectService.
 vi.mock('../services/projectService', () => ({
@@ -78,8 +86,22 @@ beforeEach(() => {
   membershipMock.getMemberRole.mockResolvedValue('PROJECT_ADMIN');
 });
 
+// Acting user id. Must be a valid UUID: the DELETE/PATCH :userId path params
+// are validated with z.uuid() (memberUserIdParamSchema), and the self-remove /
+// self-role-change FORBIDDEN checks compare URL :userId === req.user.id, so the
+// JWT `sub` and the self-target URL must BOTH be a UUID. The existing /lookup
+// suite never asserts on `sub`, so widening it from 'u1' to a UUID is safe.
+const ACTING_USER_ID = '911c0405-9761-441d-89d6-c1a64989c160';
+const OTHER_USER_ID = 'af07cbb8-6820-4cf9-a20f-8572f5bb37a7';
+const GHOST_USER_ID = '3fd6227c-7245-4d51-aa36-cd1b3f995c39';
+
 function tokenFor(isPlatformAdmin: boolean) {
-  return signJwt({ sub: 'u1', email: 'admin@example.com', pa: isPlatformAdmin, ver: 0 });
+  return signJwt({
+    sub: ACTING_USER_ID,
+    email: 'admin@example.com',
+    pa: isPlatformAdmin,
+    ver: 0,
+  });
 }
 
 // A full ProjectRow shape (enough for requireProjectMember to attach).
@@ -243,5 +265,131 @@ describe('GET /api/projects/:slug/members/lookup (SLYK-02 T1)', () => {
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
     expect(mockedFindUserByEmail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SLYK-05 Task-10: DELETE /api/projects/:slug/members/:userId
+// Removes a member. Admins-only (PA or PROJECT_ADMIN). removeMember throws
+// FORBIDDEN on self-remove and NOT_FOUND 'User not found' on a missing row.
+// ---------------------------------------------------------------------------
+
+describe('DELETE /api/projects/:slug/members/:userId (SLYK-05 Task-10)', () => {
+  it('403 FORBIDDEN on self-remove (acting user id passed as actingUserId)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    membershipMock.removeMember.mockRejectedValueOnce(
+      new AppError(ErrorCode.FORBIDDEN, 'You cannot remove yourself from a project'),
+    );
+
+    const res = await request(app)
+      .delete(`/api/projects/SLYK/members/${ACTING_USER_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    // Handler forwards (projectId, targetUserId, actingUserId) to the service.
+    expect(membershipMock.removeMember).toHaveBeenCalledWith(
+      'p1',
+      ACTING_USER_ID,
+      ACTING_USER_ID,
+    );
+  });
+
+  it('200 + {data:{userId}} on a valid other-target remove (forwards actingUserId)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    membershipMock.removeMember.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .delete(`/api/projects/SLYK/members/${OTHER_USER_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ userId: OTHER_USER_ID });
+    expect(membershipMock.removeMember).toHaveBeenCalledWith(
+      'p1',
+      OTHER_USER_ID,
+      ACTING_USER_ID,
+    );
+  });
+
+  it('404 NOT_FOUND propagation when the target is not a member', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    membershipMock.removeMember.mockRejectedValueOnce(
+      new AppError(ErrorCode.NOT_FOUND, 'User not found'),
+    );
+
+    const res = await request(app)
+      .delete(`/api/projects/SLYK/members/${GHOST_USER_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SLYK-05 Task-10: PATCH /api/projects/:slug/members/:userId/role
+// Promote/demote an existing member. Admins-only. setMemberRole throws
+// FORBIDDEN on self-role-change and NOT_FOUND 'User not found' on a non-member.
+// Role is validated at the edge (memberRoleSchema enum) → 400 VALIDATION_FAILED.
+// ---------------------------------------------------------------------------
+
+describe('PATCH /api/projects/:slug/members/:userId/role (SLYK-05 Task-10)', () => {
+  it('403 FORBIDDEN on self role-change (acting user id passed as actingUserId)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    membershipMock.setMemberRole.mockRejectedValueOnce(
+      new AppError(ErrorCode.FORBIDDEN, 'You cannot change your own role'),
+    );
+
+    const res = await request(app)
+      .patch(`/api/projects/SLYK/members/${ACTING_USER_ID}/role`)
+      .send({ role: 'MEMBER' })
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(membershipMock.setMemberRole).toHaveBeenCalledWith(
+      'p1',
+      ACTING_USER_ID,
+      'MEMBER',
+      ACTING_USER_ID,
+    );
+  });
+
+  it('200 + {data:{userId,role}} on a valid other-target role change (forwards actingUserId)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    membershipMock.setMemberRole.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch(`/api/projects/SLYK/members/${OTHER_USER_ID}/role`)
+      .send({ role: 'PROJECT_ADMIN' })
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ userId: OTHER_USER_ID, role: 'PROJECT_ADMIN' });
+    expect(membershipMock.setMemberRole).toHaveBeenCalledWith(
+      'p1',
+      OTHER_USER_ID,
+      'PROJECT_ADMIN',
+      ACTING_USER_ID,
+    );
+  });
+
+  it('400 VALIDATION_FAILED on an out-of-enum role (setMemberRole NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/projects/SLYK/members/${OTHER_USER_ID}/role`)
+      .send({ role: 'SUPERUSER' })
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(membershipMock.setMemberRole).not.toHaveBeenCalled();
   });
 });
