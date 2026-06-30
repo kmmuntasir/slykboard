@@ -156,9 +156,9 @@ export function TicketAttributeForm({
                 </div>
             </fieldset>
 
-            {/* F44: sticky footer, right-aligned, single Button size. Lives
+            {/* F44: footer, right-aligned, single Button size. Lives
                 outside <fieldset disabled> so Cancel/Close remain clickable. */}
-            <div className="sticky bottom-0 -mx-6 -mb-6 mt-6 flex justify-end gap-2 border-t border-border bg-background px-6 py-3">
+            <div className="mt-6 flex justify-end gap-2 border-t border-border bg-background pt-6">
                 {!readOnly && (
                     <Button type="submit" variant="primary" size="md" disabled={isSubmitting}>
                         {submitLabel}
