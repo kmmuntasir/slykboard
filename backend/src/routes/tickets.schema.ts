@@ -33,6 +33,8 @@ const attributeFields = {
   assigneeId: z.uuid().nullable().optional(),
   labelIds: z.array(z.string().uuid()).optional(), // F14: replace ticket's label set
   checklist: z.array(checklistItemSchema).max(50).optional(), // F15: replace checklist array
+  // T1: optional due date (ISO 8601 datetime). null clears it; absent = untouched.
+  dueDate: z.string().datetime().nullable().optional(),
 };
 
 export const updateTicketBody = z

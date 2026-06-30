@@ -113,7 +113,8 @@ ticketsRouter.patch(
       body.priority !== undefined ||
       body.assigneeId !== undefined ||
       body.labelIds !== undefined ||
-      body.checklist !== undefined;
+      body.checklist !== undefined ||
+      body.dueDate !== undefined;
 
     if (hasAttributeFields) {
       const { new: updated } = await ticketService.updateTicket({
@@ -125,6 +126,7 @@ ticketsRouter.patch(
           assigneeId: body.assigneeId,
           labelIds: body.labelIds,
           checklist: body.checklist,
+          dueDate: body.dueDate,
         },
         actingUserId: req.user!.id,
       });

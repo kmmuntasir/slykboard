@@ -500,6 +500,50 @@ describe('POST /:slug/tickets (F12)', () => {
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
   });
+
+  // T1: dueDate on create flows through to createTicket.
+  it('passes dueDate through to createTicket (ISO datetime)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
+    const due = '2026-12-31T23:59:59.000Z';
+    await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ title: 'New', dueDate: due });
+    expect(mockedCreateTicket).toHaveBeenCalledWith({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      dueDate: due,
+    });
+  });
+
+  it('passes dueDate: null through to createTicket (no due date)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
+    await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ title: 'New', dueDate: null });
+    expect(mockedCreateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({ dueDate: null }),
+    );
+  });
+
+  it('returns 400 VALIDATION_FAILED for non-ISO dueDate (createTicket NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ title: 'New', dueDate: 'not-a-date' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedCreateTicket).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /:slug/tickets/:displayId (F30)', () => {

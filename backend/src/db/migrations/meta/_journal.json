@@ -15,6 +15,13 @@
       "when": 1782815740998,
       "tag": "0001_nebulous_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782860212691,
+      "tag": "0002_windy_thunderbolts",
+      "breakpoints": true
     }
   ]
 }

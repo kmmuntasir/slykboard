@@ -756,6 +756,71 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
   });
 });
 
+describe('PATCH /api/tickets/:ticketId dueDate (T1)', () => {
+  it('200 sets dueDate via updateTicket (ISO datetime)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const due = '2026-12-31T23:59:59.000Z';
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow({ dueDate: null }),
+      new: makeTicketRow({ dueDate: new Date(due) }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ dueDate: due });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith({
+      ticketId: VALID_TICKET_ID,
+      patch: {
+        title: undefined,
+        description: undefined,
+        priority: undefined,
+        assigneeId: undefined,
+        labelIds: undefined,
+        checklist: undefined,
+        dueDate: due,
+      },
+      actingUserId: 'u1',
+    });
+    expect(mockedMoveTicket).not.toHaveBeenCalled();
+  });
+
+  it('200 clears dueDate with null (clear)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow({ dueDate: new Date('2026-12-31T23:59:59.000Z') }),
+      new: makeTicketRow({ dueDate: null }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ dueDate: null });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({ dueDate: null }),
+      }),
+    );
+  });
+
+  it('400 VALIDATION_FAILED for non-ISO dueDate', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ dueDate: '2026/12/31 23:59:59' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+});
+
 describe('DELETE /api/tickets/:ticketId (F17)', () => {
   it('204 soft-deletes ticket when ADMIN', async () => {
     mockedFindVersion.mockResolvedValue(0);

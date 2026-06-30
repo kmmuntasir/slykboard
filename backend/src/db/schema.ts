@@ -170,6 +170,9 @@ export const tickets = pgTable(
       .notNull()
       .references(() => users.id),
     priority: priorityEnum('priority').default('MEDIUM').notNull(),
+    // T1: optional due date. Nullable — NULL (default) = no due date set.
+    // timestamptz to match createdAt/updatedAt convention.
+    dueDate: timestamp('due_date', { withTimezone: true, mode: 'date' }),
     // F15 D1: checklist JSONB array of {id, text, done}. Defaults to [] so a new
     // ticket starts empty (createTicket needs no checklist arg). Copy the
     // projects.columns jsonb $type idiom (schema.ts:66).

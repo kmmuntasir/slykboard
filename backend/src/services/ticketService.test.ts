@@ -573,6 +573,30 @@ describe('ticketService createTicket (F12)', () => {
     expect(result.ticketNumber).toBe(7);
     expect(result.creatorId).toBe('u1');
   });
+
+  it('T1: inserts dueDate as a Date parsed from the ISO input', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', position: POSITION_GAP })];
+
+    const due = '2026-12-31T23:59:59.000Z';
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'Due', dueDate: due });
+
+    expect(bag.lastInsert!.dueDate).toBeInstanceOf(Date);
+    expect((bag.lastInsert!.dueDate as Date).toISOString()).toBe(due);
+  });
+
+  it('T1: inserts dueDate: null when input.dueDate is absent', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', position: POSITION_GAP })];
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'No due' });
+
+    expect(bag.lastInsert!.dueDate).toBeNull();
+  });
 });
 
 describe('ticketService getTicket (F13 T6)', () => {
@@ -724,6 +748,49 @@ describe('ticketService updateTicket (F13 T6)', () => {
 
     expect(bag.sanitizeMock).not.toHaveBeenCalled();
     expect(bag.updateSets[0]!.description).toBeNull();
+  });
+
+  it('T1: dueDate patch writes a Date parsed from the ISO input', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, dueDate: null })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+
+    const due = '2026-12-31T23:59:59.000Z';
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { dueDate: due },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.dueDate).toBeInstanceOf(Date);
+    expect((bag.updateSets[0]!.dueDate as Date).toISOString()).toBe(due);
+  });
+
+  it('T1: dueDate: null patch clears dueDate (sets null, no Date parse)', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({ id: TICKET_ID, dueDate: new Date('2026-12-31T23:59:59.000Z') }),
+    ]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, dueDate: null })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { dueDate: null },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.dueDate).toBeNull();
+  });
+
+  it('T1: absent dueDate in patch leaves dueDate out of the update set', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, title: 'X' })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { title: 'X' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets[0]!.dueDate).toBeUndefined();
   });
 
   it('priority patch writes the typed Priority value', async () => {

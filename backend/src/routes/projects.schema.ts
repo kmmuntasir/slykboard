@@ -62,6 +62,8 @@ export const createTicketBody = z.object({
   labelIds: z.array(z.string().uuid()).optional(),
   assigneeId: z.uuid().optional(),
   statusColumn: z.string().min(1).optional(),
+  // T1: optional due date (ISO 8601 datetime). null/absent = no due date.
+  dueDate: z.string().datetime().nullable().optional(),
   // F15: optional checklist at create time. Defaults to [] via the DB column
   // when omitted; validated with the same sub-schema as the PATCH path.
   checklist: z.array(checklistItemSchema).max(50).optional(),

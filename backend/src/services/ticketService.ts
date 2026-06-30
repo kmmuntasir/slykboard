@@ -52,6 +52,7 @@ export type TicketPatch = {
   assigneeId?: string | null;
   labelIds?: string[];
   checklist?: ChecklistItem[];
+  dueDate?: string | null;
 };
 
 export interface MoveTicketInput {
@@ -188,6 +189,7 @@ export interface CreateTicketInput {
   assigneeId?: string;
   statusColumn?: string; // optional; defaults to project.columns[0].id
   checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
+  dueDate?: string | null; // T1: optional due date (ISO 8601); null = none
 }
 
 // F12: create a ticket with a per-project sequential number, bottom of the
@@ -233,6 +235,7 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         assigneeId: input.assigneeId,
         priority: input.priority,
         checklist: input.checklist,
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
       })
       .returning();
     // F18 T3: stamp a CREATED activity log inside the same txn so a rollback
@@ -434,6 +437,9 @@ export async function updateTicket(args: {
     }
     if (patch.checklist !== undefined) {
       updateSet.checklist = patch.checklist;
+    }
+    if (patch.dueDate !== undefined) {
+      updateSet.dueDate = patch.dueDate === null ? null : new Date(patch.dueDate);
     }
 
     const updated = await tx
