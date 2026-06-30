@@ -27,6 +27,6 @@ function wrapper() {
 describe('SettingsPage', () => {
     it('renders the heading', () => {
         render(<SettingsPage />, { wrapper: wrapper() });
-        expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Member Management' })).toBeInTheDocument();
     });
 });

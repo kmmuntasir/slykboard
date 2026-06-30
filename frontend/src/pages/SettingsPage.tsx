@@ -61,7 +61,7 @@ export function SettingsPage() {
 
     return (
         <div className="p-8">
-            <h1 className="text-2xl font-semibold">User Management</h1>
+            <h1 className="text-2xl font-semibold">Member Management</h1>
 
             {isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
             {isError && <p className="mt-4 text-sm text-destructive">Failed to load users.</p>}
