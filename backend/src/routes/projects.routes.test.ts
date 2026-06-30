@@ -27,6 +27,23 @@ vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(),
   bumpTokenVersion: vi.fn(),
 }));
+// requireProjectMember imports getProjectBySlug from projectService and reads
+// the tier via membershipService.getMemberRole inside db.transaction. Mock the
+// db client (passthrough tx) + membershipService so the real middleware runs
+// without a live DB.
+vi.mock('../db/client', () => ({
+  db: {
+    transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({}),
+  },
+}));
+const membershipMock = vi.hoisted(() => ({
+  isProjectMember: vi.fn(),
+  getMemberRole: vi.fn(),
+}));
+vi.mock('../services/membershipService', () => ({
+  isProjectMember: membershipMock.isProjectMember,
+  getMemberRole: membershipMock.getMemberRole,
+}));
 vi.mock('../services/projectService', () => ({
   createProject: vi.fn(),
   listProjects: vi.fn(),
@@ -59,8 +76,32 @@ const mockedGetBoard = vi.mocked(boardService.getBoard);
 const mockedCreateTicket = vi.mocked(ticketService.createTicket);
 const mockedGetTicketByNumber = vi.mocked(ticketService.getTicketByNumber);
 
+// A full ProjectRow shape (enough for requireProjectMember to attach).
+const projectRow = {
+  id: 'p1',
+  name: 'Slyk',
+  slug: 'SLYK',
+  columns: [{ id: 'c1', name: 'To Do' }],
+  creatorId: 'u1',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+// Byte-identical non-revealing FORBIDDEN for not-found vs not-a-member.
+const FORBIDDEN_PROJECT = new AppError(
+  ErrorCode.FORBIDDEN,
+  'You do not have access to this project',
+);
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default membership state: the caller is a real MEMBER of the resolved
+  // project. PA-caller tests bypass membership via isPlatformAdmin=true;
+  // non-member / unknown-slug tests override getProjectBySlug to reject with
+  // the non-revealing FORBIDDEN (the service contract makes the two identical).
+  membershipMock.getMemberRole.mockResolvedValue('MEMBER');
+  mockedGetBySlug.mockResolvedValue(projectRow as never);
 });
 
 afterEach(() => {
@@ -72,7 +113,7 @@ function tokenFor(isPlatformAdmin: boolean) {
 }
 
 describe('projectsRouter (F08)', () => {
-  it('GET / returns 200 + list of projects (authed ADMIN)', async () => {
+  it('GET / returns 200 + list of projects (authed ADMIN/PA)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedList.mockResolvedValue([
       { id: 'p1', name: 'Slyk', slug: 'SLYK' },
@@ -85,6 +126,8 @@ describe('projectsRouter (F08)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.length).toBe(2);
+    // SLYK-01 Task K: visibility args forwarded to the service.
+    expect(mockedList).toHaveBeenCalledWith('u1', true);
   });
 
   it('GET / returns 401 UNAUTHENTICATED without Bearer', async () => {
@@ -94,32 +137,74 @@ describe('projectsRouter (F08)', () => {
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 
-  it('GET /:slug returns 200 when found', async () => {
+  it('GET /:slug returns 200 + project for a member (reads req.project)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue({
-      id: 'p1',
-      name: 'Slyk',
-      slug: 'SLYK',
-    } as unknown as Awaited<ReturnType<typeof projectService.getProjectBySlug>>);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.slug).toBe('SLYK');
+    // requireProjectMember resolved+authorized via the non-revealing service call.
+    expect(mockedGetBySlug).toHaveBeenCalledWith('SLYK', 'u1', false);
+  });
+
+  it('GET /:slug returns 403 FORBIDDEN for a non-member (non-revealing)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(res.body.error.message).toBe('You do not have access to this project');
+  });
+
+  it('GET /:slug returns 403 FORBIDDEN for an unknown slug (anti-oracle; no 404 leak)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('GET /:slug non-revealing: unknown slug and non-member return byte-identical envelopes', async () => {
+    // Two separate requests: one where the slug is unknown, one where the slug is
+    // real but the caller is not a member. Both go through the same non-revealing
+    // service contract and MUST return identical JSON bodies.
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+
+    const unknown = await request(app)
+      .get('/api/projects/GHOST')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+    const nonMember = await request(app)
+      .get('/api/projects/SLYK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(unknown.status).toBe(403);
+    expect(nonMember.status).toBe(403);
+    expect(unknown.body).toEqual(nonMember.body);
+  });
+
+  it('GET /:slug PA bypass returns 200 even without a membership row', async () => {
+    mockedFindVersion.mockResolvedValue(0);
 
     const res = await request(app)
       .get('/api/projects/SLYK')
       .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.slug).toBe('SLYK');
-  });
-
-  it('GET /:slug returns 404 NOT_FOUND when not found', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(null);
-
-    const res = await request(app)
-      .get('/api/projects/SLYK')
-      .set('Authorization', `Bearer ${await tokenFor(true)}`);
-
-    expect(res.status).toBe(404);
-    expect(res.body.error.code).toBe('NOT_FOUND');
+    // PA bypass: getMemberRole is never read.
+    expect(membershipMock.getMemberRole).not.toHaveBeenCalled();
+    expect(mockedGetBySlug).toHaveBeenCalledWith('SLYK', 'u1', true);
   });
 
   it('GET /:slug returns 400 VALIDATION_FAILED on invalid slug format', async () => {

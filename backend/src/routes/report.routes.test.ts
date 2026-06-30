@@ -27,6 +27,22 @@ vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(),
   bumpTokenVersion: vi.fn(),
 }));
+// requireProjectMember imports getProjectBySlug from projectService and reads
+// the tier via membershipService.getMemberRole inside db.transaction. Mock both
+// so the real middleware runs without a live DB.
+vi.mock('../db/client', () => ({
+  db: {
+    transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({}),
+  },
+}));
+const membershipMock = vi.hoisted(() => ({
+  isProjectMember: vi.fn(),
+  getMemberRole: vi.fn(),
+}));
+vi.mock('../services/membershipService', () => ({
+  isProjectMember: membershipMock.isProjectMember,
+  getMemberRole: membershipMock.getMemberRole,
+}));
 // requireProjectMember imports getProjectBySlug from projectService.
 vi.mock('../services/projectService', () => ({
   getProjectBySlug: vi.fn(),
@@ -38,6 +54,8 @@ vi.mock('../services/reportService', () => ({
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
 import * as projectService from '../services/projectService';
 import * as reportService from '../services/reportService';
@@ -49,6 +67,10 @@ const mockedGetTicketSummary = vi.mocked(reportService.getTicketSummary);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: the caller is a real MEMBER of the resolved project. Non-member
+  // / unknown-slug cases override getProjectBySlug to reject with the
+  // non-revealing FORBIDDEN (the service contract makes the two indistinguishable).
+  membershipMock.getMemberRole.mockResolvedValue('MEMBER');
 });
 
 // sub 'u1' is the JWT subject; used as creatorId for the "member" case.
@@ -56,9 +78,8 @@ function tokenFor(isPlatformAdmin: boolean) {
   return signJwt({ sub: 'u1', email: 'user@example.com', pa: isPlatformAdmin, ver: 0 });
 }
 
-// A full ProjectRow shape (enough for requireProjectMember to attach). The
-// creatorId controls membership: 'u1' = member, 'other' = non-member.
-const projectRow = (creatorId = 'u1') => ({
+// A full ProjectRow shape (enough for requireProjectMember to attach).
+const projectRow = () => ({
   id: 'p1',
   name: 'Slyk',
   slug: 'SLYK',
@@ -66,10 +87,18 @@ const projectRow = (creatorId = 'u1') => ({
     { id: 'c-todo', name: 'To Do' },
     { id: 'c-done', name: 'Done' },
   ],
-  creatorId,
+  creatorId: 'u1',
+  isActive: true,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
+
+// The byte-identical non-revealing FORBIDDEN thrown by getProjectBySlug for both
+// an unknown slug and a real-but-inaccessible project (anti-oracle).
+const FORBIDDEN_PROJECT = new AppError(
+  ErrorCode.FORBIDDEN,
+  'You do not have access to this project',
+);
 
 const timeReportPayload = {
   users: [{ id: 'u1', fullName: 'User One', avatarUrl: null, totalMs: 3_600_000 }],
@@ -101,9 +130,9 @@ const ticketSummaryPayload = {
 // ---------------------------------------------------------------------------
 
 describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
-  it('returns 200 + scoped data for a member (creator); passes projectId to the service', async () => {
+  it('returns 200 + scoped data for a member; passes projectId to the service', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(projectRow('u1') as never);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
     mockedGetTimeReport.mockResolvedValue(timeReportPayload as never);
 
     const res = await request(app)
@@ -123,7 +152,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
   it('returns 200 for an ADMIN (admin override) and passes projectId', async () => {
     mockedFindVersion.mockResolvedValue(0);
     // creatorId 'other' — admin bypasses membership.
-    mockedGetBySlug.mockResolvedValue(projectRow('other') as never);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
     mockedGetTimeReport.mockResolvedValue(timeReportPayload as never);
 
     const res = await request(app)
@@ -136,7 +165,9 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
   it('returns 403 FORBIDDEN for a non-member (reportService NOT called)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(projectRow('other') as never);
+    // Non-member: the service contract makes this indistinguishable from an
+    // unknown slug — both throw the non-revealing FORBIDDEN.
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time')
@@ -149,7 +180,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
   it('returns 403 FORBIDDEN for an unknown slug (anti-oracle; reportService NOT called)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(null);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/time')
@@ -182,7 +213,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 
   it('forwards period=monthly & offset=-1 to the service', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(projectRow('u1') as never);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
     mockedGetTimeReport.mockResolvedValue(timeReportPayload as never);
 
     const res = await request(app)
@@ -201,7 +232,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
 describe('GET /api/projects/:slug/reports/tickets (F48 scoped)', () => {
   it('returns 200 + scoped data for a member; passes projectId to the service', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(projectRow('u1') as never);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
     mockedGetTicketSummary.mockResolvedValue(ticketSummaryPayload as never);
 
     const res = await request(app)
@@ -219,7 +250,7 @@ describe('GET /api/projects/:slug/reports/tickets (F48 scoped)', () => {
 
   it('returns 403 FORBIDDEN for a non-member (reportService NOT called)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedGetBySlug.mockResolvedValue(projectRow('other') as never);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
 
     const res = await request(app)
       .get('/api/projects/SLYK/reports/tickets')
@@ -245,7 +276,7 @@ describe('GET /api/projects/:slug/reports/tickets (F48 scoped)', () => {
 // ---------------------------------------------------------------------------
 
 describe('GET /api/reports/time (deprecated global, backward compat)', () => {
-  it('returns 200 and calls service WITHOUT projectId', async () => {
+  it('returns 200 and calls service WITHOUT projectId (PA)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedGetTimeReport.mockResolvedValue(timeReportPayload as never);
 
@@ -253,7 +284,7 @@ describe('GET /api/reports/time (deprecated global, backward compat)', () => {
 
     const res = await request(app)
       .get('/api/reports/time')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.users).toHaveLength(1);
@@ -266,6 +297,18 @@ describe('GET /api/reports/time (deprecated global, backward compat)', () => {
     warnSpy.mockRestore();
   });
 
+  it('returns 403 FORBIDDEN for a non-PA member (SLYK-01 Task K)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/reports/time')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedGetTimeReport).not.toHaveBeenCalled();
+  });
+
   it('returns 401 UNAUTHENTICATED without Bearer', async () => {
     const res = await request(app).get('/api/reports/time');
 
@@ -276,7 +319,7 @@ describe('GET /api/reports/time (deprecated global, backward compat)', () => {
 });
 
 describe('GET /api/reports/tickets (deprecated global, backward compat)', () => {
-  it('returns 200 and calls service WITHOUT projectId', async () => {
+  it('returns 200 and calls service WITHOUT projectId (PA)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedGetTicketSummary.mockResolvedValue(ticketSummaryPayload as never);
 
@@ -284,7 +327,7 @@ describe('GET /api/reports/tickets (deprecated global, backward compat)', () => 
 
     const res = await request(app)
       .get('/api/reports/tickets')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+      .set('Authorization', `Bearer ${await tokenFor(true)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.data.users[0].counts.total).toBe(3);
@@ -294,5 +337,17 @@ describe('GET /api/reports/tickets (deprecated global, backward compat)', () => 
     );
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[DEPRECATED]'));
     warnSpy.mockRestore();
+  });
+
+  it('returns 403 FORBIDDEN for a non-PA member (SLYK-01 Task K)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/reports/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedGetTicketSummary).not.toHaveBeenCalled();
   });
 });

@@ -21,6 +21,26 @@ vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(),
   bumpTokenVersion: vi.fn(),
 }));
+// resolveTicketProject loads the ticket via ticketService.getTicket (mocked
+// below), then resolves+authorizes its project via db.select +
+// membershipService inside db.transaction. Mock the db client (passthrough tx +
+// a select chain returning a configurable project row) + membershipService so
+// the real middleware runs without a live DB.
+const projectRows = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const membershipMock = vi.hoisted(() => ({
+  isProjectMember: vi.fn(),
+  getMemberRole: vi.fn(),
+}));
+vi.mock('../db/client', () => ({
+  db: {
+    transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({}),
+    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(projectRows.rows) }) }) }),
+  },
+}));
+vi.mock('../services/membershipService', () => ({
+  isProjectMember: membershipMock.isProjectMember,
+  getMemberRole: membershipMock.getMemberRole,
+}));
 vi.mock('../services/projectService', () => ({
   createProject: vi.fn(),
   listProjects: vi.fn(),
@@ -56,6 +76,15 @@ const mockedGetTicketActivity = vi.mocked(activityService.getTicketActivity);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default resolution state for resolveTicketProject: the ticket exists and
+  // belongs to a project the caller is a MEMBER of. PA-caller tests bypass via
+  // isPlatformAdmin=true; tier-gated tests (DELETE) override getMemberRole.
+  mockedGetTicket.mockResolvedValue(makeTicketRow() as never);
+  membershipMock.isProjectMember.mockResolvedValue(true);
+  membershipMock.getMemberRole.mockResolvedValue('MEMBER');
+  projectRows.rows = [
+    { id: '22222222-2222-4222-8222-222222222222', slug: 'SLYK', name: 'Slyk' },
+  ];
 });
 
 function tokenFor(isPlatformAdmin: boolean) {
@@ -729,6 +758,20 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
 
     expect(res.status).toBe(204);
     expect(res.body).toEqual({});
+    expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID);
+  });
+
+  it('204 soft-deletes ticket when PROJECT_ADMIN (resolved decision: PA OR Project Admin)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    // Non-PA caller whose project membership tier is PROJECT_ADMIN.
+    membershipMock.getMemberRole.mockResolvedValue('PROJECT_ADMIN');
+    mockedDeleteTicket.mockResolvedValue(undefined);
+
+    const res = await request(app)
+      .delete(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(204);
     expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID);
   });
 

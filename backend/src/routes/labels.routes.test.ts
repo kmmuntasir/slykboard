@@ -21,7 +21,32 @@ vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(),
   bumpTokenVersion: vi.fn(),
 }));
+// requireProjectMember (slug routes) reads getProjectBySlug from projectService
+// + getMemberRole via db.transaction; resolveLabelProject (/:id routes) loads
+// the label via labelService.getLabel then resolves the project via db.select +
+// membershipService. Mock the db client (passthrough tx + select chain) +
+// membershipService + projectService.getProjectBySlug so the real middleware
+// runs without a live DB.
+const projectRows = vi.hoisted(() => ({ rows: [] as unknown[] }));
+const membershipMock = vi.hoisted(() => ({
+  isProjectMember: vi.fn(),
+  getMemberRole: vi.fn(),
+}));
+vi.mock('../db/client', () => ({
+  db: {
+    transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({}),
+    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(projectRows.rows) }) }) }),
+  },
+}));
+vi.mock('../services/membershipService', () => ({
+  isProjectMember: membershipMock.isProjectMember,
+  getMemberRole: membershipMock.getMemberRole,
+}));
+vi.mock('../services/projectService', () => ({
+  getProjectBySlug: vi.fn(),
+}));
 vi.mock('../services/labelService', () => ({
+  getLabel: vi.fn(),
   listLabels: vi.fn(),
   createLabel: vi.fn(),
   updateLabel: vi.fn(),
@@ -33,16 +58,44 @@ import { signJwt } from '../utils/jwt';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
+import * as projectService from '../services/projectService';
 import * as labelService from '../services/labelService';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
+const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
 const mockedList = vi.mocked(labelService.listLabels);
 const mockedCreate = vi.mocked(labelService.createLabel);
 const mockedUpdate = vi.mocked(labelService.updateLabel);
 const mockedDelete = vi.mocked(labelService.deleteLabel);
+const mockedGetLabel = vi.mocked(labelService.getLabel);
+
+const projectRow = {
+  id: 'p1',
+  name: 'Slyk',
+  slug: 'SLYK',
+  columns: [],
+  creatorId: 'u1',
+  isActive: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default membership state: the caller is a MEMBER of the resolved project.
+  // requireProjectAdmin write tests override getMemberRole to 'PROJECT_ADMIN'.
+  mockedGetBySlug.mockResolvedValue(projectRow as never);
+  mockedGetLabel.mockResolvedValue({
+    id: VALID_LABEL_ID,
+    projectId: 'p1',
+    name: 'Bug',
+    color: '#FF0000',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as never);
+  projectRows.rows = [projectRow];
+  membershipMock.isProjectMember.mockResolvedValue(true);
+  membershipMock.getMemberRole.mockResolvedValue('MEMBER');
 });
 
 afterEach(() => {
