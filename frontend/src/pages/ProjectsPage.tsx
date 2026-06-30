@@ -120,7 +120,7 @@ export function ProjectsPage() {
                                 className="text-left"
                             >
                                 <span className="font-medium">{p.name}</span>{' '}
-                                <span className="text-sm text-muted">({p.slug})</span>
+                                <span className="text-sm text-muted-foreground">({p.slug})</span>
                                 {!p.isActive && isAdmin && (
                                     <Badge variant="warning" className="ml-2">
                                         Deactivated

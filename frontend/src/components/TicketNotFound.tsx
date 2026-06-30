@@ -14,7 +14,7 @@ export function TicketNotFound({ onClose }: TicketNotFoundProps) {
     return (
         <Modal isOpen onClose={onClose} titleId="ticket-not-found-title" title="Ticket not found">
             <div className="flex flex-col items-center gap-4 p-8 text-center">
-                <p className="text-sm text-muted">
+                <p className="text-sm text-muted-foreground">
                     This ticket may have been deleted, or the link is invalid.
                 </p>
                 <button

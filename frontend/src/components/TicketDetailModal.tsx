@@ -109,7 +109,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         modalBody = (
             <div className="flex flex-col items-center gap-4 p-8 text-center">
                 <p className="text-base font-semibold text-foreground">Ticket not found</p>
-                <p className="text-sm text-muted">
+                <p className="text-sm text-muted-foreground">
                     This ticket may have been deleted or no longer exists.
                 </p>
                 <button
