@@ -221,6 +221,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
     expect(mockedSetBlocked).toHaveBeenCalledWith({
       targetUserId: 'u-target',
       blocked: true,
+      actingUserId: 'u1',
     });
   });
 
@@ -249,6 +250,7 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
     expect(mockedSetBlocked).toHaveBeenCalledWith({
       targetUserId: 'u-target',
       blocked: false,
+      actingUserId: 'u1',
     });
   });
 
@@ -310,6 +312,64 @@ describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('propagates FORBIDDEN (403) when an admin tries to block themselves', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetBlocked.mockRejectedValueOnce(
+      new AppError(ErrorCode.FORBIDDEN, 'You cannot deactivate yourself'),
+    );
+
+    const res = await request(app)
+      .patch('/api/users/u1/blocked')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ blocked: true });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('propagates CONFLICT (409) when blocking the last platform admin', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetBlocked.mockRejectedValueOnce(
+      new AppError(ErrorCode.CONFLICT, 'Cannot remove the last platform admin'),
+    );
+
+    const res = await request(app)
+      .patch('/api/users/u-target/blocked')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ blocked: true });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+  });
+
+  it('allows an admin to unblock themselves (block=false regression)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedSetBlocked.mockResolvedValueOnce({
+      id: 'u1',
+      googleId: 'g1',
+      email: 'user@example.com',
+      fullName: 'Self',
+      avatarUrl: null,
+      isPlatformAdmin: true,
+      tokenVersion: 0,
+      blocked: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } as unknown as Awaited<ReturnType<typeof setUserBlocked>>);
+
+    const res = await request(app)
+      .patch('/api/users/u1/blocked')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ blocked: false });
+
+    expect(res.status).toBe(200);
+    expect(mockedSetBlocked).toHaveBeenCalledWith({
+      targetUserId: 'u1',
+      blocked: false,
+      actingUserId: 'u1',
+    });
   });
 });
 
