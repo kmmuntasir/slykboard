@@ -404,23 +404,79 @@ describe('F44 two-column layout', () => {
         expect(rightCol?.className).toContain('lg:overflow-y-auto');
     });
 
-    it('footer is sticky and right-aligned with single-size buttons', () => {
-        render(
-            <TicketAttributeForm
-                mode="create"
-                projectSlug={PROJECT_SLUG}
-                defaultValues={baseDefaults}
-                onSubmit={vi.fn()}
-                onCancel={vi.fn()}
-            />,
-        );
-        const footer = document.querySelector('form > div.sticky');
-        expect(footer).toBeInTheDocument();
-        expect(footer?.className).toContain('justify-end');
-        // Both buttons are present; primary submit + outline cancel.
-        expect(screen.getByRole('button', { name: 'Create ticket' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-    });
+    // SLYK-15: footer is NON-STICKY (no sticky/edge/bottom/padding classes),
+    // right-aligned, lives outside the disabled <fieldset>, and stays the
+    // last child of <form>. Table-driven across the three render modes.
+    it.each([
+        {
+            name: 'create',
+            mode: 'create' as const,
+            readOnly: false,
+            submitLabel: 'Create ticket',
+            secondaryLabel: 'Cancel',
+        },
+        {
+            name: 'edit',
+            mode: 'edit' as const,
+            readOnly: false,
+            submitLabel: 'Save changes',
+            secondaryLabel: 'Cancel',
+        },
+        {
+            name: 'edit + readOnly',
+            mode: 'edit' as const,
+            readOnly: true,
+            submitLabel: null as string | null,
+            secondaryLabel: 'Close',
+        },
+    ])(
+        '$name: footer is non-sticky and right-aligned',
+        ({ mode, readOnly, submitLabel, secondaryLabel }) => {
+            render(
+                <TicketAttributeForm
+                    mode={mode}
+                    projectSlug={PROJECT_SLUG}
+                    defaultValues={baseDefaults}
+                    readOnly={readOnly}
+                    onSubmit={vi.fn()}
+                    onCancel={vi.fn()}
+                />,
+            );
+            const form = document.querySelector('form')!;
+            const fieldset = form.querySelector('fieldset')!;
+
+            // (6) The footer is the LAST child of <form>.
+            const footer = form.lastElementChild as HTMLElement;
+            expect(footer.tagName).toBe('DIV');
+            expect(footer).not.toBe(fieldset);
+
+            const cls = footer.className;
+            // (3) Footer LACKS sticky / edge-bleed / bottom / padding classes.
+            expect(cls).not.toContain('sticky');
+            expect(cls).not.toContain('-mx-6');
+            expect(cls).not.toContain('-mb-6');
+            expect(cls).not.toContain('bottom-0');
+            expect(cls).not.toContain('px-6');
+            expect(cls).not.toContain('py-3');
+            // (4) Footer IS right-aligned.
+            expect(cls).toContain('justify-end');
+
+            // (5) Submit button presence matches the mode.
+            if (submitLabel) {
+                expect(screen.getByRole('button', { name: submitLabel })).toBeInTheDocument();
+            } else {
+                expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+                expect(screen.queryByRole('button', { name: 'Create ticket' })).not.toBeInTheDocument();
+            }
+
+            // (7) Cancel/Close sits OUTSIDE the disabled <fieldset> and stays
+            // enabled even when readOnly.
+            const secondary = screen.getByRole('button', { name: secondaryLabel });
+            expect(fieldset.contains(secondary)).toBe(false);
+            expect(footer.contains(secondary)).toBe(true);
+            expect(secondary).not.toBeDisabled();
+        },
+    );
 
     it('readOnly still hides Save and shows Close (regression)', () => {
         render(
