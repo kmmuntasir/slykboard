@@ -75,7 +75,8 @@ describe('App shell', () => {
             id: 'u1',
             email: 'e@x',
             name: 'Test',
-            role: 'MEMBER',
+            isPlatformAdmin: false,
+            displayName: null,
             avatarUrl: null,
             blocked: false,
         });

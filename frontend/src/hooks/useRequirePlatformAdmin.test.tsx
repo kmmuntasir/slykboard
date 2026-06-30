@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
 
@@ -8,8 +8,8 @@ function Probe({ allowed }: { allowed: boolean }) {
     return <span data-testid="probe">{String(allowed)}</span>;
 }
 
-function ProbeRole({ roles }: { roles: Parameters<typeof useRequireRole> }) {
-    const allowed = useRequireRole(...roles);
+function ProbePlatformAdmin() {
+    const allowed = useRequirePlatformAdmin();
     return <Probe allowed={allowed} />;
 }
 
@@ -18,12 +18,13 @@ const baseUser: AuthUser = {
     id: 'user-1',
     email: 'demo@slykboard.local',
     name: 'Demo User',
-    role: 'ADMIN',
+    isPlatformAdmin: true,
+    displayName: null,
     avatarUrl: null,
     blocked: false,
 };
 
-describe('useRequireRole', () => {
+describe('useRequirePlatformAdmin', () => {
     beforeEach(() => {
         localStorage.clear();
         useAuthStore.getState().clear();
@@ -32,41 +33,31 @@ describe('useRequireRole', () => {
     const cases: Array<{
         name: string;
         user: AuthUser | null;
-        roles: Parameters<typeof useRequireRole>;
         expected: boolean;
     }> = [
         {
-            name: 'returns true when role allowed',
-            user: { ...baseUser, role: 'ADMIN' },
-            roles: ['ADMIN'],
+            name: 'returns true when the user is a platform admin',
+            user: { ...baseUser, isPlatformAdmin: true },
             expected: true,
         },
         {
-            name: 'returns false when role not allowed',
-            user: { ...baseUser, role: 'MEMBER' },
-            roles: ['ADMIN'],
+            name: 'returns false when the user is not a platform admin',
+            user: { ...baseUser, isPlatformAdmin: false },
             expected: false,
         },
         {
-            name: 'returns false when no user',
+            name: 'returns false when there is no user',
             user: null,
-            roles: ['ADMIN'],
             expected: false,
-        },
-        {
-            name: 'allows multiple roles',
-            user: { ...baseUser, role: 'MEMBER' },
-            roles: ['ADMIN', 'MEMBER'],
-            expected: true,
         },
     ];
 
-    cases.forEach(({ name, user, roles, expected }) => {
+    cases.forEach(({ name, user, expected }) => {
         it(name, () => {
             if (user) {
                 useAuthStore.getState().setUser(user);
             }
-            render(<ProbeRole roles={roles} />);
+            render(<ProbePlatformAdmin />);
             expect(screen.getByTestId('probe').textContent).toBe(String(expected));
         });
     });

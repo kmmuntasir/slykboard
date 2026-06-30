@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { render, screen } from '@testing-library/react';
-import { RequireRole } from '@/components/RequireRole';
+import { RequirePlatformAdmin } from '@/components/RequirePlatformAdmin';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
 
@@ -10,13 +10,14 @@ const baseUser: AuthUser = {
     id: 'user-1',
     email: 'demo@slykboard.local',
     name: 'Demo User',
-    role: 'ADMIN',
+    isPlatformAdmin: true,
+    displayName: null,
     avatarUrl: null,
     blocked: false,
 };
 
-function setUserWithRole(role: AuthUser['role']) {
-    useAuthStore.getState().setUser({ ...baseUser, role });
+function setUserAdmin(isPlatformAdmin: boolean) {
+    useAuthStore.getState().setUser({ ...baseUser, isPlatformAdmin });
 }
 
 function HomeProbe() {
@@ -28,7 +29,7 @@ function renderGuarded(initialPath = '/settings') {
     render(
         <MemoryRouter initialEntries={[initialPath]}>
             <Routes>
-                <Route path="/settings" element={<RequireRole role="ADMIN" />}>
+                <Route path="/settings" element={<RequirePlatformAdmin />}>
                     <Route index element={<div data-testid="outlet">OUTLET</div>} />
                 </Route>
                 <Route path="/" element={<HomeProbe />} />
@@ -37,24 +38,24 @@ function renderGuarded(initialPath = '/settings') {
     );
 }
 
-describe('RequireRole', () => {
+describe('RequirePlatformAdmin', () => {
     beforeEach(() => {
         localStorage.clear();
         useAuthStore.getState().clear();
     });
 
-    it('renders Outlet (child) when role matches', () => {
-        setUserWithRole('ADMIN');
+    it('renders Outlet (child) when the user is a platform admin', () => {
+        setUserAdmin(true);
         renderGuarded();
         expect(screen.getByTestId('outlet')).toBeInTheDocument();
         expect(screen.queryByTestId('home')).toBeNull();
     });
 
-    it('renders the 403 page when role mismatch', () => {
-        setUserWithRole('MEMBER');
+    it('renders the 403 page when the user is not a platform admin', () => {
+        setUserAdmin(false);
         renderGuarded();
         expect(screen.queryByTestId('outlet')).toBeNull();
-        // SLYK-F28: deny now renders ForbiddenPage instead of redirecting
+        // SLYK-F28: deny renders ForbiddenPage instead of redirecting.
         expect(screen.getByRole('heading', { name: /403/i })).toBeInTheDocument();
         expect(screen.queryByTestId('home')).toBeNull();
     });

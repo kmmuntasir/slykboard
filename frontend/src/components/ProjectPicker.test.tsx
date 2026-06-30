@@ -9,8 +9,8 @@ import type { Project } from '@/types/project';
 vi.mock('@/hooks/useProjects', () => ({
     useProjects: vi.fn(),
 }));
-vi.mock('@/hooks/useRequireRole', () => ({
-    useRequireRole: vi.fn(() => true),
+vi.mock('@/hooks/useRequirePlatformAdmin', () => ({
+    useRequirePlatformAdmin: vi.fn(() => true),
 }));
 
 const navigateMock = vi.fn();
@@ -20,7 +20,7 @@ vi.mock('react-router', async () => {
 });
 
 import { useProjects } from '@/hooks/useProjects';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useProjectStore } from '@/stores/useProjectStore';
 
 // --- Fixtures ---------------------------------------------------------------
@@ -72,7 +72,7 @@ function renderPicker(initialEntry = '/') {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useRequireRole).mockReturnValue(true);
+    vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
     useProjectStore.getState().clear();
 });
 
@@ -209,7 +209,7 @@ it('selecting a project persists lastSelectedSlug and navigates', () => {
 // --- ADMIN-gated footer -----------------------------------------------------
 
 it('shows "+ Create project" footer for ADMIN', () => {
-    vi.mocked(useRequireRole).mockReturnValue(true);
+    vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
     setProjects();
     renderPicker();
     fireEvent.pointerDown(screen.getByLabelText('Select project'), { button: 0 });
@@ -217,7 +217,7 @@ it('shows "+ Create project" footer for ADMIN', () => {
 });
 
 it('hides "+ Create project" footer for MEMBER', () => {
-    vi.mocked(useRequireRole).mockReturnValue(false);
+    vi.mocked(useRequirePlatformAdmin).mockReturnValue(false);
     setProjects();
     renderPicker();
     fireEvent.pointerDown(screen.getByLabelText('Select project'), { button: 0 });

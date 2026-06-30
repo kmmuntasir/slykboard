@@ -59,11 +59,11 @@ vi.mock('./LabelMultiSelect', () => ({
 vi.mock('@/api/tickets');
 
 // --- F17 role-gate + delete mutation mocks ---------------------------------
-// useRequireRole('ADMIN') controls the delete-button render; useDeleteTicket is
+// useRequirePlatformAdmin() controls the delete-button render; useDeleteTicket is
 // the delete mutation. Both are module-level vi.fn returns so individual tests
 // can flip admin/member and the delete path.
-vi.mock('@/hooks/useRequireRole', () => ({
-    useRequireRole: vi.fn(() => false),
+vi.mock('@/hooks/useRequirePlatformAdmin', () => ({
+    useRequirePlatformAdmin: vi.fn(() => false),
 }));
 vi.mock('@/hooks/useDeleteTicket', () => ({
     useDeleteTicket: vi.fn(() => ({
@@ -76,7 +76,7 @@ vi.mock('@/hooks/useDeleteTicket', () => ({
 }));
 
 import { TicketDetailModal } from './TicketDetailModal';
-import { useRequireRole } from '@/hooks/useRequireRole';
+import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
@@ -357,14 +357,14 @@ describe('TicketDetailModal', () => {
 
     it('F17 ADMIN: renders the "Delete ticket" button', async () => {
         // beforeEach's clearAllMocks reset the mock fn; re-stub admin = true.
-        vi.mocked(useRequireRole).mockReturnValue(true);
+        vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
         expect(screen.getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
     });
 
     it('F17 ADMIN: clicking "Delete ticket" opens the DeleteTicketConfirm dialog', async () => {
-        vi.mocked(useRequireRole).mockReturnValue(true);
+        vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
 
@@ -373,14 +373,14 @@ describe('TicketDetailModal', () => {
     });
 
     it('F17 MEMBER: does NOT render the "Delete ticket" button', async () => {
-        vi.mocked(useRequireRole).mockReturnValue(false);
+        vi.mocked(useRequirePlatformAdmin).mockReturnValue(false);
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
         expect(screen.queryByRole('button', { name: 'Delete ticket' })).not.toBeInTheDocument();
     });
 
     it('F17 ADMIN on a soft-deleted ticket: shows the Deleted badge + hides the Delete button', async () => {
-        vi.mocked(useRequireRole).mockReturnValue(true);
+        vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
         renderModal({ ticket: makeTicket({ deletedAt: '2026-06-24T00:00:00.000Z' }) });
         await screen.findByRole('dialog', { name: 'SLYK-101' });
         // Deleted badge banner is present.

@@ -7,7 +7,8 @@ const fullUser: AuthUser = {
   id: 'user-1',
   email: 'demo@slykboard.local',
   name: 'Demo User',
-  role: 'ADMIN',
+  isPlatformAdmin: true,
+  displayName: null,
   avatarUrl: 'https://example.com/a.png',
   blocked: false,
 };
@@ -38,7 +39,8 @@ describe('useAuthStore', () => {
       { name: 'id', expected: 'user-1' },
       { name: 'email', expected: 'demo@slykboard.local' },
       { name: 'name', expected: 'Demo User' },
-      { name: 'role', expected: 'ADMIN' },
+      { name: 'isPlatformAdmin', expected: true },
+      { name: 'displayName', expected: null },
       { name: 'avatarUrl', expected: 'https://example.com/a.png' },
     ];
     checks.forEach(({ name, expected }) => {

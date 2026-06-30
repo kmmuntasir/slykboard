@@ -18,7 +18,8 @@ function buildAuthResponse(): AuthResponse {
       email: 'user@example.com',
       fullName: 'Test User',
       avatarUrl: null,
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
     },
   };
 }

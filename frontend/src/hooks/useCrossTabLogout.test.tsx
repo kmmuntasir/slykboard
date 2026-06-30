@@ -17,7 +17,8 @@ const testUser: AuthUser = {
     id: 'u1',
     email: 'a@b.c',
     name: 'N',
-    role: 'ADMIN',
+    isPlatformAdmin: true,
+    displayName: null,
     avatarUrl: null,
     blocked: false,
 };

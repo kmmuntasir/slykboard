@@ -8,7 +8,8 @@ const MOCK_USER_STALE: AuthUser = {
   id: 'u1',
   email: 'e',
   name: 'n',
-  role: 'MEMBER',
+  isPlatformAdmin: false,
+  displayName: null,
   avatarUrl: null,
   blocked: false,
 };
@@ -57,7 +58,8 @@ describe('apiFetch', () => {
       id: 'u1',
       email: 'e',
       name: 'n',
-      role: 'MEMBER',
+      isPlatformAdmin: false,
+      displayName: null,
       avatarUrl: null,
       blocked: false,
     });

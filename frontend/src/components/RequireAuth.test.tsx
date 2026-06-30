@@ -22,7 +22,8 @@ function setUserWithToken(token: string) {
         id: 'u1',
         email: 'user@example.com',
         name: 'Test User',
-        role: 'MEMBER',
+        isPlatformAdmin: false,
+        displayName: null,
         avatarUrl: null,
         blocked: false,
     });

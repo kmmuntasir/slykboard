@@ -36,7 +36,8 @@ const fullUser: AuthUser = {
     id: 'user-1',
     email: 'demo@slykboard.local',
     name: 'Demo User',
-    role: 'ADMIN',
+    isPlatformAdmin: true,
+    displayName: null,
     avatarUrl: 'https://example.com/a.png',
     blocked: false,
 };
@@ -303,7 +304,7 @@ describe('TopNav', () => {
     });
 
     it('hides Settings link when role is MEMBER', () => {
-        useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
+        useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
         renderTopNav();
 
         expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
@@ -324,7 +325,7 @@ describe('TopNav', () => {
     });
 
     it('project-present (MEMBER): Board + Reports enabled, no Settings', () => {
-        useAuthStore.getState().setUser({ ...fullUser, role: 'MEMBER' });
+        useAuthStore.getState().setUser({ ...fullUser, isPlatformAdmin: false });
         renderTopNavWithProject('demo');
 
         expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute(

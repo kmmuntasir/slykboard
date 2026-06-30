@@ -57,8 +57,8 @@ vi.mock('@/hooks/useProjects', () => ({
     }),
 }));
 
-vi.mock('@/hooks/useRequireRole', () => ({
-    useRequireRole: () => mockState.isAdmin,
+vi.mock('@/hooks/useRequirePlatformAdmin', () => ({
+    useRequirePlatformAdmin: () => mockState.isAdmin,
 }));
 
 vi.mock('@/hooks/useUpdateProject', () => ({

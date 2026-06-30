@@ -10,6 +10,7 @@ const {
     navigateMock,
     fetchMeMock,
     registerMock,
+    registerForbiddenMock,
     decodeJwtMock,
     broadcastLogoutMock,
     logoutApiMock,
@@ -17,6 +18,7 @@ const {
     navigateMock: vi.fn(),
     fetchMeMock: vi.fn(),
     registerMock: vi.fn(),
+    registerForbiddenMock: vi.fn(),
     decodeJwtMock: vi.fn(),
     broadcastLogoutMock: vi.fn(),
     logoutApiMock: vi.fn(),
@@ -59,7 +61,7 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
 
 vi.mock('@/api/auth', () => ({ fetchMe: fetchMeMock, logout: logoutApiMock }));
 
-vi.mock('@/api/client', () => ({ registerLogoutHandlers: registerMock }));
+vi.mock('@/api/client', () => ({ registerLogoutHandlers: registerMock, registerForbiddenHandler: registerForbiddenMock }));
 
 vi.mock('@/stores/useAuthStore', () => ({
     useAuthStore: Object.assign(
@@ -84,7 +86,8 @@ const freshResponse: AuthResponse = {
         id: 'u1',
         email: 'e@x.com',
         fullName: 'New Name',
-        role: 'MEMBER',
+        isPlatformAdmin: false,
+        displayName: null,
         avatarUrl: null,
     },
 };
@@ -94,7 +97,8 @@ const fullUser: AuthUser = {
     id: 'u-orig',
     email: 'orig@x.com',
     name: 'Orig',
-    role: 'MEMBER',
+    isPlatformAdmin: false,
+    displayName: null,
     avatarUrl: null,
     blocked: false,
 };
@@ -118,6 +122,7 @@ describe('useAuthSync', () => {
         navigateMock.mockReset();
         fetchMeMock.mockReset();
         registerMock.mockReset();
+        registerForbiddenMock.mockReset();
         decodeJwtMock.mockReset();
         setUserMock.mockReset();
         clearMock.mockReset();
@@ -145,7 +150,8 @@ describe('useAuthSync', () => {
             id: 'u1',
             email: 'e@x.com',
             name: 'New Name',
-            role: 'MEMBER',
+            isPlatformAdmin: false,
+            displayName: null,
             avatarUrl: null,
             blocked: false,
         });
@@ -198,7 +204,8 @@ describe('useAuthSync', () => {
             id: 'u1',
             email: 'e@x.com',
             name: 'New Name',
-            role: 'MEMBER',
+            isPlatformAdmin: false,
+            displayName: null,
             avatarUrl: null,
             blocked: false,
         });

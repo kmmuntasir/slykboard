@@ -31,7 +31,8 @@ const defaultAuthResponse: AuthResponse = {
         email: 'user@slykboard.local',
         fullName: 'Jane Doe',
         avatarUrl: null,
-        role: 'MEMBER',
+        isPlatformAdmin: false,
+        displayName: null,
     },
 };
 
@@ -103,7 +104,7 @@ describe('LoginPage', () => {
         expect(user?.id).toBe('u1');
         expect(user?.email).toBe('user@slykboard.local');
         expect(user?.name).toBe('Jane Doe');
-        expect(user?.role).toBe('MEMBER');
+        expect(user?.isPlatformAdmin).toBe(false);
         expect(user?.avatarUrl).toBeNull();
         expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
     });
