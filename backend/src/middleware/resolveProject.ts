@@ -7,6 +7,7 @@ import { ErrorCode } from '../utils/envelope';
 import { isProjectMember, getMemberRole } from '../services/membershipService';
 import { getTicket } from '../services/ticketService';
 import { getLabel } from '../services/labelService';
+import { getComment } from '../services/commentService';
 import type { ProjectRow } from '../services/projectService';
 
 // SLYK-01 Task I — slug-less project resolvers for routes keyed by ticket/label
@@ -119,6 +120,45 @@ export function resolveLabelProject() {
     }
     const { project, projectMember } = await resolveAndAuthorize(
       label.projectId,
+      req.user.id,
+      req.user.isPlatformAdmin,
+    );
+    req.project = project;
+    req.projectMember = projectMember;
+    next();
+  };
+}
+
+// For /api/tickets/:ticketId/comments/:commentId PATCH/DELETE — resolves the
+// comment, then its ticket, then the ticket's project + membership. Reads
+// req.params.commentId. Mount AFTER validateRequest (commentIdParam) and compose
+// with requireProjectAdmin()/authorship checks for write paths. Comments do not
+// carry a projectId directly, so the ticket is loaded first (via the existing
+// getTicket helper) to recover the owning project.
+export function resolveCommentProject() {
+  return async function resolveCommentProjectMiddleware(
+    req: Request,
+    _res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    if (!req.user) {
+      throw new AppError(ErrorCode.UNAUTHENTICATED, 'Authentication required');
+    }
+    const commentId = req.params.commentId as string;
+    const comment = await getComment(commentId);
+    if (!comment) {
+      // No row at all → the only NOT_FOUND these middleware emit.
+      throw new AppError(ErrorCode.NOT_FOUND, 'Comment not found');
+    }
+    const ticket = await getTicket(comment.ticketId);
+    if (!ticket) {
+      // Inconsistent state — the comment→ticket FK should prevent this. Treated
+      // as non-revealing FORBIDDEN (never 404) to preserve the anti-oracle
+      // guarantee, matching resolveAndAuthorize's missing-project handling.
+      throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+    }
+    const { project, projectMember } = await resolveAndAuthorize(
+      ticket.projectId,
       req.user.id,
       req.user.isPlatformAdmin,
     );
