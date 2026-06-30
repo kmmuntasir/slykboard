@@ -18,6 +18,9 @@ export const ticketKeys = {
     [...ticketKeys.all, 'detail-by-ref', slug, displayId] as const,
   // F19: per-ticket activity feed cache key.
   activity: (id: string) => [...ticketKeys.all, 'activity', id] as const,
+  // SLYK-13 T9: per-ticket comment thread cache key. Scoped under the ticket's
+  // detail domain so invalidation travels with the ticket, not globally.
+  comments: (id: string) => [...ticketKeys.all, 'comments', id] as const,
 };
 
 // F14 T5: label catalog query keys (project-scoped list + label detail).
