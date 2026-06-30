@@ -349,23 +349,121 @@ describe('setUserBlocked', () => {
     { name: 'blocks a user (true)', blocked: true },
     { name: 'reactivates a user (false)', blocked: false },
   ])('$name', async ({ blocked }) => {
+    // pre-fetch returns a row currently in the opposite state (non-PA)
+    bag.selectLimit.mockResolvedValueOnce([
+      { ...MOCK_USER_ROW, isPlatformAdmin: false, blocked: !blocked },
+    ]);
     const updated = { ...MOCK_USER_ROW, blocked };
     bag.updateReturning.mockResolvedValueOnce([updated]);
 
-    const result = await setUserBlocked({ targetUserId: 'u-admin', blocked });
+    const result = await setUserBlocked({
+      targetUserId: 'u-admin',
+      blocked,
+      actingUserId: 'u-other',
+    });
 
     expect(result.blocked).toBe(blocked);
     expect(bag.updateSetArg.blocked).toBe(blocked);
     expect(bag.bumpTokenVersion).toHaveBeenCalledWith('u-admin');
   });
 
-  it('throws NOT_FOUND when the target user does not exist (update affected 0 rows)', async () => {
-    bag.updateReturning.mockResolvedValueOnce([]);
+  it('throws NOT_FOUND when the target user does not exist (pre-fetch empty)', async () => {
+    bag.selectLimit.mockResolvedValueOnce([]);
 
     await expect(
-      setUserBlocked({ targetUserId: 'u-ghost', blocked: true }),
+      setUserBlocked({ targetUserId: 'u-ghost', blocked: true, actingUserId: 'u-other' }),
     ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND, message: 'User not found' });
     expect(bag.bumpTokenVersion).not.toHaveBeenCalled();
+  });
+
+  // --- net-new cases for the actingUserId + order-of-checks signature --------
+
+  it('FORBIDDEN: an actor cannot deactivate itself (self-check runs before pre-fetch)', async () => {
+    await expect(
+      setUserBlocked({ targetUserId: 'u1', blocked: true, actingUserId: 'u1' }),
+    ).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN,
+      message: 'You cannot deactivate yourself',
+    });
+    // self-check runs before pre-fetch and before any update
+    expect(bag.selectLimit).not.toHaveBeenCalled();
+    expect(bag.updateReturning).not.toHaveBeenCalled();
+  });
+
+  it('FORBIDDEN: self-block still rejected even when already blocked (self-check before no-op short-circuit)', async () => {
+    // No mock seeding — proves the self-check fires before the pre-fetch /
+    // no-op short-circuit.
+    await expect(
+      setUserBlocked({ targetUserId: 'u1', blocked: true, actingUserId: 'u1' }),
+    ).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN,
+      message: 'You cannot deactivate yourself',
+    });
+    expect(bag.selectLimit).not.toHaveBeenCalled();
+    expect(bag.updateReturning).not.toHaveBeenCalled();
+  });
+
+  it('self-unblock is allowed: an actor can reactivate itself', async () => {
+    bag.selectLimit.mockResolvedValueOnce([
+      { ...MOCK_USER_ROW, isPlatformAdmin: false, blocked: true },
+    ]);
+    const updated = { ...MOCK_USER_ROW, blocked: false };
+    bag.updateReturning.mockResolvedValueOnce([updated]);
+
+    const result = await setUserBlocked({
+      targetUserId: 'u1',
+      blocked: false,
+      actingUserId: 'u1',
+    });
+
+    expect(result.blocked).toBe(false);
+    expect(bag.bumpTokenVersion).toHaveBeenCalledWith('u1');
+  });
+
+  it('blocks a non-last platform admin: update + token bump', async () => {
+    bag.selectLimit.mockResolvedValueOnce([
+      { ...MOCK_USER_ROW, isPlatformAdmin: true, blocked: false },
+    ]);
+    bag.selectCount.mockResolvedValueOnce([{ count: 2 }]); // 2 PAs → safe
+    const updated = { ...MOCK_USER_ROW, blocked: true };
+    bag.updateReturning.mockResolvedValueOnce([updated]);
+
+    const result = await setUserBlocked({
+      targetUserId: 'u-admin',
+      blocked: true,
+      actingUserId: 'u-other',
+    });
+
+    expect(result.blocked).toBe(true);
+    expect(bag.bumpTokenVersion).toHaveBeenCalledWith('u-admin');
+  });
+
+  it('CONFLICT: blocking the last platform admin is rejected', async () => {
+    bag.selectLimit.mockResolvedValueOnce([
+      { ...MOCK_USER_ROW, isPlatformAdmin: true, blocked: false },
+    ]);
+    bag.selectCount.mockResolvedValueOnce([{ count: 1 }]); // only PA
+
+    await expect(
+      setUserBlocked({ targetUserId: 'u-admin', blocked: true, actingUserId: 'u-other' }),
+    ).rejects.toMatchObject({
+      code: ErrorCode.CONFLICT,
+      message: 'Cannot remove the last platform admin',
+    });
+    expect(bag.updateReturning).not.toHaveBeenCalled();
+    expect(bag.bumpTokenVersion).not.toHaveBeenCalled();
+  });
+
+  it('CONFLICT: a missing count row is treated as 0 (defensive last-PA guard)', async () => {
+    bag.selectLimit.mockResolvedValueOnce([
+      { ...MOCK_USER_ROW, isPlatformAdmin: true, blocked: false },
+    ]);
+    bag.selectCount.mockResolvedValueOnce([]); // defensive: no count row → 0
+
+    await expect(
+      setUserBlocked({ targetUserId: 'u-admin', blocked: true, actingUserId: 'u-other' }),
+    ).rejects.toMatchObject({ code: ErrorCode.CONFLICT });
+    expect(bag.updateReturning).not.toHaveBeenCalled();
   });
 });
 
