@@ -59,7 +59,6 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
 
     return (
         <div ref={containerRef} className="relative">
-            <span className="mb-1 block text-sm font-medium">Labels</span>
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
