@@ -18,6 +18,7 @@ import {
 import { parseTicketDisplayId } from '../utils/parseTicketDisplayId';
 import { projectLabelsRouter } from './labels.routes';
 import { projectReportsRouter } from './report.routes';
+import { projectMembersRouter } from './projectMembers.routes';
 
 export const projectsRouter = Router();
 
@@ -148,3 +149,9 @@ projectsRouter.use(projectLabelsRouter);
 // projectsRouter. Membership-gated by requireProjectMember (F47). Mirrors the
 // projectLabelsRouter bare-mount pattern.
 projectsRouter.use(projectReportsRouter);
+
+// SLYK-01 Task L: project-scoped member-management routes
+// (/:slug/members...) mounted on projectsRouter. GET roster gated by
+// requireProjectMember; write routes additionally by requireProjectAdmin.
+// Mirrors the projectLabelsRouter / projectReportsRouter bare-mount pattern.
+projectsRouter.use(projectMembersRouter);

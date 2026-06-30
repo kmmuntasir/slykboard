@@ -164,6 +164,28 @@ export async function promoteToProjectAdmin(
   }
 }
 
+// 6b. Set an existing member's tier to an arbitrary role (promote OR demote).
+// Used by the PATCH /:slug/members/:userId/role route. Unlike addMember (which
+// idempotently INSERTS on a missing row), this throws NOT_FOUND when the user
+// is not already a member — so demoting a non-member correctly surfaces
+// 'User not found' instead of silently creating a membership. NOT_FOUND if absent.
+export async function setMemberRole(
+  projectId: string,
+  userId: string,
+  role: ProjectMemberRole,
+): Promise<void> {
+  const updated = await db
+    .update(projectMembers)
+    .set({ role })
+    .where(
+      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+    )
+    .returning();
+  if (updated.length === 0) {
+    throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
+  }
+}
+
 // 7. Provisioning path for Member Management. ONE db.transaction: domain-gate the
 //    email BEFORE any insert (zero side effects on a wrong-domain email), then
 //    insert the user (googleId=null, isPlatformAdmin=false, blocked=false), then
