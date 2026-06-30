@@ -171,6 +171,15 @@ describe('TicketDetailModal', () => {
         expect(await screen.findByRole('dialog', { name: 'SLYK-101' })).toBeInTheDocument();
     });
 
+    it('renders the dialog at the full width preset (SLYK-09)', async () => {
+        renderModal();
+        const dialog = await screen.findByRole('dialog', { name: 'SLYK-101' });
+        // 'full' preset from Modal.tsx -> max-w-[min(95vw,1400px)] on the [role="dialog"] panel.
+        expect(dialog).toHaveClass('max-w-[min(95vw,1400px)]');
+        // Guard: the old 'xl' preset class must be gone.
+        expect(dialog).not.toHaveClass('max-w-4xl');
+    });
+
     it('renders "Created by {creator.fullName}" and the creator avatar', async () => {
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
