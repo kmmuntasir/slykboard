@@ -23,7 +23,7 @@ export async function listUsers(): Promise<UserOption[]> {
 }
 
 // F25: GET /users — admin user-management roster. Returns the full user shape
-// (email/isPlatformAdmin/blocked) so SettingsPage can render the management table.
+// (email/isPlatformAdmin/blocked) for the management table.
 export async function fetchUsers(): Promise<WorkspaceUser[]> {
   return apiFetch<WorkspaceUser[]>('/users');
 }
