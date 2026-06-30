@@ -27,7 +27,18 @@ export function reportError(error: ApiClientError | Error): void {
 export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     onError: (error, _variables, _onMutateResult, mutation) => {
-      const meta = mutation.meta as { revertMessage?: string } | undefined;
+      // SLYK-02 T6: double-toast suppression mechanism.
+      // A mutation may carry meta.suppressGlobalToast: true when the caller owns
+      // the error UX inline (e.g. AddMemberModal renders a role="alert" region).
+      // When set, the global toast funnel is skipped entirely so the user does
+      // not see both an inline message AND a generic toast. This is now the
+      // preferred project-wide convention for locally-handled mutation errors;
+      // meta.revertMessage still overrides text-only for callers that keep the toast.
+      const meta = mutation.meta as {
+        revertMessage?: string;
+        suppressGlobalToast?: boolean;
+      } | undefined;
+      if (meta?.suppressGlobalToast) return;
       toast.error(meta?.revertMessage ?? defaultMessage(error));
     },
   }),
