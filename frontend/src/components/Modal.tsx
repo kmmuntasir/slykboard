@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { useModalA11y } from '../hooks/useModalA11y';
 import { cn } from './ui/cn';
 
-type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
 // F43: size → panel width. 'md' default preserves the prior max-w-lg for all
 // existing consumers (none pass size today → backward compatible).
@@ -14,6 +14,7 @@ const MODAL_SIZE_CLASS: Record<ModalSize, string> = {
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
+    full: 'max-w-[min(95vw,1400px)]',
 };
 
 // F16 D1: reusable accessible dialog shell (0 deps). Renders into a portal at
