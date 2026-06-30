@@ -1,6 +1,8 @@
 // F14 T9: LabelManager component tests.
 // Mocks useLabels + the three mutation hooks (vi.hoisted state) so no
 // QueryClientProvider is needed — these are render + interaction assertions.
+// ConfirmDialog is mocked to expose deterministic Confirm/Cancel triggers so
+// the delete flow can be driven without the real Modal portal.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { LabelManager } from './LabelManager';
@@ -13,6 +15,8 @@ const { mockState } = vi.hoisted(() => ({
         updateMutate: vi.fn(),
         deleteMutate: vi.fn(),
         createIsPending: false,
+        deleteIsPending: false,
+        toastSuccess: vi.fn(),
     },
 }));
 
@@ -26,11 +30,60 @@ vi.mock('@/hooks/useLabelMutations', () => ({
         isPending: mockState.createIsPending,
     }),
     useUpdateLabel: () => ({ mutate: mockState.updateMutate }),
-    useDeleteLabel: () => ({ mutate: mockState.deleteMutate }),
+    useDeleteLabel: () => ({
+        mutate: mockState.deleteMutate,
+        isPending: mockState.deleteIsPending,
+    }),
 }));
+
+vi.mock('@/hooks/useToast', () => ({
+    toast: { success: mockState.toastSuccess },
+}));
+
+// ConfirmDialog mock — mirrors the AddMemberModal.test.tsx pattern. Exposes
+// deterministic Confirm/Cancel triggers wired to the real handlers + renders
+// the dialog title/message so tests can assert the dialog surfaced.
+vi.mock('./ConfirmDialog', () => ({
+    ConfirmDialog: ({
+        isOpen,
+        title,
+        message,
+        onConfirm,
+        onCancel,
+    }: {
+        isOpen: boolean;
+        title: string;
+        message?: string;
+        onConfirm: () => void;
+        onCancel: () => void;
+    }) => {
+        if (!isOpen) return null;
+        return (
+            <div data-testid="confirm-dialog" role="dialog" aria-label={title}>
+                <h2>{title}</h2>
+                {message ? <p>{message}</p> : null}
+                <button type="button" onClick={onConfirm}>
+                    DoConfirm
+                </button>
+                <button type="button" onClick={onCancel}>
+                    DoCancel
+                </button>
+            </div>
+        );
+    },
+}));
+
+const createToast = mockState.toastSuccess;
 
 const bugLabel: Label = { id: 'l1', name: 'Bug', color: '#EF4444' };
 const featureLabel: Label = { id: 'l2', name: 'Feature', color: '#10B981' };
+
+// Invoke the per-call onSuccess passed as the 2nd mutate arg (mirrors how the
+// real mutation hook resolves onSuccess), so toast assertions can run sync.
+function fireOnSuccess(mutateSpy: ReturnType<typeof vi.fn>) {
+    const opts = mutateSpy.mock.calls.at(-1)?.[1] as { onSuccess?: () => void } | undefined;
+    opts?.onSuccess?.();
+}
 
 describe('LabelManager', () => {
     beforeEach(() => {
@@ -39,6 +92,8 @@ describe('LabelManager', () => {
         mockState.updateMutate = vi.fn();
         mockState.deleteMutate = vi.fn();
         mockState.createIsPending = false;
+        mockState.deleteIsPending = false;
+        mockState.toastSuccess = vi.fn();
     });
 
     it('renders the create row + empty label list without error', () => {
@@ -62,7 +117,7 @@ describe('LabelManager', () => {
         expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2);
     });
 
-    it('create: typing a name + Add calls createLabel mutate', () => {
+    it('create: typing a name + Add calls createLabel mutate + fires "Label created." toast', () => {
         render(<LabelManager projectSlug="SLYK" />);
 
         fireEvent.change(screen.getByLabelText('New label name'), { target: { value: 'Urgent' } });
@@ -71,10 +126,12 @@ describe('LabelManager', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-        expect(mockState.createMutate).toHaveBeenCalledWith({
-            name: 'Urgent',
-            color: '#F59E0B',
-        });
+        expect(mockState.createMutate).toHaveBeenCalledWith(
+            { name: 'Urgent', color: '#F59E0B' },
+            expect.objectContaining({ onSuccess: expect.any(Function) }),
+        );
+        fireOnSuccess(mockState.createMutate);
+        expect(createToast).toHaveBeenCalledWith('Label created.');
     });
 
     it('create: trims the name before calling mutate', () => {
@@ -85,10 +142,10 @@ describe('LabelManager', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-        expect(mockState.createMutate).toHaveBeenCalledWith({
-            name: 'Spaced',
-            color: '#6B7280',
-        });
+        expect(mockState.createMutate).toHaveBeenCalledWith(
+            { name: 'Spaced', color: '#6B7280' },
+            expect.objectContaining({ onSuccess: expect.any(Function) }),
+        );
     });
 
     it('create: Add disabled when name is empty (no mutate)', () => {
@@ -99,7 +156,7 @@ describe('LabelManager', () => {
         expect(mockState.createMutate).not.toHaveBeenCalled();
     });
 
-    it('edit: Edit reveals inline controls; Save calls updateLabel mutate', () => {
+    it('edit: Edit reveals inline controls; Save calls updateLabel mutate + fires "Label updated." toast', () => {
         mockState.labels = [bugLabel];
         render(<LabelManager projectSlug="SLYK" />);
 
@@ -113,10 +170,12 @@ describe('LabelManager', () => {
         fireEvent.change(editName, { target: { value: 'Defect' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        expect(mockState.updateMutate).toHaveBeenCalledWith({
-            labelId: 'l1',
-            dto: { name: 'Defect', color: '#EF4444' },
-        });
+        expect(mockState.updateMutate).toHaveBeenCalledWith(
+            { labelId: 'l1', dto: { name: 'Defect', color: '#EF4444' } },
+            expect.objectContaining({ onSuccess: expect.any(Function) }),
+        );
+        fireOnSuccess(mockState.updateMutate);
+        expect(createToast).toHaveBeenCalledWith('Label updated.');
     });
 
     it('edit: Cancel exits edit mode without mutating', () => {
@@ -130,25 +189,51 @@ describe('LabelManager', () => {
         expect(mockState.updateMutate).not.toHaveBeenCalled();
     });
 
-    it('delete: Delete reveals confirm prompt; Confirm calls deleteLabel mutate', () => {
+    it('delete: Delete opens the ConfirmDialog with title + message', () => {
         mockState.labels = [bugLabel];
         render(<LabelManager projectSlug="SLYK" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-        expect(screen.getByText('Delete? Removes from all tickets.')).toBeInTheDocument();
+        // No dialog before clicking Delete.
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-        expect(mockState.deleteMutate).toHaveBeenCalledWith('l1');
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        // Dialog surfaced with the expected title + message.
+        expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+        expect(screen.getByText('Delete label?')).toBeInTheDocument();
+        expect(
+            screen.getByText('This label will be removed from all tickets. This cannot be undone.'),
+        ).toBeInTheDocument();
     });
 
-    it('delete: Cancel exits confirm mode without mutating', () => {
+    it('delete: Cancel in the dialog clears it without calling deleteMut', () => {
         mockState.labels = [bugLabel];
         render(<LabelManager projectSlug="SLYK" />);
 
         fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
 
-        expect(screen.queryByText('Delete? Removes from all tickets.')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'DoCancel' }));
+
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
         expect(mockState.deleteMutate).not.toHaveBeenCalled();
+    });
+
+    it('delete: confirm calls deleteLabel mutate(id) + clears the dialog + fires "Label deleted." toast', () => {
+        mockState.labels = [bugLabel];
+        render(<LabelManager projectSlug="SLYK" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(screen.getByRole('button', { name: 'DoConfirm' }));
+
+        expect(mockState.deleteMutate).toHaveBeenCalledWith(
+            'l1',
+            expect.objectContaining({ onSuccess: expect.any(Function) }),
+        );
+        // Dialog cleared immediately on confirm.
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+
+        fireOnSuccess(mockState.deleteMutate);
+        expect(createToast).toHaveBeenCalledWith('Label deleted.');
     });
 });

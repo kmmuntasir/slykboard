@@ -5,7 +5,9 @@ import { useState } from 'react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { useLabels } from '@/hooks/useLabels';
 import { useCreateLabel, useUpdateLabel, useDeleteLabel } from '@/hooks/useLabelMutations';
+import { toast } from '@/hooks/useToast';
 import { LabelChip } from './LabelChip';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface LabelManagerProps {
     projectSlug: string;
@@ -13,6 +15,7 @@ interface LabelManagerProps {
 
 // D16: neutral gray default for migrated / new labels (recolorable post-create).
 const DEFAULT_COLOR = '#6B7280';
+const DELETE_DIALOG_TITLE_ID = 'confirm-delete-label-title';
 
 export function LabelManager({ projectSlug }: LabelManagerProps) {
     const { data: labels = [] } = useLabels(projectSlug);
@@ -31,7 +34,10 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
         if (!newName.trim()) {
             return;
         }
-        createMut.mutate({ name: newName.trim(), color: newColor });
+        createMut.mutate(
+            { name: newName.trim(), color: newColor },
+            { onSuccess: () => toast.success('Label created.') },
+        );
         setNewName('');
         setNewColor(DEFAULT_COLOR);
     }
@@ -46,12 +52,20 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
         if (!editingId || !editName.trim()) {
             return;
         }
-        updateMut.mutate({ labelId: editingId, dto: { name: editName.trim(), color: editColor } });
+        updateMut.mutate(
+            { labelId: editingId, dto: { name: editName.trim(), color: editColor } },
+            { onSuccess: () => toast.success('Label updated.') },
+        );
         setEditingId(null);
     }
 
-    function handleConfirmDelete(id: string) {
-        deleteMut.mutate(id);
+    function handleConfirmDelete() {
+        if (confirmDeleteId === null) {
+            return;
+        }
+        deleteMut.mutate(confirmDeleteId, {
+            onSuccess: () => toast.success('Label deleted.'),
+        });
         setConfirmDeleteId(null);
     }
 
@@ -134,25 +148,6 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                                     Cancel
                                 </button>
                             </>
-                        ) : confirmDeleteId === l.id ? (
-                            <>
-                                <LabelChip label={l} />
-                                <span className="text-sm">Delete? Removes from all tickets.</span>
-                                <button
-                                    type="button"
-                                    onClick={() => handleConfirmDelete(l.id)}
-                                    className="rounded bg-destructive px-2 py-1 text-destructive-foreground"
-                                >
-                                    Confirm
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteId(null)}
-                                    className="rounded border px-2 py-1"
-                                >
-                                    Cancel
-                                </button>
-                            </>
                         ) : (
                             <>
                                 <LabelChip label={l} />
@@ -175,6 +170,19 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                     </li>
                 ))}
             </ul>
+
+            <ConfirmDialog
+                isOpen={confirmDeleteId !== null}
+                title="Delete label?"
+                titleId={DELETE_DIALOG_TITLE_ID}
+                variant="destructive"
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                pending={deleteMut.isPending}
+                message="This label will be removed from all tickets. This cannot be undone."
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmDeleteId(null)}
+            />
         </div>
     );
 }
