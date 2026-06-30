@@ -16,6 +16,8 @@ import {
   type UpdateTicketBody,
   type ManualEntryBody,
 } from './tickets.schema';
+import { createCommentBody, type CreateCommentBody } from './comments.schema';
+import * as commentService from '../services/commentService';
 
 export const ticketsRouter = Router();
 
@@ -50,6 +52,43 @@ ticketsRouter.get(
     const { ticketId } = req.params as TicketIdParam;
     const entries = await activityService.getTicketActivity(ticketId);
     res.json(success({ entries }));
+  },
+);
+
+// F11 move + F13 attributes — merged PATCH. Body is a non-empty subset of
+// {statusColumn, position, title, description, priority, assigneeId}.
+// If any attribute field is present, run updateTicket first; if move fields
+// are ALSO present, run moveTicket on the updated row (move wins the response).
+// Attribute-only path returns the updated row. Move-only path preserves F11.
+// SLYK-13: comment sub-resource (list + create). Member-scoped via the SAME
+// resolveTicketProject middleware chain the other /:ticketId/* routes use — a
+// non-member gets the byte-identical non-revealing FORBIDDEN, and a missing OR
+// soft-deleted ticket surfaces as NOT_FOUND (getTicket ignores deletedAt, but
+// createComment re-checks ticketIsLive so a soft-deleted ticket still 404s on
+// POST). Mounted AFTER /:ticketId/activity; both are specific sub-paths so
+// neither shadows the other (no catch-all precedes them).
+ticketsRouter.get(
+  '/:ticketId/comments',
+  authenticate,
+  validateRequest({ params: ticketIdParam }),
+  resolveTicketProject(),
+  async (req, res) => {
+    const { ticketId } = req.params as TicketIdParam;
+    const comments = await commentService.listComments(ticketId);
+    res.json(success(comments));
+  },
+);
+
+ticketsRouter.post(
+  '/:ticketId/comments',
+  authenticate,
+  validateRequest({ params: ticketIdParam, body: createCommentBody }),
+  resolveTicketProject(),
+  async (req, res) => {
+    const { ticketId } = req.params as TicketIdParam;
+    const body = req.body as CreateCommentBody;
+    const created = await commentService.createComment(ticketId, req.user!.id, body.body);
+    res.status(201).json(success(created));
   },
 );
 
