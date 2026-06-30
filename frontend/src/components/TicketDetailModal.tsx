@@ -17,6 +17,7 @@ import { Modal } from './Modal';
 import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
 import { DeleteTicketConfirm } from './DeleteTicketConfirm';
 import { ActivityFeed } from './ActivityFeed';
+import { CommentsSection } from './CommentsSection';
 import { TicketAttributeForm } from './TicketAttributeForm';
 import { TimerControls } from './TimerControls';
 import { TimeLog } from './TimeLog';
@@ -221,12 +222,12 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                             onCancel={requestClose}
                         />
 
-                        {/* SLYK-13: Comments section — not yet implemented */}
-                        <section aria-label="Comments" className="mt-4">
-                            <p className="text-sm text-muted-foreground">
-                                Comments — coming soon (SLYK-13)
-                            </p>
-                        </section>
+                        {/* SLYK-13 T14: comments section — owns its data + create/edit/delete. */}
+                        <CommentsSection
+                            ticketId={ticket.id}
+                            slug={slug}
+                            disabled={!!ticket.deletedAt}
+                        />
 
                         {/* F17 T4: admin-only delete entry point. Hidden for members + soft-deleted tickets. */}
                         {isAdmin && !ticket.deletedAt && (

@@ -57,6 +57,12 @@ vi.mock('./LabelMultiSelect', () => ({
 }));
 
 vi.mock('@/api/tickets');
+vi.mock('@/api/comments', () => ({
+    fetchTicketComments: vi.fn().mockResolvedValue([]),
+    createTicketComment: vi.fn().mockResolvedValue({}),
+    updateTicketComment: vi.fn().mockResolvedValue({}),
+    deleteTicketComment: vi.fn().mockResolvedValue(undefined),
+}));
 
 // SLYK-11 T4: the Time Tracking tab (forceMount → mounted even when hidden)
 // drives these queries. Mock them so the panel renders deterministically
@@ -99,6 +105,7 @@ import { TicketDetailModal } from './TicketDetailModal';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket, fetchTicketActivity } from '@/api/tickets';
+import { fetchTicketComments } from '@/api/comments';
 import { ticketKeys } from '@/api/queryKeys';
 import { formatDate } from '@/utils/formatDate';
 import type { Ticket } from '@/types/ticket';
@@ -181,6 +188,9 @@ describe('TicketDetailModal', () => {
         // returns undefined, which React Query v5 treats as an error; resolve a
         // real shape so the Activity panel renders its (empty) success state.
         vi.mocked(fetchTicketActivity).mockResolvedValue({ entries: [] });
+        // SLYK-13 T14: CommentsSection reads the ticket's comment thread. Default
+        // to an empty list so the 'No comments yet.' empty state renders cleanly.
+        vi.mocked(fetchTicketComments).mockResolvedValue([]);
         appRoot = document.createElement('main');
         appRoot.id = 'app-root';
         document.body.appendChild(appRoot);
@@ -492,8 +502,9 @@ describe('TicketDetailModal', () => {
         expect(within(details).getByText('Created by Ada Lovelace')).toBeInTheDocument();
         // Embedded TicketAttributeForm with the title seeded.
         expect(within(details).getByLabelText('Title')).toHaveValue('Render board');
-        // Comments placeholder (SLYK-13 not yet implemented).
-        expect(within(details).getByText(/coming soon/i)).toBeInTheDocument();
+        // Comments section (SLYK-13 T14) renders its empty state. The comment
+        // thread query resolves async, so findByText waits past the loading state.
+        expect(await within(details).findByText('No comments yet.')).toBeInTheDocument();
         // Admin-only delete entry point lives on the Details panel.
         expect(within(details).getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
 
