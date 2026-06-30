@@ -24,6 +24,7 @@ import { TimeLog } from './TimeLog';
 import { ManualEntryForm } from './ManualEntryForm';
 import { TicketModalSkeleton } from './TicketModalSkeleton';
 import { Retry } from './Retry';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 
 // F16: the unified ticket detail modal. Read-only header (display ID, creator,
 // timestamps) + the reused TicketAttributeForm edit body (F13/F14/F15). Wires the
@@ -134,6 +135,12 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             </div>
         );
     } else {
+        // T6: extracted absolute timestamps for the Tooltip content (parity with
+        // ActivityItem/CommentItem). Kept local to the resolved branch since
+        // formatDate is only meaningful when `ticket` is present.
+        const createdAbsolute = formatDate(ticket.createdAt);
+        const updatedAbsolute = formatDate(ticket.updatedAt);
+
         modalBody = (
             <>
                 {/* F17: deleted-ticket banner — shown when the ticket is soft-deleted. */}
@@ -188,15 +195,25 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                             </span>
                             <span className="inline-flex items-center gap-1">
                                 <Clock size={14} className="shrink-0" />
-                                <time dateTime={ticket.createdAt} title={formatDate(ticket.createdAt)}>
-                                    {formatRelativeTime(ticket.createdAt)}
-                                </time>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <time dateTime={ticket.createdAt}>
+                                            {formatRelativeTime(ticket.createdAt)}
+                                        </time>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{createdAbsolute}</TooltipContent>
+                                </Tooltip>
                             </span>
                             <span className="inline-flex items-center gap-1">
                                 <Clock size={14} className="shrink-0" />
-                                <time dateTime={ticket.updatedAt} title={formatDate(ticket.updatedAt)}>
-                                    {formatRelativeTime(ticket.updatedAt)}
-                                </time>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <time dateTime={ticket.updatedAt}>
+                                            {formatRelativeTime(ticket.updatedAt)}
+                                        </time>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{updatedAbsolute}</TooltipContent>
+                                </Tooltip>
                             </span>
                         </div>
 

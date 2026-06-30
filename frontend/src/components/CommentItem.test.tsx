@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 import { CommentItem } from './CommentItem';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import type { CommentDto } from '@/types/comment';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
@@ -47,13 +48,17 @@ function makeComment(overrides: Partial<CommentDto> = {}): CommentDto {
 }
 
 function renderComment(comment: CommentDto, slug = 'some-project') {
+    // TooltipProvider is mounted app-wide in main.tsx (production). Tests render an
+    // isolated subtree, so mount it here too — Radix Tooltip throws without it.
     return render(
-        <CommentItem
-            comment={comment}
-            slug={slug}
-            onEdit={vi.fn()}
-            onDelete={vi.fn()}
-        />,
+        <TooltipProvider>
+            <CommentItem
+                comment={comment}
+                slug={slug}
+                onEdit={vi.fn()}
+                onDelete={vi.fn()}
+            />
+        </TooltipProvider>,
     );
 }
 
@@ -99,13 +104,15 @@ describe('CommentItem', () => {
     });
 
     // --- relative time + tooltip -------------------------------------------
-    it('renders a relative time element with an absolute-time title tooltip', () => {
+    it('renders a relative <time> element with dateTime preserved (T6: title moved to Tooltip)', () => {
         setUser();
         renderComment(makeComment({ createdAt: '2024-01-01T00:00:00.000Z' }));
         const time = screen.getByText(/ago|^now$/);
         expect(time.tagName).toBe('TIME');
-        expect(time).toHaveAttribute('title');
-        expect(time.getAttribute('title')).not.toBe('');
+        // T6: the absolute time moved from a native title= attr to Radix Tooltip
+        // content (portalled, interaction-gated). The machine-readable dateTime
+        // is preserved on the <time> element.
+        expect(time).toHaveAttribute('dateTime', '2024-01-01T00:00:00.000Z');
     });
 
     // --- Edit/Delete gate matrix -------------------------------------------
@@ -190,7 +197,14 @@ describe('CommentItem', () => {
         const onDelete = vi.fn();
         const comment = makeComment({ author: { id: 'u-author', fullName: 'Ada', avatarUrl: null } });
         render(
-            <CommentItem comment={comment} slug="some-project" onEdit={onEdit} onDelete={onDelete} />,
+            <TooltipProvider>
+                <CommentItem
+                    comment={comment}
+                    slug="some-project"
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                />
+            </TooltipProvider>,
         );
         screen.getByRole('button', { name: /^edit$/i }).click();
         expect(onEdit).toHaveBeenCalledWith(comment);

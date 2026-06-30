@@ -3,6 +3,7 @@ import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import { formatDate } from '@/utils/formatDate';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 
 // SLYK-13 T12: a single comment row in a ticket's comment thread.
 //
@@ -55,13 +56,17 @@ export function CommentItem({ comment, slug, onEdit, onDelete }: CommentItemProp
             <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                     <span className="text-sm font-medium text-foreground">{name}</span>
-                    <time
-                        className="text-xs text-muted-foreground"
-                        title={absolute}
-                        dateTime={comment.createdAt}
-                    >
-                        {formatRelativeTime(comment.createdAt)}
-                    </time>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <time
+                                className="text-xs text-muted-foreground"
+                                dateTime={comment.createdAt}
+                            >
+                                {formatRelativeTime(comment.createdAt)}
+                            </time>
+                        </TooltipTrigger>
+                        <TooltipContent>{absolute}</TooltipContent>
+                    </Tooltip>
                     {comment.edited && (
                         <span className="text-xs italic text-muted-foreground">(edited)</span>
                     )}

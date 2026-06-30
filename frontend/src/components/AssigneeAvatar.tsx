@@ -1,4 +1,5 @@
 import type { Assignee } from '@/types/ticket';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 
 interface AssigneeAvatarProps {
     assignee: Assignee | null;
@@ -7,13 +8,17 @@ interface AssigneeAvatarProps {
 export function AssigneeAvatar({ assignee }: AssigneeAvatarProps) {
     if (!assignee) {
         return (
-            <span
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground"
-                aria-label="Unassigned"
-                title="Unassigned"
-            >
-                –
-            </span>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <span
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground"
+                        aria-label="Unassigned"
+                    >
+                        –
+                    </span>
+                </TooltipTrigger>
+                <TooltipContent>Unassigned</TooltipContent>
+            </Tooltip>
         );
     }
     const initials = assignee.fullName
@@ -25,11 +30,16 @@ export function AssigneeAvatar({ assignee }: AssigneeAvatarProps) {
     return assignee.avatarUrl ? (
         <img src={assignee.avatarUrl} alt={assignee.fullName} className="h-6 w-6 rounded-full" />
     ) : (
-        <span
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
-            title={assignee.fullName}
-        >
-            {initials}
-        </span>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
+                    aria-label={assignee.fullName}
+                >
+                    {initials}
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>{assignee.fullName}</TooltipContent>
+        </Tooltip>
     );
 }

@@ -13,6 +13,7 @@ import {
     DropdownGroup,
 } from '@/components/ui/Dropdown';
 import { Badge } from '@/components/ui/Badge';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 import type { Project } from '@/types/project';
 
 // F38 — Project picker rebuild. Kills the 3 bugs at the old :19/:24/:27:
@@ -95,30 +96,46 @@ export function ProjectPicker() {
             <>
                 {selected && <ColorDot slug={selected.slug} />}
                 <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className={cn('truncate', TRIGGER_MAX_W)} title={triggerLabel}>
-                    {triggerLabel}
-                </span>
+                {/*
+                  T6: overflow tooltip. Radix Tooltip has no built-in overflow gate,
+                  so this is always-on (shows on hover/focus even when the label
+                  fits). Acceptable here — the trigger is narrow (max-w-[10rem]) and
+                  the project name is the control's primary identity cue.
+                */}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span className={cn('truncate', TRIGGER_MAX_W)}>{triggerLabel}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>{triggerLabel}</TooltipContent>
+                </Tooltip>
             </>
         );
     }
 
     return (
         <Dropdown>
-            <DropdownTrigger asChild>
-                <button
-                    type="button"
-                    aria-label="Select project"
-                    title={selected ? selected.name : PLACEHOLDER}
-                    className={cn(
-                        'flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1',
-                        'text-sm text-foreground hover:bg-accent',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    )}
-                >
-                    {triggerBody}
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </button>
-            </DropdownTrigger>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <DropdownTrigger asChild>
+                        <button
+                            type="button"
+                            aria-label="Select project"
+                            className={cn(
+                                'flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1',
+                                'text-sm text-foreground hover:bg-accent',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            )}
+                        >
+                            {triggerBody}
+                            <ChevronDown
+                                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                        </button>
+                    </DropdownTrigger>
+                </TooltipTrigger>
+                <TooltipContent>{selected ? selected.name : PLACEHOLDER}</TooltipContent>
+            </Tooltip>
 
             <DropdownContent align="start" className="min-w-[12rem]">
                 {isLoading && <div className="px-2 py-1.5" aria-hidden="true" />}
@@ -159,9 +176,14 @@ export function ProjectPicker() {
                                         className="h-4 w-4 shrink-0 text-muted-foreground"
                                         aria-hidden="true"
                                     />
-                                    <span className={cn('truncate', TRIGGER_MAX_W)} title={p.name}>
-                                        {p.name}
-                                    </span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className={cn('truncate', TRIGGER_MAX_W)}>
+                                                {p.name}
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{p.name}</TooltipContent>
+                                    </Tooltip>
                                     {!p.isActive && isAdmin && (
                                         <Badge variant="warning" className="shrink-0">
                                             Deactivated

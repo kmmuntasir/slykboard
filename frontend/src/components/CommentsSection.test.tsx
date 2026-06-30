@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 
 import { CommentsSection } from './CommentsSection';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import type { CommentDto } from '@/types/comment';
 import { useAuthStore } from '@/stores/useAuthStore';
 import type { AuthUser } from '@/stores/useAuthStore';
@@ -70,7 +71,14 @@ function wrapper() {
         defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     function Wrapper({ children }: { children: ReactNode }) {
-        return createElement(QueryClientProvider, { client: qc }, children);
+        // TooltipProvider is mounted app-wide in main.tsx (production); mount it
+        // here too — CommentsSection renders CommentItem, whose Radix Tooltip
+        // (absolute-time) throws without it.
+        return createElement(
+            QueryClientProvider,
+            { client: qc },
+            createElement(TooltipProvider, null, children),
+        );
     }
     return Wrapper;
 }

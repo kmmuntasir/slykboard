@@ -3,6 +3,7 @@ import { createElement, type ReactNode } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 
 // --- Leaf-editor mocks (reuse the TicketAttributeForm.test.tsx pattern) ------
 vi.mock('./RichTextEditor', () => ({
@@ -107,7 +108,6 @@ import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket, fetchTicketActivity } from '@/api/tickets';
 import { fetchTicketComments } from '@/api/comments';
 import { ticketKeys } from '@/api/queryKeys';
-import { formatDate } from '@/utils/formatDate';
 import type { Ticket } from '@/types/ticket';
 
 // --- Fixtures ---------------------------------------------------------------
@@ -150,10 +150,16 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
             element: <>{children}</>,
         },
     ]);
+    // TooltipProvider is mounted app-wide in main.tsx (production); mount it here
+    // too so the Radix Tooltips on the created/updated timestamps render.
     return createElement(
         QueryClientProvider,
         { client },
-        createElement(RouterProvider, { router }),
+        createElement(
+            TooltipProvider,
+            null,
+            createElement(RouterProvider, { router }),
+        ),
     );
 }
 
@@ -232,10 +238,12 @@ describe('TicketDetailModal', () => {
         expect(times).toHaveLength(2);
         // First <time> is the createdAt timestamp from the makeTicket fixture.
         expect(times[0]!.getAttribute('dateTime')).toBe('2026-06-01T00:00:00.000Z');
-        expect(times[0]!.getAttribute('title')).toBe(formatDate('2026-06-01T00:00:00.000Z'));
         // Second <time> is the updatedAt timestamp.
         expect(times[1]!.getAttribute('dateTime')).toBe('2026-06-02T00:00:00.000Z');
-        expect(times[1]!.getAttribute('title')).toBe(formatDate('2026-06-02T00:00:00.000Z'));
+        // T6: the absolute time moved from a native title= attr to Radix Tooltip
+        // content (portalled, interaction-gated); assert dateTime is preserved.
+        expect(times[0]!.getAttribute('title')).toBeNull();
+        expect(times[1]!.getAttribute('title')).toBeNull();
         // Each <time> is preceded by a Clock (lucide) icon.
         expect(document.querySelectorAll('svg.lucide-clock').length).toBe(2);
     });

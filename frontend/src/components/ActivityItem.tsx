@@ -2,6 +2,7 @@ import type { ActivityEntry } from '@/types/activity';
 import { actorLabel, describeActivity } from '@/utils/describeActivity';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import { formatDate } from '@/utils/formatDate';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
 
 // F19: one enriched activity row. Actor avatar+name, sentence clause,
 // relative time primary + absolute locale time in a title tooltip.
@@ -27,9 +28,14 @@ export function ActivityItem({ entry }: ActivityItemProps) {
                 <p className="text-sm text-foreground">
                     <span className="font-medium">{name}</span> {clause}
                 </p>
-                <p className="text-xs text-muted-foreground" title={absolute}>
-                    {formatRelativeTime(entry.createdAt)}
-                </p>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <p className="text-xs text-muted-foreground">
+                            {formatRelativeTime(entry.createdAt)}
+                        </p>
+                    </TooltipTrigger>
+                    <TooltipContent>{absolute}</TooltipContent>
+                </Tooltip>
             </div>
         </li>
     );

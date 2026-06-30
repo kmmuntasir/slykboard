@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { ProjectPicker } from './ProjectPicker';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import type { Project } from '@/types/project';
 
 // --- Mocks ------------------------------------------------------------------
@@ -60,13 +61,17 @@ function renderPicker(initialEntry = '/') {
     // RR v7 useParams only populates from a matched <Route>; wrap the picker so
     // /projects/:slug drives the controlled value (named test b). '/' and
     // '/projects' match the catch-all / listing routes → no slug → placeholder.
+    // TooltipProvider is mounted app-wide in main.tsx (production); mount it here
+    // too so the Radix Tooltips on the trigger/label render without throwing.
     return render(
         <MemoryRouter initialEntries={[initialEntry]}>
-            <Routes>
-                <Route path="/projects/:slug" element={<ProjectPicker />} />
-                <Route path="/projects" element={<ProjectPicker />} />
-                <Route path="*" element={<ProjectPicker />} />
-            </Routes>
+            <TooltipProvider>
+                <Routes>
+                    <Route path="/projects/:slug" element={<ProjectPicker />} />
+                    <Route path="/projects" element={<ProjectPicker />} />
+                    <Route path="*" element={<ProjectPicker />} />
+                </Routes>
+            </TooltipProvider>
         </MemoryRouter>,
     );
 }
