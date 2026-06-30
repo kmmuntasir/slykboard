@@ -40,6 +40,10 @@ function describeClause(entry: ActivityEntry): string {
     case 'CONTENT_UPDATED':
       // REQ-5.3: generic, no diff — message carries the field name(s).
       return `updated the ${entry.message ?? 'description'}`;
+    case 'COMMENT_EDITED':
+      return 'edited a comment';
+    case 'COMMENT_DELETED':
+      return 'deleted a comment';
     default:
       return 'updated the ticket';
   }

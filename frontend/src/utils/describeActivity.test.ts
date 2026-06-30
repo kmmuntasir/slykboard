@@ -51,6 +51,16 @@ describe('describeActivity', () => {
       input: entry({ actionType: 'CONTENT_UPDATED' }),
       expected: 'updated the description',
     },
+    {
+      name: 'COMMENT_EDITED → edited a comment',
+      input: entry({ actionType: 'COMMENT_EDITED' }),
+      expected: 'edited a comment',
+    },
+    {
+      name: 'COMMENT_DELETED → deleted a comment',
+      input: entry({ actionType: 'COMMENT_DELETED' }),
+      expected: 'deleted a comment',
+    },
   ];
 
   cases.forEach(({ name, input, expected }) => {

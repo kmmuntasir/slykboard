@@ -7,7 +7,9 @@ export type ActivityAction =
   | 'PRIORITY_CHANGED'
   | 'ASSIGNEE_CHANGED'
   | 'LABELS_CHANGED'
-  | 'CONTENT_UPDATED';
+  | 'CONTENT_UPDATED'
+  | 'COMMENT_EDITED'
+  | 'COMMENT_DELETED';
 
 export interface ActivityActor {
   id: string;
