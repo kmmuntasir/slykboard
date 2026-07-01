@@ -1,9 +1,10 @@
 ---
-name: create-implementation-plan
-description: Read a ticket file (bug, feature, or enhancement), analyze the codebase, and write a comprehensive implementation plan. Use when the user hands you a ticket file path and wants an implementation plan generated.
+description: Read a ticket file (bug, feature, or enhancement), analyze the codebase, and write a comprehensive implementation plan.
+tools: read, write, edit, bash, grep, find, ls
+model: inherit
+thinking: high
+max_turns: 80
 ---
-
-# Create Implementation Plan Skill
 
 Read the provided ticket carefully, understand what needs to be delivered, analyze the codebase via `Explore` subagents (to keep your context clean), then write a complete and comprehensive implementation plan as a new markdown file in the **same folder** as the ticket.
 
@@ -11,13 +12,7 @@ The ticket may be a **bug**, **feature**, or **enhancement** — adapt the analy
 
 ## Inputs
 
-User provides a **ticket file path**, e.g.:
-
-- `docs/bugfix/some-bug-ticket.md`
-- `docs/feature/notification-matrix/some-ticket.md`
-- Absolute or relative path to a single `*.md` ticket
-
-If no input is provided, **ask** for the ticket file path. Do not guess.
+User provides a **ticket file path**. If no input is provided, **ask** for the ticket file path. Do not guess.
 
 ## Execution Steps
 
@@ -31,7 +26,6 @@ Resolve the input to an absolute path and read it **completely**. Extract and ho
 - **Ticket type** — bug / feature / enhancement. Infer from content.
 - **What needs to be delivered** — the requirement or defect, in your own words
 - **Named endpoints, entities, roles, domains** (backend / frontend)
-- For bugs: the **steps to reproduce** + expected vs. actual result
 
 State your understanding back: "Read ticket SLYK-300 (bug) — <one-line summary>. Analyzing codebase..."
 
@@ -57,8 +51,6 @@ State your understanding back: "Read ticket SLYK-300 (bug) — <one-line summary
 
 Each agent returns a **curated digest** with `path:line` evidence — not raw file dumps. Work from those digests.
 
-**Do not drop to fewer delegations and do not read files inline.** Even for a single-layer or small ticket, the minimum is **1 `Explore` agent** — never zero.
-
 ### Step 3: Synthesize the approach
 
 Combine the digests into a single coherent picture:
@@ -67,11 +59,9 @@ Combine the digests into a single coherent picture:
 - **Feature / enhancement** → state the design: new/changed schema, DTOs/types, services, routes/controllers, API contract, migrations, frontend pieces — and a sensible build order
 - **Both** → list edge cases & risks and any open questions
 
-Respect project conventions: services own business logic; controllers exchange DTOs/types only; Drizzle migrations are the only schema path; errors handled via centralized Express error middleware.
-
 ### Step 4: Write the implementation plan
 
-Write the plan to the **same directory as the ticket**, named `{ticket-filename}-plan.md`. Use the template below; include the **Root Cause** section **only for bugs**.
+Write the plan to the **same directory as the ticket**, named `{ticket-filename}-plan.md`.
 
 ## Plan Template
 
@@ -87,11 +77,11 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 ## Summary
 
-{1–2 paragraph restatement of what needs to be delivered, in your own words.}
+{1–2 paragraph restatement of what needs to be delivered.}
 
-## Root Cause  *(bugs only — omit for feature/enhancement)*
+## Root Cause  *(bugs only)*
 
-{The precise defect: what is wrong and why it happens, with `path:line` evidence.}
+{The precise defect with `path:line` evidence.}
 
 ## Affected Components
 
@@ -100,19 +90,14 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 | Route | `backend/src/routes/xxxRoutes.ts` | ... |
 | Controller | `backend/src/controllers/xxxController.ts` | ... |
 | Service | `backend/src/services/xxxService.ts` | ... |
-| Repository | `backend/src/repositories/xxxRepository.ts` | ... |
-| Schema | `backend/src/db/schema.ts` | ... |
 | ... | ... | ... |
 
 ## Proposed Implementation
-
-{Step-by-step. One sub-section per change, each with **File** / **What** / **Why** / **Code reference**. Group backend and frontend separately. For features/enhancements, order changes by build dependency.}
 
 ### Backend Changes
 ...
 
 ### Frontend Changes
-*(only if the ticket or fix touches the frontend)*
 ...
 
 ## Edge Cases & Risks
@@ -121,39 +106,24 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 ## Testing
 
-*Follow project conventions — Vitest + supertest (backend) and Vitest + Testing Library (frontend); table-driven tests; one behavior per test; co-locate `*.test.ts(x)` next to source.*
-
 - **Unit tests:** {service/repository-level cases}
 - **HTTP tests:** {route/controller via supertest, if applicable}
 - **Integration tests:** {critical flows only}
-- **Manual verification:** {re-run the ticket's reproduce steps for bugs / exercise the new capability for features}
+- **Manual verification:** {re-run the ticket's reproduce steps for bugs}
 
 ## Acceptance Criteria
 
-- [ ] {verifiable outcome — mirrors the ticket's "Expected Result" / acceptance criteria}
+- [ ] {verifiable outcome}
 - [ ] ...
-
-## Open Questions  *(optional)*
-
-- {anything needing a product/owner decision}
 
 ## Out of Scope
 
 - {anything explicitly not addressed}
 ```
 
-## Error Handling
-
-- **Can't read ticket** — ask the user to verify the path; do not proceed.
-- **Ticket has no ID** — derive a slug from the filename; flag it in the plan.
-- **Ticket type unclear** — state your best inference and why; proceed on that basis and note it.
-- **Approach ambiguous** — document the leading approach with evidence, list alternatives, mark what needs confirmation. Do not fabricate `path:line` citations.
-- **Explore agent failure** — retry the failed agent individually; note in the plan if an area could not be fully investigated.
-
 ## Key Principles
 
-- **Delegate analysis, write yourself.** Investigate ONLY via `Explore` subagents; synthesize and write the plan yourself. Never read source files inline to inform the plan.
-- **Evidence-backed.** Every code claim cites `path:line`. No guesses presented as fact.
-- **Convention-correct.** Respect the layered call rule and the project's style/exception/testing conventions.
-- **Adapt to the ticket type.** Bugs hunt a root cause; features/enhancements lay out a design.
-- **Comprehensive but minimal.** Cover the full surface without scope creep.
+- **Delegate analysis, write yourself.** Investigate ONLY via `Explore` subagents; synthesize and write the plan yourself.
+- **Evidence-backed.** Every code claim cites `path:line`.
+- **Convention-correct.** Respect the layered call rule and the project's style.
+- **Adapt to the ticket type.** Bugs hunt a root cause; features lay out a design.

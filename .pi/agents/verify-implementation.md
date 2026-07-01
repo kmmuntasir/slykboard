@@ -1,9 +1,10 @@
 ---
-name: verify-implementation
-description: Verify implementation against task/plan files, identify gaps and missing parts. Use when user requests verification of implementation completeness against task files in this project.
+description: Verify implementation against task/plan files, identify gaps and missing parts. Writes a comprehensive verification report.
+tools: read, write, edit, bash, grep, find, ls
+model: inherit
+thinking: high
+max_turns: 80
 ---
-
-# Verify Implementation Skill
 
 Read the provided task/plan file(s). Analyze the current codebase state against the planned tasks (via `Explore` subagents to keep your context clean). Identify gaps and missing implementations. Write a comprehensive verification report.
 
@@ -23,13 +24,7 @@ Follow exactly, in order.
 
 ### Step 1: Read the task/plan file(s)
 
-Resolve the input to absolute file paths:
-
-- **Single file** — use as-is
-- **Multiple files** — expand the glob
-- **Folder** — list `folder/*.md`, exclude non-task files (README, etc.)
-
-Read every file completely. Understand:
+Resolve the input to absolute file paths. Read every file completely. Understand:
 - What tasks are defined
 - Expected file outputs
 - Acceptance criteria
@@ -39,7 +34,7 @@ Report: "Read N tasks from M files. Analyzing against current codebase..."
 
 ### Step 2: Analyze Codebase State (via Explore subagents)
 
-Analyze the current codebase to determine what's implemented vs. what was planned. Spawn **3 parallel `Explore` agents**:
+Spawn **3 parallel `Explore` agents**:
 
 | Agent | Responsibility |
 |-------|---------------|
@@ -51,7 +46,7 @@ Analyze the current codebase to determine what's implemented vs. what was planne
 
 For each file referenced in the tasks:
 1. **Does it exist?** — check the file path.
-2. **Is it complete?** — read content; check for stubbed code (`// TODO`, `throw new Error('not implemented')`, empty handlers, `return null`, `return []`, pass-through routes returning mock data).
+2. **Is it complete?** — read content; check for stubbed code (`// TODO`, `throw new Error('not implemented')`, empty handlers).
 3. **Does it match the spec?** — compare against acceptance criteria.
 4. **Are tests present?** — check for test files if required.
 
@@ -64,13 +59,7 @@ Collect the agent findings. Categorize each task as:
 | ✅ **Implemented** | All files exist, code complete, matches spec |
 | ⚠️ **Partial** | Files exist but incomplete or stubbed |
 | ❌ **Missing** | Files don't exist or major parts missing |
-| 🔄 **Modified** | Exists but differs from spec (note changes) |
-
-For each gap, document:
-- Task ID and title
-- Missing files/features
-- Which acceptance criteria are unmet
-- Suggested fix
+| 🔄 **Modified** | Exists but differs from spec |
 
 ### Step 4: Write Verification Report
 
@@ -104,28 +93,21 @@ Write a comprehensive report in the **same directory as the first provided file*
 ## Task-by-Task Results
 
 ### ✅ Implemented Tasks
-
 | Task ID | Title | Files |
 |---------|-------|-------|
 | T1 | Title | backend/src/controllers/offerController.ts |
 
 ### ⚠️ Partial Tasks
-
 | Task ID | Title | Missing | Notes |
 |--------|-------|---------|-------|
-| T2 | Title | backend/src/controllers/offerController.test.ts | Tests not written |
 
 ### ❌ Missing Tasks
-
 | Task ID | Title | Missing Files/Features |
 |--------|-------|----------------------|
-| T3 | Title | backend/src/controllers/salesController.ts |
 
 ### 🔄 Modified Tasks
-
 | Task ID | Title | Changes |
 |--------|-------|---------|
-| T4 | Title | Changed signature |
 
 ---
 
@@ -147,30 +129,11 @@ Write a comprehensive report in the **same directory as the first provided file*
 1. Priority fixes for missing tasks
 2. Suggestions for partial implementations
 3. Items needing review
-
----
-
-## Quick Reference: Task Status
-
 ```
-T1: ✅ Implemented
-T2: ⚠️ Partial (missing tests)
-T3: ❌ Missing (file not created)
-...
-```
-```
-
-## Error Handling
-
-- **Can't read file** — ask the user to verify the path.
-- **No tasks parsed** — report "No task headings found." Check the markdown structure.
-- **Empty codebase** — report all tasks as missing (expected for early-stage verification).
-- **Agent failures** — retry individually; report which agent failed.
 
 ## Key Principles
 
 1. **Use 3 parallel Explore agents** — mandatory. Never verify inline.
 2. **Report alongside source** — same directory as the first provided file.
 3. **Be comprehensive** — include every task, no omissions.
-4. **Document gaps clearly** — what's missing, where, what to fix.
-5. **Verify actual implementation** — not just file existence; check completeness against acceptance criteria.
+4. **Verify actual implementation** — not just file existence; check completeness against acceptance criteria.

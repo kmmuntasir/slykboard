@@ -5,12 +5,6 @@ description: Comprehensive PR review covering the Node.js/Express + PostgreSQL b
 
 # PR Review Skill
 
-> ## MANDATORY EXECUTION — READ FIRST
->
-> Every step below is **mandatory, not optional**. You **MUST** follow them exactly as written.
->
-> **The review investigation MUST be done by dispatching `analyst` subprocesses via `delegate.sh`.** You are **FORBIDDEN** from reading the diff/files yourself, even if you think it would be faster or "good enough," or because the diff "looks small." The entire point is **context isolation** — you synthesize the review; `analyst` subprocesses do ALL the diff analysis. If you read the files yourself, you have **failed** the workflow. **Do not optimize against this instruction. Spawn the subprocesses.**
-
 When the user requests a **PR review** or to **compare branches**:
 
 ### Branch Defaults
@@ -40,26 +34,19 @@ git rebase <target-branch>
 
 If the rebase succeeds, proceed to the review steps below.
 
-### Parallel Delegation Strategy
+### Parallel Agent Strategy
 
-Accelerate the review using **3 parallel `analyst` delegations** (via the delegate script — read-only, so they can't mutate the tree). Split independent review tasks across delegations to save your context window and speed up the process.
+Accelerate the review using **3 parallel `Explore` agents** (read-only, so they can't mutate the tree). Split independent review tasks across agents to save your context window and speed up the process.
 
-```bash
-./.pi/skills/delegate/scripts/delegate.sh --parallel \
-  analyst "Diff analysis + architecture review for <source>..<<target>>. Run: git diff <target>..<source>; git log <target>..<source> --oneline. Identify change types, assess correctness/readability/maintainability/architectural alignment/performance/security. Cite path:line." \
-  analyst "Stack-specific checks for <source>..<target>: Express/Node backend layering, data access/migrations, validation, transactions, error handling, auth/logging; React/TS frontend state/hooks/types/error handling/component design/drag-and-drop/security/API client." \
-  analyst "Test coverage assessment + code quality checklist for <source>..<target>: backend Vitest/supertest, frontend Vitest + Testing Library, error cases, mocks; plus the naming/import/constant/early-return checklist."
-```
+Spawn 3 `Explore` agents in parallel via the Agent tool:
 
-| Delegation | Scope |
-|----------|-------|
-| 1 | Diff analysis + architecture review |
-| 2 | Stack-specific checks (Express/Node backend + React/TS frontend) |
-| 3 | Test coverage assessment + code quality checklist |
+| Agent | Scope |
+|-------|-------|
+| 1 | **Diff analysis + architecture review** — Run `git diff <target>..<source>` and `git log <target>..<source> --oneline`. Identify change types, assess correctness/readability/maintainability/architectural alignment/performance/security. Cite `path:line`. |
+| 2 | **Stack-specific checks** — Express/Node backend layering, data access/migrations, validation, transactions, error handling, auth/logging; React/TS frontend state/hooks/types/error handling/component design/drag-and-drop/security/API client. |
+| 3 | **Test coverage + code quality** — Backend Vitest/supertest, frontend Vitest + Testing Library, error cases, mocks; plus naming/import/constant/early-return checklist. |
 
-**When to parallelise:** **always** use parallel delegations — even for tiny diffs. **Never review inline.** The 3-subprocess fan-out is mandatory; do not reduce it.
-
-**How to parallelise:** launch all independent delegations in a single `--parallel` call. Each delegation runs `git diff`/`git log` within its scope. After all return, synthesize the findings into the final review summary (step 6).
+**When to parallelise:** **always** use parallel agents — even for tiny diffs. **Never review inline.** The 3-agent fan-out is mandatory; do not reduce it.
 
 ## 1. Run Complete Diff
 
@@ -82,13 +69,13 @@ Evaluate: **correctness** (does it work?), **readability**, **maintainability**,
 
 ### 4a. Node.js / Express + PostgreSQL Backend
 
-**Layering** — Route → Controller → Service → Repository flow respected (no controller/route → DB shortcuts)? Controllers thin (HTTP only), business logic in the service layer?
+**Layering** — Route → Controller → Service → Repository flow respected? Controllers thin (HTTP only), business logic in the service layer?
 
 **Data Access & Migrations** — parameterized queries / ORM query builder (no string-concat SQL / injection)? Migrations ordered and reversible? PostgreSQL indexes added for new query/filter columns? No N+1 queries?
 
 **Validation** — every request validated at the edge (Zod/Joi) on `body`/`params`/`query`? Errors surfaced as `400` with the project's consistent error shape?
 
-**Transactions & Concurrency** — multi-statement mutations wrapped in a single DB transaction? Timer start/stop and `ticket_number` sequence generation race-safe?
+**Transactions & Concurrency** — multi-statement mutations wrapped in a single DB transaction?
 
 **Error Handling** — all errors funnelled through centralized error-handling middleware? No leaking raw stack traces / SQL / paths / secrets? No swallowed exceptions?
 
@@ -98,7 +85,7 @@ Evaluate: **correctness** (does it work?), **readability**, **maintainability**,
 
 ### 4b. React 19 / TypeScript Frontend
 
-**State Management** — React Query for server state (30s polling)? Zustand for client/global UI, `useState` for local? Unnecessary re-renders?
+**State Management** — React Query for server state? Zustand for client/global UI, `useState` for local? Unnecessary re-renders?
 
 **Hooks** — custom hooks for reusable logic? Correct `useEffect`/`useMemo`/`useCallback` deps? Stale closures?
 
@@ -106,7 +93,7 @@ Evaluate: **correctness** (does it work?), **readability**, **maintainability**,
 
 **Error Handling** — try/catch around async/await? API errors handled gracefully?
 
-**Component Design** — focused (single responsibility)? Props drilling avoided (Zustand/composition)? Functional components + hooks?
+**Component Design** — focused (single responsibility)? Props drilling avoided? Functional components + hooks?
 
 **Drag-and-Drop** — `@hello-pangea/dnd` per convention; optimistic UI reconciled with server truth on poll?
 
@@ -116,7 +103,7 @@ Evaluate: **correctness** (does it work?), **readability**, **maintainability**,
 
 ## 5. Test Coverage
 
-Backend tests present for new logic (Vitest + supertest, mocked or test DB)? Frontend tests use Vitest + Testing Library? Error cases covered alongside happy paths? Mocks appropriate (`vi.fn()` frontend, data-access mocks backend)?
+Backend tests present for new logic (Vitest + supertest, mocked or test DB)? Frontend tests use Vitest + Testing Library? Error cases covered alongside happy paths? Mocks appropriate?
 
 ## 6. Provide Senior-Level Review Summary
 
