@@ -200,9 +200,9 @@ const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
     [UI.Months]: '',
     [UI.Nav]: 'flex items-center justify-between px-1',
     [UI.NextMonthButton]:
-        'p-1 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
+        'p-1 rounded-md text-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.PreviousMonthButton]:
-        'p-1 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
+        'p-1 rounded-md text-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.Week]: 'flex',
     [UI.Weeks]: '',
     [UI.Weekday]: 'flex items-center justify-center w-9 h-9 text-muted-foreground text-xs font-medium',
