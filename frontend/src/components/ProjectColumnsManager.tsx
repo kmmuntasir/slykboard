@@ -1,17 +1,42 @@
-// F27: column management surface (rename/reorder/add/delete). Maintains a local
-// draft synced from server data; edits/reorders/add mutate the draft only, while
-// "Save Columns" persists the whole draft and delete persists immediately
-// (gated by a confirm modal per the destructive-action rule). Hosted on
-// ProjectSettingsPage.
-import { useState } from 'react';
+// F27 / SLYK-02 T3: column management surface (rename/reorder/add/delete).
+// Columns are reordered via drag-and-drop (pangea) and auto-saved on drag-end;
+// names persist on blur; add appends + persists immediately; delete is gated by
+// a ConfirmDialog (destructive-action rule). No manual Save button or Up/Down
+// arrows — drag is the only reorder affordance. Hosted on ProjectSettingsPage.
+import { useState, type CSSProperties } from 'react';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import { GripVertical } from 'lucide-react';
 import { useUpdateProject } from '@/hooks/useUpdateProject';
+import { toast } from '@/hooks/useToast';
 import { ApiClientError } from '@/api/client';
-import { Modal } from './Modal';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { Column } from '@/types/project';
 
 interface ProjectColumnsManagerProps {
     projectSlug: string;
     columns: Column[];
+}
+
+const DELETE_DIALOG_TITLE_ID = 'confirm-delete-column-title';
+
+// Pure reorder helper: returns a new array with the item at `source` moved to
+// `destination`, or null when the drop is a no-op (missing destination or same
+// index). Extracted so the onDragEnd contract is unit-testable without driving
+// pangea's pointer sensor in jsdom (mirrors the boardReorder.test.ts approach).
+// NOTE: @hello-pangea/dnd does not export arrayMove (unlike react-beautiful-dnd),
+// so the splice is implemented inline here.
+export function reorderColumns(
+    columns: Column[],
+    source: number,
+    destination: number | null | undefined,
+): Column[] | null {
+    if (destination === null || destination === undefined) return null;
+    if (source === destination) return null;
+    const next = [...columns];
+    const [moved] = next.splice(source, 1);
+    if (moved === undefined) return null;
+    next.splice(destination, 0, moved);
+    return next;
 }
 
 export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsManagerProps) {
@@ -40,29 +65,37 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
         setDraft((curr) => curr.map((c) => (c.id === id ? { ...c, name } : c)));
     };
 
-    const move = (index: number, dir: -1 | 1) => {
-        setDraft((curr) => {
-            const target = index + dir;
-            if (target < 0 || target >= curr.length) return curr;
-            const next = [...curr];
-            const a = next[index];
-            const b = next[target];
-            if (!a || !b) return curr;
-            next[index] = b;
-            next[target] = a;
-            return next;
-        });
+    // D5: drag-end auto-persists the reordered draft immediately, mirroring
+    // BoardPage's handleDragEnd. Errors funnel through meta.revertMessage.
+    const handleDragEnd = async (result: DropResult) => {
+        const reordered = reorderColumns(draft, result.source.index, result.destination?.index);
+        if (!reordered) return;
+        setDraft(reordered);
+        try {
+            await updateMut.mutateAsync({ columns: reordered });
+            toast.success('Columns saved.');
+        } catch {
+            // error surfaced via the global mutation toast funnel (revertMessage).
+        }
     };
 
-    const addColumn = () => {
-        setDraft((curr) => [...curr, { id: crypto.randomUUID(), name: 'New Column' }]);
+    const addColumn = async () => {
+        const next = [...draft, { id: crypto.randomUUID(), name: 'New Column' }];
+        setDraft(next);
+        try {
+            await updateMut.mutateAsync({ columns: next });
+        } catch {
+            // error surfaced via the global mutation toast funnel (revertMessage).
+        }
     };
 
-    const handleSaveColumns = async () => {
+    // Name persist on blur — no Save button. The draft already holds the typed
+    // name (updateName on change). No toast on rename per the T3 criterion.
+    const persistName = async () => {
         try {
             await updateMut.mutateAsync({ columns: draft });
         } catch {
-            // error surfaced via updateMut.error below
+            // error surfaced via the global mutation toast funnel (revertMessage).
         }
     };
 
@@ -89,44 +122,60 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
         <section className="space-y-4 rounded border border-border p-4">
             <h2 className="text-lg font-semibold">Columns</h2>
 
-            <ul className="space-y-2">
-                {draft.map((col, index) => (
-                    <li key={col.id} className="flex items-center gap-2">
-                        <input
-                            type="text"
-                            aria-label={`Column ${index + 1} name`}
-                            value={col.name}
-                            onChange={(e) => updateName(col.id, e.target.value)}
-                            className="block w-full rounded border border-border px-2 py-1"
-                        />
-                        <button
-                            type="button"
-                            aria-label={`Move column ${index + 1} up`}
-                            onClick={() => move(index, -1)}
-                            disabled={index === 0}
-                            className="rounded border px-2 py-1 disabled:opacity-50"
+            <DragDropContext onDragEnd={handleDragEnd}>
+                <Droppable droppableId="columns" type="COLUMN" direction="vertical">
+                    {(provided) => (
+                        <ul
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            className="space-y-2"
                         >
-                            ↑
-                        </button>
-                        <button
-                            type="button"
-                            aria-label={`Move column ${index + 1} down`}
-                            onClick={() => move(index, 1)}
-                            disabled={index === draft.length - 1}
-                            className="rounded border px-2 py-1 disabled:opacity-50"
-                        >
-                            ↓
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(col.id)}
-                            className="text-sm text-destructive"
-                        >
-                            Delete
-                        </button>
-                    </li>
-                ))}
-            </ul>
+                            {draft.map((col, index) => (
+                                <Draggable key={col.id} draggableId={col.id} index={index}>
+                                    {(dragProvided, snapshot) => (
+                                        <li
+                                            ref={dragProvided.innerRef}
+                                            {...dragProvided.draggableProps}
+                                            style={dragProvided.draggableProps.style as CSSProperties | undefined}
+                                            className={
+                                                snapshot.isDragging
+                                                    ? 'flex items-center gap-2 rounded border border-border bg-card p-1 shadow-md ring-2 ring-primary/40'
+                                                    : 'flex items-center gap-2'
+                                            }
+                                        >
+                                            {/* Dedicated drag handle so the name input stays
+                                                clickable/editable (handle is NOT the whole row). */}
+                                            <span
+                                                {...dragProvided.dragHandleProps}
+                                                aria-label={`Drag handle for column ${index + 1}`}
+                                                className="cursor-grab self-stretch rounded px-1 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                                            >
+                                                <GripVertical size={16} />
+                                            </span>
+                                            <input
+                                                type="text"
+                                                aria-label={`Column ${index + 1} name`}
+                                                value={col.name}
+                                                onChange={(e) => updateName(col.id, e.target.value)}
+                                                onBlur={persistName}
+                                                className="block w-full rounded border border-border px-2 py-1"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setConfirmDeleteId(col.id)}
+                                                className="text-sm text-destructive"
+                                            >
+                                                Delete
+                                            </button>
+                                        </li>
+                                    )}
+                                </Draggable>
+                            ))}
+                            {provided.placeholder}
+                        </ul>
+                    )}
+                </Droppable>
+            </DragDropContext>
 
             <div className="flex items-center gap-2">
                 <button
@@ -136,44 +185,22 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
                 >
                     Add Column
                 </button>
-                <button
-                    type="button"
-                    onClick={handleSaveColumns}
-                    disabled={updateMut.isPending}
-                    className="rounded bg-primary px-3 py-1 text-background disabled:opacity-50"
-                >
-                    {updateMut.isPending ? 'Saving…' : 'Save Columns'}
-                </button>
             </div>
 
             {errMsg && <p className="text-sm text-destructive">{errMsg}</p>}
 
-            <Modal
+            <ConfirmDialog
                 isOpen={confirmDeleteId !== null}
-                onClose={() => setConfirmDeleteId(null)}
-                titleId="confirm-delete-column-title"
                 title="Delete column?"
-            >
-                <p className="mb-4 text-sm">
-                    Delete this column? Tickets still in this column must be moved first.
-                </p>
-                <div className="flex justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="rounded border px-3 py-1"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleConfirmDelete}
-                        className="rounded bg-destructive px-3 py-1 text-destructive-foreground"
-                    >
-                        Confirm
-                    </button>
-                </div>
-            </Modal>
+                titleId={DELETE_DIALOG_TITLE_ID}
+                variant="destructive"
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                pending={updateMut.isPending}
+                message="Are you sure? Tickets in this column must be moved first."
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmDeleteId(null)}
+            />
         </section>
     );
 }
