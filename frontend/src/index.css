@@ -166,6 +166,10 @@
   background-color: var(--color-accent);
   color: var(--color-accent-foreground);
 }
+.dark .rdp-button_next:hover,
+.dark .rdp-button_previous:hover {
+  background-color: oklch(0.37 0.034 259.733); /* gray-700 — accent==popover in dark, so lighten */
+}
 .rdp-button_next svg,
 .rdp-button_previous svg,
 .rdp-button_next polygon,
