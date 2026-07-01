@@ -19,7 +19,8 @@ function renderDatePicker(overrides?: {
     disabled?: boolean;
     placeholder?: string;
 }) {
-    const onChange = overrides?.onChange ?? vi.fn();
+    const fallback = vi.fn<(date: Date | null) => void>();
+    const onChange = (overrides?.onChange ?? fallback) as ReturnType<typeof vi.fn>;
     // The root <DatePicker> renders DatePickerContent + quick picks + calendar
     // internally inside `open &&`. Children only need <DatePickerTrigger />.
     render(
@@ -95,7 +96,7 @@ describe('DatePicker', () => {
         openPicker();
         fireEvent.click(screen.getByRole('menuitem', { name: 'Today' }));
         expect(onChange).toHaveBeenCalledTimes(1);
-        const calledDate = onChange.mock.calls[0][0] as Date;
+        const calledDate = onChange.mock.calls[0]![0] as Date;
         expect(calledDate).toBeInstanceOf(Date);
         expect(isSameDay(calledDate, new Date())).toBe(true);
         // Popover closes after selection
@@ -130,7 +131,7 @@ describe('DatePicker', () => {
         expect(dayButton).not.toBeNull();
         fireEvent.click(dayButton!);
         expect(onChange).toHaveBeenCalledTimes(1);
-        const calledDate = onChange.mock.calls[0][0] as Date;
+        const calledDate = onChange.mock.calls[0]![0] as Date;
         expect(calledDate).toBeInstanceOf(Date);
         expect(calledDate.getDate()).toBe(15);
         // Popover closes
