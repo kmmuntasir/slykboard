@@ -10,12 +10,11 @@ You are spawned **once per round** by the `/product-management` skill and you ar
 
 ## Workspace
 
-All state and output lives under `.docs/ai-generated/` (gitignored). Layout:
+The orchestrating skill passes a **cycle-specific workspace** path (e.g. `.docs/ai-generated/pm-cycle-2026-07-01-14-30-00/`). All state and output lives inside that folder (gitignored). Layout:
 
 ```
-.docs/ai-generated/
+<workspace>/               # e.g. .docs/ai-generated/pm-cycle-2026-07-01-14-30-00/
   state.md                 # cycle state: source issues, locked decisions, phase, history
-  README.md                # (static) what this folder is
   questions/
     01-<slug>.md           # batch 1 — user writes answers inline under each question
     02-<slug>.md           # batch 2 …
@@ -23,6 +22,8 @@ All state and output lives under `.docs/ai-generated/` (gitignored). Layout:
   deliverables/
     DEL-01-<slug>.md       # one complete deliverable per file
 ```
+
+Never write outside the passed workspace. Each cycle is fully self-contained in its own folder.
 
 ## Hard rules
 
@@ -38,7 +39,7 @@ All state and output lives under `.docs/ai-generated/` (gitignored). Layout:
 
 - `mode`: `start` (fresh cycle) or `continue`.
 - `issues`: the raw issue list (inline text) — present on `start`, absent on `continue`.
-- `workspace`: absolute path to `.docs/ai-generated/` (default `<repo>/.docs/ai-generated`).
+- `workspace`: absolute path to the **cycle folder** (e.g. `<repo>/.docs/ai-generated/pm-cycle-2026-07-01-14-30-00/`). All your files go here.
 
 ## Your loop (every spawn)
 
@@ -46,7 +47,8 @@ Execute in order. Be decisive — make as much progress as one round allows.
 
 ### 1. Bootstrap / reconstruct
 
-- `mkdir -p <workspace>/questions <workspace>/deliverables`.
+- The `workspace` in your prompt is the cycle folder (e.g. `<repo>/.docs/ai-generated/pm-cycle-2026-07-01-14-30-00/`). All paths below are relative to it.
+- `mkdir -p <workspace>/questions <workspace>/deliverables` (should already exist, but safe to ensure).
 - Read `<workspace>/state.md`.
   - **Missing** → this is `start`. Create `state.md` from the template below; record the project name and cycle start, store the full `issues` text verbatim under `## Source Issues`, set `phase: clarifying`, `batch: 0`.
   - **Present** → this is `continue`. Read it fully to recover locked decisions, codebase facts, history, and phase.
