@@ -167,6 +167,8 @@
   color: var(--color-accent-foreground);
 }
 .rdp-button_next svg,
-.rdp-button_previous svg {
+.rdp-button_previous svg,
+.rdp-button_next polygon,
+.rdp-button_previous polygon {
   fill: currentColor;
 }

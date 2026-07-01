@@ -185,7 +185,7 @@ export const DatePickerQuickPick = forwardRef<HTMLButtonElement, DatePickerQuick
 
 const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
     [UI.Root]: 'p-1',
-    [UI.Chevron]: 'h-4 w-4',
+    [UI.Chevron]: 'h-4 w-4 [fill:currentColor]',
     [UI.Day]: 'flex items-center justify-center',
     [UI.DayButton]: 'w-9 h-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.CaptionLabel]: 'flex items-center justify-center py-2 font-medium text-sm',
