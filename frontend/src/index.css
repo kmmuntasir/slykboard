@@ -153,3 +153,19 @@
 }
 
 /* Board-specific colors deferred to F09 (existing comment preserved). */
+
+/* ── react-day-picker overrides — unlayered beats Tailwind @layer utilities ──
+   rdp injects unlayered CSS; Tailwind utilities live in @layer utilities.
+   Per Cascade Layers spec: unlayered > layered, so we must also be unlayered. ── */
+.rdp-button_next,
+.rdp-button_previous {
+  color: var(--color-foreground);
+}
+.rdp-button_next:hover,
+.rdp-button_previous:hover {
+  background-color: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+.rdp-chevron {
+  fill: currentColor;
+}

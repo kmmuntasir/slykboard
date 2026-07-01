@@ -185,7 +185,7 @@ export const DatePickerQuickPick = forwardRef<HTMLButtonElement, DatePickerQuick
 
 const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
     [UI.Root]: 'p-1',
-    [UI.Chevron]: 'h-4 w-4 text-foreground dark:text-gray-200',
+    [UI.Chevron]: 'h-4 w-4',
     [UI.Day]: 'flex items-center justify-center',
     [UI.DayButton]: 'w-9 h-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.CaptionLabel]: 'flex items-center justify-center py-2 font-medium text-sm',
@@ -200,9 +200,9 @@ const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
     [UI.Months]: '',
     [UI.Nav]: 'flex items-center justify-between px-1',
     [UI.NextMonthButton]:
-        'p-1 rounded-md text-gray-900 dark:text-gray-100 hover:bg-accent hover:text-accent-foreground transition-colors',
+        'p-1 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.PreviousMonthButton]:
-        'p-1 rounded-md text-gray-900 dark:text-gray-100 hover:bg-accent hover:text-accent-foreground transition-colors',
+        'p-1 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.Week]: 'flex',
     [UI.Weeks]: '',
     [UI.Weekday]: 'flex items-center justify-center w-9 h-9 text-muted-foreground text-xs font-medium',
