@@ -166,6 +166,7 @@
   background-color: var(--color-accent);
   color: var(--color-accent-foreground);
 }
-.rdp-chevron {
+.rdp-button_next svg,
+.rdp-button_previous svg {
   fill: currentColor;
 }
