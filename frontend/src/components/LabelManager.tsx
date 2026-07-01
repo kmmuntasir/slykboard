@@ -1,13 +1,20 @@
-// F14 T9: admin label-management surface. Inline CRUD pattern (Linear/Trello):
-// create row at top; each label row has an inline rename input + react-colorful
-// color popover + trash with confirm. Hosted on ProjectSettingsPage.
+// DEL-02: admin label-management surface rewritten on shared ui/ primitives
+// and the DEL-01 ColorPicker. Inline CRUD pattern (Linear/Trello): create row
+// at top; each label row is a full-width Card with hover/focus-revealed
+// Edit/Delete icon buttons (wrapped in Tooltip); inline edit mirrors the create
+// row. Hosted on ProjectSettingsPage.
 import { useState } from 'react';
-import { HexColorPicker, HexColorInput } from 'react-colorful';
+import { Pencil, Trash2, Tag } from 'lucide-react';
 import { useLabels } from '@/hooks/useLabels';
 import { useCreateLabel, useUpdateLabel, useDeleteLabel } from '@/hooks/useLabelMutations';
 import { toast } from '@/hooks/useToast';
 import { LabelChip } from './LabelChip';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ColorPicker } from './ui/ColorPicker';
+import { Card } from './ui/Card';
+import { Button } from './ui/Button';
+import { TextInput } from './ui/TextInput';
+import { Tooltip, TooltipTrigger, TooltipContent } from './ui/Tooltip';
 
 interface LabelManagerProps {
     projectSlug: string;
@@ -75,101 +82,103 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
 
             {/* Create row */}
             <div className="flex items-center gap-2">
-                <span
-                    aria-hidden="true"
-                    className="inline-block h-6 w-6 rounded border border-border"
-                    style={{ backgroundColor: newColor }}
-                />
-                <input
-                    type="text"
+                <ColorPicker value={newColor} onChange={setNewColor} aria-label="New label color" />
+                <TextInput
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="New label name"
+                    placeholder="Label name"
                     aria-label="New label name"
-                    className="rounded border border-border p-1"
+                    className="flex-1"
                 />
-                <HexColorInput
-                    aria-label="New label color"
-                    color={newColor}
-                    onChange={setNewColor}
-                    className="w-20 rounded border border-border p-1"
-                />
-                <button
-                    type="button"
-                    onClick={handleCreate}
-                    disabled={!newName.trim() || createMut.isPending}
-                    className="rounded bg-primary px-3 py-1 text-primary-foreground disabled:opacity-50"
-                >
+                <Button onClick={handleCreate} disabled={!newName.trim() || createMut.isPending}>
                     Add
-                </button>
+                </Button>
             </div>
 
             {/* Label list */}
-            <ul className="space-y-2">
-                {labels.map((l) => (
-                    <li key={l.id} className="flex flex-wrap items-center gap-2">
-                        {editingId === l.id ? (
-                            <>
-                                <span
-                                    aria-hidden="true"
-                                    className="inline-block h-6 w-6 rounded border border-border"
-                                    style={{ backgroundColor: editColor }}
-                                />
-                                <HexColorPicker
-                                    color={editColor}
-                                    onChange={setEditColor}
-                                    aria-label="Edit label color picker"
-                                />
-                                <HexColorInput
-                                    aria-label="Edit label color"
-                                    color={editColor}
-                                    onChange={setEditColor}
-                                    className="w-20 rounded border border-border p-1"
-                                />
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    aria-label="Edit label name"
-                                    className="rounded border border-border p-1"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={saveEdit}
-                                    className="rounded bg-success px-2 py-1 text-success-foreground"
-                                >
-                                    Save
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingId(null)}
-                                    className="rounded border px-2 py-1"
-                                >
-                                    Cancel
-                                </button>
-                            </>
+            {labels.length === 0 ? (
+                <Card className="p-6 text-center text-sm text-muted-foreground">
+                    <Tag className="mx-auto mb-2 h-5 w-5" aria-hidden="true" />
+                    No labels yet — create your first one.
+                </Card>
+            ) : (
+                <div className="space-y-2">
+                    {labels.map((l) =>
+                        editingId === l.id ? (
+                            <Card key={l.id} className="p-3">
+                                <div className="flex items-center gap-2">
+                                    <ColorPicker
+                                        value={editColor}
+                                        onChange={setEditColor}
+                                        aria-label={'Edit color for ' + editName}
+                                    />
+                                    <TextInput
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        aria-label="Label name"
+                                        className="flex-1"
+                                    />
+                                    <Button
+                                        onClick={saveEdit}
+                                        disabled={!editName.trim() || updateMut.isPending}
+                                    >
+                                        Save
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setEditingId(null)}>
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </Card>
                         ) : (
-                            <>
-                                <LabelChip label={l} />
-                                <button
-                                    type="button"
-                                    onClick={() => startEdit(l.id, l.name, l.color)}
-                                    className="text-sm text-primary"
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteId(l.id)}
-                                    className="text-sm text-destructive"
-                                >
-                                    Delete
-                                </button>
-                            </>
-                        )}
-                    </li>
-                ))}
-            </ul>
+                            <Card key={l.id} className="group p-3">
+                                <div className="flex items-center gap-3">
+                                    <LabelChip label={l} />
+                                    <div className="ml-auto flex items-center gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    aria-label={'Edit ' + l.name}
+                                                    onClick={() =>
+                                                        startEdit(l.id, l.name, l.color)
+                                                    }
+                                                >
+                                                    <Pencil
+                                                        className="h-4 w-4"
+                                                        aria-hidden="true"
+                                                    />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom">Edit</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    aria-label={'Delete ' + l.name}
+                                                    onClick={() => setConfirmDeleteId(l.id)}
+                                                >
+                                                    <Trash2
+                                                        className="h-4 w-4"
+                                                        aria-hidden="true"
+                                                    />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom">
+                                                Delete
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                </div>
+                            </Card>
+                        ),
+                    )}
+                </div>
+            )}
 
             <ConfirmDialog
                 isOpen={confirmDeleteId !== null}
