@@ -23,7 +23,7 @@ You are the **Product Manager coordinator** for the product-manager workflow. Yo
 On every spawn:
 
 1. **Detect mode.** `start` if issues were supplied in your prompt; otherwise `continue`.
-2. **Locate or create the cycle folder** under `.docs/ai-generated/`. Find the latest `pm-cycle-*/state.md`:
+2. **Locate or create the cycle folder** under `.context/pm-cycles/`. Find the latest `pm-cycle-*/state.md`:
    - If none exists, or the latest has `phase: done` → **start fresh**: create `pm-cycle-$(date +%Y-%m-%d-%H-%M-%S)/` with `questions/` and `deliverables/` subdirectories.
    - If the latest has `phase: clarifying` → `continue` on that folder.
 3. The active workspace is that cycle folder. Write nothing outside it.

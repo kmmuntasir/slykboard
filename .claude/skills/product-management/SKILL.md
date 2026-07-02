@@ -5,14 +5,14 @@ description: Turn a list of product issues into complete, end-to-end deliverable
 
 # Product Management Skill
 
-Orchestrates the **`product-manager`** subagent across a multi-round clarification loop. You (the main agent) stay thin: spawn the PM, relay its short summary, tell the user how to continue. The PM keeps its own context clean by delegating codebase investigation to the `analyst` subagent and persisting all state under a dated `.docs/ai-generated/pm-cycle-*/` folder (gitignored).
+Orchestrates the **`product-manager`** subagent across a multi-round clarification loop. You (the main agent) stay thin: spawn the PM, relay its short summary, tell the user how to continue. The PM keeps its own context clean by delegating codebase investigation to the `analyst` subagent and persisting all state under a dated `.context/pm-cycles/pm-cycle-*/` folder (gitignored).
 
 ## Cycle Folders
 
-Each PM cycle lives in its own **dated subfolder** under `.docs/ai-generated/`:
+Each PM cycle lives in its own **dated subfolder** under `.context/pm-cycles/`:
 
 ```
-.docs/ai-generated/
+.context/pm-cycles/
   pm-cycle-2026-07-01-14-30-00/   # cycle folder (YYYY-MM-DD-HH-mm-ss)
     state.md
     questions/
@@ -31,17 +31,17 @@ This keeps cycles self-contained — no file shuffling between cycles. The times
 
 ### Mode detection
 
-- **Start**: user supplied issues → find the latest `pm-cycle-*/state.md` under `.docs/ai-generated/`. If none exists OR the latest one has `phase: done` → create a new cycle folder. If the latest one has `phase: clarifying` → ask whether to start fresh or continue.
+- **Start**: user supplied issues → find the latest `pm-cycle-*/state.md` under `.context/pm-cycles/`. If none exists OR the latest one has `phase: done` → create a new cycle folder. If the latest one has `phase: clarifying` → ask whether to start fresh or continue.
 - **Continue**: no new issues → find the latest `pm-cycle-*/state.md` with `phase: clarifying`. If found, continue it. If not found, tell the user there's no active cycle.
 
 ## Authorization
 
 Invoking this skill **is standing approval** to:
 
-- Create cycle folders and write files under `.docs/ai-generated/` (questions, state, deliverables).
+- Create cycle folders and write files under `.context/pm-cycles/` (questions, state, deliverables).
 - Spawn `analyst` and `product-manager` subagents (read-only investigation + the PM worker).
 
-It does **not** commit, push, merge, or touch any file outside `.docs/ai-generated/`. (That folder is gitignored.)
+It does **not** commit, push, merge, or touch any file outside `.context/pm-cycles/`. (That folder is gitignored.)
 
 ## Execution (every invocation)
 
@@ -49,12 +49,12 @@ It does **not** commit, push, merge, or touch any file outside `.docs/ai-generat
 2. **Create or locate the cycle folder.**
    - `start`: generate a dated folder name using the current timestamp:
      ```bash
-     CYCLE_DIR=".docs/ai-generated/pm-cycle-$(date +%Y-%m-%d-%H-%M-%S)"
+     CYCLE_DIR=".context/pm-cycles/pm-cycle-$(date +%Y-%m-%d-%H-%M-%S)"
      mkdir -p "$CYCLE_DIR/questions" "$CYCLE_DIR/deliverables"
      ```
    - `continue`: find the active cycle folder:
      ```bash
-     CYCLE_DIR=$(ls -dt .docs/ai-generated/pm-cycle-*/state.md 2>/dev/null | head -1 | xargs dirname)
+     CYCLE_DIR=$(ls -dt .context/pm-cycles/pm-cycle-*/state.md 2>/dev/null | head -1 | xargs dirname)
      ```
    Store `CYCLE_DIR` as an absolute path for the PM prompt.
 3. **Spawn the PM subagent.** Use the `Agent` tool:
