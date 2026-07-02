@@ -76,6 +76,7 @@ vi.mock('./ticket-fields/StatusField', () => ({
 }));
 
 import { TicketAttributeForm } from './TicketAttributeForm';
+import { TICKET_DESCRIPTION_MAX_LENGTH } from '@/hooks/useTicketForm';
 import type { UpdateTicketDto } from '@/types/ticket';
 
 const PROJECT_SLUG = 'SLYK';
@@ -174,7 +175,7 @@ describe('TicketAttributeForm', () => {
         expect(onSubmit).not.toHaveBeenCalled();
     });
 
-    it('description > 5000 chars blocks submit + shows error', async () => {
+    it('description > 10000 chars blocks submit + shows error', async () => {
         const onSubmit = vi.fn();
         render(
             <TicketAttributeForm
@@ -186,13 +187,13 @@ describe('TicketAttributeForm', () => {
             />,
         );
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Valid title' } });
-        const long = 'a'.repeat(5001);
+        const long = 'a'.repeat(TICKET_DESCRIPTION_MAX_LENGTH + 1);
         fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: long },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
         await waitFor(() => {
-            expect(screen.getByText('Description must be 5000 chars or fewer')).toBeInTheDocument();
+            expect(screen.getByText('Description must be 10000 chars or fewer')).toBeInTheDocument();
         });
         expect(onSubmit).not.toHaveBeenCalled();
     });
