@@ -41,14 +41,43 @@ beforeAll(() => {
     }
 });
 
+// Helper: place a live DOM selection over the editor's content so ProseMirror's
+// view.state.selection syncs before a toolbar click. TipTap's toggle chains call
+// .focus(); in jsdom the chain short-circuits unless the contenteditable holds a
+// live selection.
+async function selectEditorContent() {
+    const editorEl = document.querySelector('.ProseMirror') as HTMLElement;
+    await act(async () => {
+        editorEl.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+    });
+    return editorEl;
+}
+
 describe('RichTextEditor', () => {
     it('renders all toolbar buttons with accessible names', () => {
         render(<RichTextEditor value="" onChange={vi.fn()} />);
+        // Existing actions.
         expect(screen.getByRole('button', { name: 'Bold' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Italic' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Heading 3' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Bullet list' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Inline code' })).toBeInTheDocument();
+        // T4: new actions.
+        expect(screen.getByRole('button', { name: 'Strikethrough' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Underline' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Heading 1' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Heading 2' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Heading 4' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Numbered list' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Blockquote' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Code block' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Link' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Image' })).toBeInTheDocument();
         expect(screen.getByRole('toolbar', { name: 'Formatting' })).toBeInTheDocument();
     });
 
@@ -92,19 +121,7 @@ describe('RichTextEditor', () => {
         const onChange = vi.fn();
         render(<RichTextEditor value="<p>turn me into a heading</p>" onChange={onChange} />);
 
-        // TipTap's toggleHeading chain calls .focus() — in jsdom, view.hasFocus()
-        // returns false unless the contenteditable has a live DOM selection, which
-        // short-circuits the chain. Place a real Range selection inside the
-        // paragraph before clicking so ProseMirror's view.state.selection syncs.
-        const editorEl = document.querySelector('.ProseMirror') as HTMLElement;
-        await act(async () => {
-            editorEl.focus();
-            const range = document.createRange();
-            range.selectNodeContents(editorEl);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-        });
+        await selectEditorContent();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Heading 3' }));
         });
@@ -113,6 +130,46 @@ describe('RichTextEditor', () => {
         const lastCall = onChange.mock.calls.at(-1)?.[0] ?? '';
         expect(lastCall).toContain('<h3>');
         expect(lastCall).toContain('turn me into a heading');
+    });
+
+    it('emits <strong> when Bold is toggled', async () => {
+        const onChange = vi.fn();
+        render(<RichTextEditor value="<p>bold me</p>" onChange={onChange} />);
+
+        await selectEditorContent();
+        const boldBtn = screen.getByRole('button', { name: 'Bold' });
+        // Inline marks need pointerDown before click in jsdom (see bold
+        // active-state test comment for the same workaround).
+        await act(async () => {
+            fireEvent.pointerDown(boldBtn);
+        });
+        await act(async () => {
+            fireEvent.click(boldBtn);
+        });
+
+        await waitFor(() => expect(onChange).toHaveBeenCalled());
+        const lastCall = onChange.mock.calls.at(-1)?.[0] ?? '';
+        expect(lastCall).toContain('<strong>');
+        expect(lastCall).toContain('bold me');
+    });
+
+    it('emits <s> when Strikethrough is toggled', async () => {
+        const onChange = vi.fn();
+        render(<RichTextEditor value="<p>strike me</p>" onChange={onChange} />);
+
+        await selectEditorContent();
+        const strikeBtn = screen.getByRole('button', { name: 'Strikethrough' });
+        await act(async () => {
+            fireEvent.pointerDown(strikeBtn);
+        });
+        await act(async () => {
+            fireEvent.click(strikeBtn);
+        });
+
+        await waitFor(() => expect(onChange).toHaveBeenCalled());
+        const lastCall = onChange.mock.calls.at(-1)?.[0] ?? '';
+        expect(lastCall).toContain('<s>');
+        expect(lastCall).toContain('strike me');
     });
 
     // T7: pressed-state contract. The toolbar is a Radix ToggleGroup (type="multiple")
@@ -130,18 +187,7 @@ describe('RichTextEditor', () => {
         // Before activation the item is off.
         expect(boldBtn.getAttribute('data-state')).toBe('off');
 
-        // TipTap's toggleBold chain calls .focus(); in jsdom the chain short-circuits
-        // unless the contenteditable holds a live selection (see the heading test
-        // above for the same workaround). Seed a Range over the paragraph text.
-        const editorEl = document.querySelector('.ProseMirror') as HTMLElement;
-        await act(async () => {
-            editorEl.focus();
-            const range = document.createRange();
-            range.selectNodeContents(editorEl);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-        });
+        await selectEditorContent();
         // Radix Toggle/ToggleGroupItem drives its onPressedChange from a native
         // click, but the button's onPointerDown calls preventDefault to keep focus
         // on the contenteditable. fireEvent.click alone in jsdom skips the pointer
@@ -163,6 +209,76 @@ describe('RichTextEditor', () => {
         });
         expect(boldBtn.className).toContain('bg-accent');
         expect(boldBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    // T4: active-state coverage for the new toggles. Each must reflect data-state="on"
+    // + aria-pressed=true + the bg-accent token once its mark/node is applied.
+    it.each([
+        { label: 'Strikethrough', id: 'strikethrough' },
+        { label: 'Underline', id: 'underline' },
+        { label: 'Heading 1', id: 'heading-1' },
+        { label: 'Numbered list', id: 'ordered-list' },
+        { label: 'Blockquote', id: 'blockquote' },
+        { label: 'Code block', id: 'code-block' },
+    ] as const)('reflects active state for $label after toggle', async ({ label }) => {
+        render(<RichTextEditor value="<p>target text</p>" onChange={vi.fn()} />);
+
+        const btn = screen.getByRole('button', { name: label });
+        expect(btn.getAttribute('data-state')).toBe('off');
+
+        await selectEditorContent();
+        await act(async () => {
+            fireEvent.pointerDown(btn);
+        });
+        await act(async () => {
+            fireEvent.click(btn);
+        });
+
+        await waitFor(() => {
+            expect(btn.getAttribute('data-state')).toBe('on');
+        });
+        expect(btn.className).toContain('bg-accent');
+        expect(btn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('inserts a link over a selection via prompt and emits an <a> with target/rel', async () => {
+        const onChange = vi.fn();
+        const promptSpy = vi
+            .spyOn(window, 'prompt')
+            .mockReturnValue('https://example.com/page');
+        render(<RichTextEditor value="<p>link me</p>" onChange={onChange} />);
+
+        await selectEditorContent();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Link' }));
+        });
+
+        await waitFor(() => expect(onChange).toHaveBeenCalled());
+        const lastCall = onChange.mock.calls.at(-1)?.[0] ?? '';
+        expect(lastCall).toContain('href="https://example.com/page"');
+        expect(lastCall).toContain('target="_blank"');
+        expect(lastCall).toContain('rel="noopener noreferrer nofollow"');
+        expect(promptSpy).toHaveBeenCalledWith('Link URL');
+        promptSpy.mockRestore();
+    });
+
+    it('inserts an image via prompt and emits an <img> with the src', async () => {
+        const onChange = vi.fn();
+        const promptSpy = vi
+            .spyOn(window, 'prompt')
+            .mockReturnValue('https://example.com/logo.png');
+        render(<RichTextEditor value="<p>image target</p>" onChange={onChange} />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Image' }));
+        });
+
+        await waitFor(() => expect(onChange).toHaveBeenCalled());
+        const lastCall = onChange.mock.calls.at(-1)?.[0] ?? '';
+        expect(lastCall).toContain('<img');
+        expect(lastCall).toContain('src="https://example.com/logo.png"');
+        expect(promptSpy).toHaveBeenCalledWith('Image URL');
+        promptSpy.mockRestore();
     });
 
     it('renders the placeholder when value is empty', () => {
