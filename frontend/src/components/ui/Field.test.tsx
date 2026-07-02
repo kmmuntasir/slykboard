@@ -84,4 +84,36 @@ describe('Field', () => {
         expect(labelSpan.classList.contains('flex')).toBe(false);
         expect(screen.queryByTestId('field-icon')).toBeNull();
     });
+
+    it('renders the action node in the label row, right-aligned, when provided', () => {
+        render(
+            <Field label="Title" action={<button type="button">Edit</button>}>
+                <input />
+            </Field>,
+        );
+        const actionButton = screen.getByRole('button', { name: 'Edit' });
+        expect(actionButton).toBeInTheDocument();
+
+        // The action sits in a right-aligned (ml-auto) wrapper.
+        const actionWrapper = actionButton.parentElement;
+        expect(actionWrapper?.classList.contains('ml-auto')).toBe(true);
+
+        // The label row (flex container) holds both the label text and the action.
+        const labelRow = actionWrapper?.parentElement;
+        expect(labelRow?.classList.contains('flex')).toBe(true);
+        expect(labelRow?.contains(screen.getByText('Title'))).toBe(true);
+
+        // a11y: the interactive action must NOT be nested inside a <label>.
+        expect(actionButton.closest('label')).toBeNull();
+    });
+
+    it('does not render an action slot by default', () => {
+        render(
+            <Field label="Title">
+                <input />
+            </Field>,
+        );
+        expect(screen.queryByRole('button')).toBeNull();
+        expect(screen.queryByText('Edit')).toBeNull();
+    });
 });
