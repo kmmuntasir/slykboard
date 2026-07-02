@@ -3,7 +3,7 @@ import { AlignLeft } from 'lucide-react';
 
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { Field } from '@/components/ui/Field';
-import type { TicketFormValues } from '@/hooks/useTicketForm';
+import { type TicketFormValues, TICKET_DESCRIPTION_MAX_LENGTH } from '@/hooks/useTicketForm';
 import { sanitizeDescription } from '@/utils/sanitizeHtml';
 
 // DEL-01 T6: description field bound via useFormContext. Replicates the exact
@@ -38,10 +38,21 @@ export function DescriptionField({ readOnly }: DescriptionFieldProps) {
                     dangerouslySetInnerHTML={{ __html: sanitizeDescription(descriptionValue) }}
                 />
             ) : (
-                <RichTextEditor
-                    value={descriptionValue}
-                    onChange={(html) => setValue('description', html)}
-                />
+                <>
+                    <RichTextEditor
+                        value={descriptionValue}
+                        onChange={(html) => setValue('description', html)}
+                    />
+                    <p
+                        className={`mt-1 text-right text-xs ${
+                            descriptionValue.length > TICKET_DESCRIPTION_MAX_LENGTH
+                                ? 'text-destructive'
+                                : 'text-muted-foreground'
+                        }`}
+                    >
+                        {descriptionValue.length} / {TICKET_DESCRIPTION_MAX_LENGTH}
+                    </p>
+                </>
             )}
         </Field>
     );
