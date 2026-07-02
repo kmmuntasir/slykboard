@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { checklistItemSchema } from './tickets.schema';
+import { checklistItemSchema, TICKET_DESCRIPTION_MAX_LENGTH } from './tickets.schema';
 
 // F08 D-Slug-Format: validated server-side again (service also normalizes+checks).
 // Accepts the raw input here; service normalizes. Lenient on case so 'slyk' is accepted then normalized.
@@ -57,7 +57,7 @@ export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 // Renamed labels -> labelIds for symmetry with updateTicketBody + createTicket input.
 export const createTicketBody = z.object({
   title: z.string().min(1).max(200),
-  description: z.string().max(5000).optional(),
+  description: z.string().max(TICKET_DESCRIPTION_MAX_LENGTH).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']).optional(),
   labelIds: z.array(z.string().uuid()).optional(),
   assigneeId: z.uuid().optional(),

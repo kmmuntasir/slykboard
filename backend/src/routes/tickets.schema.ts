@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+// DEL-03: single source of truth for the ticket description char cap.
+// Applied on both the PATCH (attributeFields) and POST (createTicketBody) paths.
+export const TICKET_DESCRIPTION_MAX_LENGTH = 10_000;
+
 export const ticketIdParam = z.object({
   ticketId: z.uuid(),
 });
@@ -28,7 +32,7 @@ export const checklistItemSchema = z.object({
 
 const attributeFields = {
   title: z.string().min(1).max(200).optional(),
-  description: z.string().max(5000).nullable().optional(),
+  description: z.string().max(TICKET_DESCRIPTION_MAX_LENGTH).nullable().optional(),
   priority: priorityEnum.optional(),
   assigneeId: z.uuid().nullable().optional(),
   labelIds: z.array(z.string().uuid()).optional(), // F14: replace ticket's label set
