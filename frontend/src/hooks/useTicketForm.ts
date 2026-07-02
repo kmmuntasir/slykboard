@@ -13,9 +13,15 @@ import { z } from 'zod';
 // checklist, with statusColumn + dueDate added for DEL-01 (Status is expose-only
 // on the existing tickets.statusColumn; dueDate is the net-new full-stack slice).
 
+// DEL-03 T2: unified description length ceiling (10_000) shared by create + edit.
+export const TICKET_DESCRIPTION_MAX_LENGTH = 10_000;
+
 export const ticketFormSchema = z.object({
     title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 chars or fewer'),
-    description: z.string().max(5000, 'Description must be 5000 chars or fewer'),
+    description: z.string().max(
+        TICKET_DESCRIPTION_MAX_LENGTH,
+        `Description must be ${TICKET_DESCRIPTION_MAX_LENGTH} chars or fewer`,
+    ),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
     assigneeId: z.string().uuid().nullable(),
     labelIds: z.array(z.string().uuid()).default([]),
