@@ -74,6 +74,7 @@ import * as ticketService from '../services/ticketService';
 import * as activityService from '../services/activityService';
 import { UNSORTED_BUCKET_ID } from '../services/boardService';
 import * as timerService from '../services/timerService';
+import { TICKET_DESCRIPTION_MAX_LENGTH } from './tickets.schema';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedMoveTicket = vi.mocked(ticketService.moveTicket);
@@ -404,6 +405,41 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
       expect.objectContaining({
         patch: expect.objectContaining({
           description: '<script>alert("xss")</script>safe content',
+        }),
+      }),
+    );
+  });
+
+  it('400 VALIDATION_FAILED for description over limit (10001 chars)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH + 1) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('200 description at max length (10000 chars) is accepted (boundary)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow({ description: null }),
+      new: makeTicketRow({ description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH) }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH) });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({
+          description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH),
         }),
       }),
     );

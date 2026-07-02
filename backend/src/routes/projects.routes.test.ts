@@ -66,6 +66,7 @@ import { findUserTokenVersion } from '../services/tokenVersion';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
 import * as ticketService from '../services/ticketService';
+import { TICKET_DESCRIPTION_MAX_LENGTH } from './tickets.schema';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedCreate = vi.mocked(projectService.createProject);
@@ -436,6 +437,35 @@ describe('POST /:slug/tickets (F12)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedCreateTicket).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_FAILED on description over limit (createTicket NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        title: 'X',
+        description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH + 1),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedCreateTicket).not.toHaveBeenCalled();
+  });
+
+  it('returns 201 for description at max length (boundary accepted)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        title: 'X',
+        description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH),
+      });
+    expect(res.status).toBe(201);
   });
 
   it('returns 400 VALIDATION_FAILED on invalid priority BOGUS', async () => {
