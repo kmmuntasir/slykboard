@@ -101,6 +101,9 @@ describe('TicketAttributeForm', () => {
             />,
         );
         expect(screen.getByLabelText('Title')).toBeInTheDocument();
+        // DEL-02: DescriptionField is now read-first; the editor is only mounted
+        // after clicking "Edit description", so reveal it before asserting it renders.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
         expect(screen.getByLabelText('Description')).toBeInTheDocument();
         expect(screen.getByLabelText('Priority')).toBeInTheDocument();
         expect(screen.getByLabelText('Assignee')).toBeInTheDocument();
@@ -128,6 +131,9 @@ describe('TicketAttributeForm', () => {
         );
         expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
         expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Existing ticket');
+        // DEL-02: DescriptionField renders read-only HTML until edited; click
+        // "Edit description" to mount the editor before asserting its value.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
         expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe(
             '<p>prefilled</p>',
         );
@@ -187,6 +193,8 @@ describe('TicketAttributeForm', () => {
             />,
         );
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Valid title' } });
+        // DEL-02: reveal the Description editor (read-first) before changing it.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
         const long = 'a'.repeat(TICKET_DESCRIPTION_MAX_LENGTH + 1);
         fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: long },
@@ -210,6 +218,8 @@ describe('TicketAttributeForm', () => {
             />,
         );
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New bug' } });
+        // DEL-02: reveal the Description editor (read-first) before changing it.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
         fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: '<p>steps</p>' },
         });
@@ -546,21 +556,29 @@ describe('SLYK-14 label row', () => {
         'the icon shares the label row inline-left of the caption for %s',
         (label) => {
             renderForm();
-            // The caption span is the label-bearing element rendered by Field.
+            // The caption-bearing element is the label-row container rendered by
+            // Field. For most fields this is a <span>, but when an action slot is
+            // populated (e.g. Description's "Edit description" button under DEL-02)
+            // Field wraps the icon + caption inside a <label> instead — a11y: the
+            // action button must not be nested inside a <label>. Be tolerant of both.
             const caption = screen.getByText(label);
-            const span = caption.closest('span')!;
+            // Tolerate both container shapes: a <span> normally, or a <label>
+            // when Field's action slot is populated (Description under DEL-02).
+            // span-first preserves the historical lookup; the label fallback only
+            // triggers for Description, whose caption-bearing flex row is a <label>.
+            const labelRow = caption.closest('span') ?? caption.closest('label')!;
 
-            // Caption span carries the Field label-row classes.
-            expect(span.classList.contains('flex')).toBe(true);
-            expect(span.classList.contains('items-center')).toBe(true);
+            // Caption container carries the Field label-row classes.
+            expect(labelRow.classList.contains('flex')).toBe(true);
+            expect(labelRow.classList.contains('items-center')).toBe(true);
 
             // Exactly one lucide <svg> sits on the label row.
-            const svgs = span.querySelectorAll('svg');
+            const svgs = labelRow.querySelectorAll('svg');
             expect(svgs.length).toBe(1);
 
             // The <svg> PRECEDES the caption text node in DOM order.
             const svg = svgs[0]!;
-            const textNode = Array.from(span.childNodes).find(
+            const textNode = Array.from(labelRow.childNodes).find(
                 (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes(label),
             );
             expect(textNode).toBeTruthy();
