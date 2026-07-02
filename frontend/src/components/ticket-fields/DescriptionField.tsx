@@ -4,6 +4,7 @@ import { AlignLeft } from 'lucide-react';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { Field } from '@/components/ui/Field';
 import type { TicketFormValues } from '@/hooks/useTicketForm';
+import { sanitizeDescription } from '@/utils/sanitizeHtml';
 
 // DEL-01 T6: description field bound via useFormContext. Replicates the exact
 // readOnly vs editable binding that lived inline in TicketAttributeForm:
@@ -34,7 +35,7 @@ export function DescriptionField({ readOnly }: DescriptionFieldProps) {
                 // F17: read-only view of the archived (sanitized) description.
                 <div
                     className="max-w-none rounded border border-border bg-muted p-2 text-sm"
-                    dangerouslySetInnerHTML={{ __html: descriptionValue }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeDescription(descriptionValue) }}
                 />
             ) : (
                 <RichTextEditor

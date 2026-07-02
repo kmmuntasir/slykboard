@@ -87,6 +87,56 @@ describe('sanitizeDescription', () => {
       check: (o) => !o.includes('id=') && o.includes('hi'),
     },
     {
+      name: 'keeps <s> and <u>',
+      input: '<p><s>struck</s> <u>under</u></p>',
+      check: (o) => o.includes('<s>struck</s>') && o.includes('<u>under</u>'),
+    },
+    {
+      name: 'keeps <h1> and <h2>',
+      input: '<h1>one</h1><h2>two</h2>',
+      check: (o) => o.includes('<h1>one</h1>') && o.includes('<h2>two</h2>'),
+    },
+    {
+      name: 'keeps <img src="https://..."> with src',
+      input: '<img src="https://example.com/a.png">',
+      check: (o) => o.includes('<img') && o.includes('src="https://example.com/a.png"'),
+    },
+    {
+      name: 'img alt survives',
+      input: '<img src="https://example.com/a.png" alt="alt text">',
+      check: (o) => o.includes('alt="alt text"'),
+    },
+    {
+      name: 'link target/rel survive',
+      input: '<a href="https://example.com" target="_blank" rel="noopener">link</a>',
+      check: (o) => o.includes('target="_blank"') && o.includes('rel="noopener"'),
+    },
+    {
+      name: 'strips script / onerror / onload',
+      input: '<script>x</script><img src="x" onerror="a(1)" onload="b(2)">',
+      check: (o) => !o.includes('<script') && !o.includes('onerror') && !o.includes('onload'),
+    },
+    {
+      name: 'strips javascript: href',
+      input: '<a href="javascript:alert(1)">x</a>',
+      check: (o) => !o.toLowerCase().includes('javascript:'),
+    },
+    {
+      name: 'strips javascript: img src',
+      input: '<img src="javascript:alert(1)">',
+      check: (o) => !o.toLowerCase().includes('javascript:'),
+    },
+    {
+      name: 'strips data: img src',
+      input: '<img src="data:image/png;base64,abc">',
+      check: (o) => !o.toLowerCase().includes('data:'),
+    },
+    {
+      name: 'strips <iframe> with remote src',
+      input: '<iframe src="https://evil.com"></iframe>',
+      check: (o) => !o.includes('<iframe'),
+    },
+    {
       name: 'keeps nested allowed content unchanged',
       input: '<p>hello <strong>world</strong></p>',
       check: (o) => o === '<p>hello <strong>world</strong></p>',
