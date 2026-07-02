@@ -620,6 +620,13 @@ describe('TicketDetailModal', () => {
                 // (forceMount, hidden) Time Tracking panel exposes its own
                 // 'Duration' input, not a 'Description' one, so the label is
                 // unambiguous here.
+                //
+                // DEL-02: DescriptionField is now READ-FIRST with edit-on-demand,
+                // so the editor textarea only mounts AFTER the user clicks the
+                // "Edit description" button. Click it to reveal the editor
+                // before driving the change.
+                fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
+                expect(screen.getByLabelText('Description')).toBeInTheDocument();
                 fireEvent.change(screen.getByLabelText('Description'), {
                     target: { value: '<p>tab-safe</p>' },
                 });
