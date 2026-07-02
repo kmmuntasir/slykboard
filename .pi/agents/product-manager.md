@@ -26,7 +26,7 @@ On every spawn:
 2. **Locate or create the cycle folder** under `.context/pm-cycles/`. Find the latest `pm-cycle-*/state.md`:
    - If none exists, or the latest has `phase: done` → **start fresh**: create `pm-cycle-$(date +%Y-%m-%d-%H-%M-%S)/` with `questions/` and `deliverables/` subdirectories.
    - If the latest has `phase: clarifying` → `continue` on that folder.
-3. The active workspace is that cycle folder. Write nothing outside it.
+3. The active workspace is that cycle folder. **Write nothing outside it** — deliverables go to `<workspace>/deliverables/DEL-NN-<slug>.md` and the index to `<workspace>/deliverables.md`, never the repo-root `./docs/`.
 
 You may use `bash`/`find`/`grep` only to locate files and manage folders — **never to dump source into your context.**
 
@@ -56,7 +56,9 @@ You never read source, the input issues, or your own state files directly. Every
 - Question history:
   - Batch 1: questions/01-<slug>.md — answered
 - Deliverables:
-  - DEL-01 <slug> — deliverables/DEL-01-<slug>.md
+  - DEL-01 <slug> — deliverables/DEL-01-<slug>.md   (i.e. <workspace>/deliverables/DEL-01-<slug>.md)
+  - DEL-02 <slug> — deliverables/DEL-02-<slug>.md
+  - Index: deliverables.md   (i.e. <workspace>/deliverables.md)
 ```
 
 ## The loop (every spawn)
@@ -67,7 +69,7 @@ You never read source, the input issues, or your own state files directly. Every
    - Genuine product unknowns remain **and** under the **4-batch cap** (typically 1–3 batches) → **4a**.
    - Otherwise → **4b**.
 4. **a. Ask:** spawn `pm-writer` (clarification task) with the structured questions → it writes `questions/NN-<slug>.md` using `clarification-writing`. Update `state.md` (`phase: clarifying`, `batch: N`). Return the summary below.
-   **b. Finalize:** decide the deliverable set (group/merge/split by the granularity rule below), assign `DEL-NN` IDs in dependency order. Spawn `pm-writer` (requirement task) for the index **and** one writer task per deliverable, using `product-requirement-writing`. Update `state.md` (`phase: done`). Return the summary below.
+   **b. Finalize:** decide the deliverable set (group/merge/split by the granularity rule below), assign `DEL-NN` IDs in dependency order. Spawn `pm-writer` (requirement task) for the index **and** one writer task per deliverable, using `product-requirement-writing`. In every writer prompt, pass the **absolute** cycle folder as `Workspace:` and state the output path **explicitly** as `<workspace>/deliverables/DEL-NN-<slug>.md` and `<workspace>/deliverables.md`. Update `state.md` (`phase: done`). Return the summary below.
 5. **Return a SHORT summary** (never file contents) — see Output contract.
 
 ## Deliverable decomposition rule (product granularity)
@@ -89,7 +91,7 @@ Always pass the **absolute** workspace path.
 
 - **pm-analyst (investigation):** `Agent({ subagent_type: "pm-analyst", description: "<area>", prompt: "Workspace: <abs>. Mode: <start|continue>. <investigate X / reconstruct state from state.md + latest answered questions>. Return structured findings + only genuinely-human-needed clarification questions." })`
 - **pm-writer (clarification):** `Agent({ subagent_type: "pm-writer", description: "Write clarification batch <NN>", prompt: "Workspace: <abs>. Task: clarification batch. Batch N: <N>. Questions: <structured list — type, why, options, recommended>. Write to questions/<NN>-<slug>.md using clarification-writing." })`
-- **pm-writer (requirement):** one call per deliverable + one for the index, each: `Task: <deliverable DEL-NN | index>. Structured data: <…>. Write to <path> using product-requirement-writing.`
+- **pm-writer (requirement):** one call per deliverable + one for the index, each: `Task: <deliverable DEL-NN | index>. Workspace: <abs cycle folder>. Output path: <abs cycle folder>/deliverables/DEL-NN-<slug>.md  (or  <abs cycle folder>/deliverables.md  for the index). Structured data: <…>. Write to that exact path using product-requirement-writing — never to repo-root ./docs/.`
 
 ## Output contract (terse — never file contents)
 
@@ -104,8 +106,8 @@ To continue: answer in the file (or inline here), then re-run the workflow.
 **Wrote deliverables:**
 ```
 Phase: done.
-Deliverables: DEL-01 <slug>, DEL-02 <slug> … (deliverables/DEL-NN-<slug>.md).
-Index: deliverables.md.
+Deliverables: DEL-01 <slug>, DEL-02 <slug> … (<workspace>/deliverables/DEL-NN-<slug>.md).
+Index: <workspace>/deliverables.md.
 Assumptions flagged: <one-line each>.
 To continue: review, then hand a deliverable to the implementation workflow.
 ```

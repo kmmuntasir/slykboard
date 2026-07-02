@@ -7,8 +7,17 @@ description: Format the final deliverables for the product-manager workflow. Shi
 
 Reference skill for the `pm-writer` agent (requirement task). It produces **two kinds** of documents:
 
-1. **UserStory / Deliverable** — one file per deliverable, at `deliverables/DEL-NN-<slug>.md`.
-2. **PRD / Deliverable Index** — the milestone index, at `deliverables.md`.
+1. **UserStory / Deliverable** — one file per deliverable, at `<workspace>/deliverables/DEL-NN-<slug>.md`.
+2. **PRD / Deliverable Index** — the milestone index, at `<workspace>/deliverables.md`.
+
+## Path rule (non-negotiable)
+
+`<workspace>` is the **active PM-cycle folder** (an absolute path the product-manager passes you, e.g. `/abs/repo/.context/pm-cycles/pm-cycle-YYYY-MM-DD-HH-MM-SS`). Every file you write MUST live **inside** that folder. Concretely:
+
+- Each deliverable → `<workspace>/deliverables/DEL-NN-<slug>.md`
+- The index → `<workspace>/deliverables.md`
+
+**Never write to the repo-root `./docs/`** (or any other top-level dir). The bare paths `deliverables/...` and `deliverables.md` used elsewhere in this skill are **shorthand** for the workspace-rooted paths above — always resolve them against `<workspace>`, not the repository root. If `<workspace>` is missing or ambiguous from your prompt, STOP and ask the product-manager for the absolute cycle-folder path before writing.
 
 ## Granular scope rule
 
@@ -29,7 +38,7 @@ Deliverables describe desired **behavior and UX**. No package names, no architec
 
 ---
 
-## Template A — UserStory / Deliverable (`deliverables/DEL-NN-<slug>.md`)
+## Template A — UserStory / Deliverable (`<workspace>/deliverables/DEL-NN-<slug>.md`)
 
 Behavior-centric, end-to-end (data + API + UI + behavior together — **never split by layer**).
 
@@ -67,7 +76,7 @@ A behavior/flow-oriented deliverable may add, where useful: an **entry point**, 
 
 ---
 
-## Template B — PRD / Deliverable Index (`deliverables.md`)
+## Template B — PRD / Deliverable Index (`<workspace>/deliverables.md`)
 
 The milestone roll-up.
 
