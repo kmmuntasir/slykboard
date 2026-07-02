@@ -1,5 +1,5 @@
 {
   "packages": [
-    "npm:@tintinweb/pi-subagents"
+    "npm:@kmmuntasir/pi-nested-subagents"
   ]
 }
