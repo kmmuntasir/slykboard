@@ -574,6 +574,38 @@ describe('ticketService createTicket (F12)', () => {
     expect(result.creatorId).toBe('u1');
   });
 
+  it('DEL-01 T2: description routes through sanitizeDescription exactly once with input.description', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
+
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      description: 'raw',
+    });
+
+    expect(bag.sanitizeMock).toHaveBeenCalledTimes(1);
+    expect(bag.sanitizeMock).toHaveBeenCalledWith('raw');
+    expect(bag.lastInsert).not.toBeNull();
+    expect(bag.lastInsert!.description).toBe('<clean>raw</clean>');
+  });
+
+  it('DEL-01 T2: undefined description does NOT invoke sanitizer and does NOT throw', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'No desc' });
+
+    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+    expect(bag.lastInsert).not.toBeNull();
+    expect(bag.lastInsert!.description).toBeUndefined();
+  });
+
   it('T1: inserts dueDate as a Date parsed from the ISO input', async () => {
     bag.getProjectBySlug.mockResolvedValue(makeProject());
     bag.seqRow = [{ nextNumber: 1 }];

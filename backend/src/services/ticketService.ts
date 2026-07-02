@@ -228,7 +228,11 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         projectId: project.id,
         ticketNumber,
         title: input.title,
-        description: input.description,
+        // DEL-01 T2: sanitize the description on the create path too (mirrors
+        // the edit path). `input.description` is `string | undefined`; pass it
+        // through only when present so an undefined create body is left as-is.
+        description:
+          input.description === undefined ? undefined : sanitizeDescription(input.description),
         statusColumn: resolvedColumn,
         position,
         creatorId: input.creatorId,
