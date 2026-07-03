@@ -855,25 +855,27 @@ describe('TicketDetailModal', () => {
 
     // --- DEL-01 T7: footer + widened delete-gate coverage --------------------
 
-    it('footer: renders Save changes and Cancel (pinned three-action footer)', async () => {
+    it('footer: renders Save changes; Cancel is hidden until a description edit starts', async () => {
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
         expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
-        // DEL-01: the pinned footer now exposes Cancel (discard-and-close with
-        // confirm-if-dirty) alongside Save. (Delete is admin-gated — covered below.)
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+        // DEL-01 + ISSUE-1: the pinned footer's Cancel is now visible ONLY
+        // during an active description edit session. In display mode it is
+        // absent (closing stays available via the X / Esc / backdrop).
+        expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
     });
 
-    it('Cancel (footer) on a clean form closes the modal immediately', async () => {
+    it('close (X button) on a clean form closes the modal immediately', async () => {
         const { onClose } = renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
-        // Clean form → Cancel routes through requestClose → onClose (no confirm).
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        // Clean form → X (Close dialog) routes through requestClose → onClose
+        // (no confirm). The footer Cancel no longer closes the modal.
+        fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument();
     });
 
-    it('Cancel (footer) on a dirty form opens the discard confirm instead of closing', async () => {
+    it('close (X button) on a dirty form opens the discard confirm instead of closing', async () => {
         const { onClose } = renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
 
@@ -881,12 +883,49 @@ describe('TicketDetailModal', () => {
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Edited' } });
         await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Edited'));
 
-        // Footer Cancel → requestClose → dirty → ConfirmDiscardDialog (NOT onClose).
-        // At click time only the footer Cancel exists (the confirm is not open
-        // yet), so the unscoped query is unambiguous.
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        // X (Close dialog) → requestClose → dirty → ConfirmDiscardDialog (NOT onClose).
+        fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
         expect(onClose).not.toHaveBeenCalled();
         expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument();
+    });
+
+    it('Cancel is hidden in display mode and appears after starting a description edit', async () => {
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Display mode: no footer Cancel.
+        expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+
+        // Start a description edit → the footer Cancel appears.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
+
+    it('Cancel during a description edit reverts the description and returns to display mode without closing the modal', async () => {
+        const { onClose } = renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Enter the description edit session (also snapshots the pre-edit value).
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
+        const description = screen.getByLabelText('Description');
+        expect(description).toBeInTheDocument();
+
+        // Edit the description HTML.
+        const editedHtml = '<p>changed description</p>';
+        fireEvent.change(description, { target: { value: editedHtml } });
+        await waitFor(() => expect(screen.getByLabelText('Description')).toHaveValue(editedHtml));
+
+        // Footer Cancel → revert + exit edit session (modal stays open).
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        // (a) The modal was NOT closed.
+        expect(onClose).not.toHaveBeenCalled();
+        // (b) The editor is gone → back to the read-only display view.
+        await waitFor(() => {
+            expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
+        });
+        // (c) The Edit description button is present again (display mode).
+        expect(screen.getByRole('button', { name: /edit description/i })).toBeInTheDocument();
     });
 
     it('DEL-01 widened delete gate: a PROJECT ADMIN (not platform admin) sees the Delete ticket button', async () => {

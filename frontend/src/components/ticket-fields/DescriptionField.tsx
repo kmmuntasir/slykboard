@@ -17,10 +17,19 @@ import { sanitizeDescription } from '@/utils/sanitizeHtml';
 // field reverts to read-only. `readOnly` always wins (no editor, no button).
 interface DescriptionFieldProps {
     readOnly?: boolean;
+    // When provided, the parent owns the edit session (controlled). When
+    // omitted, the component falls back to its own internal state so the
+    // create-form usage (and its tests) keep behaving exactly as before.
+    isEditing?: boolean;
+    // Invoked when the user clicks the Edit button. Lets a controlled parent
+    // snapshot the pre-edit value before flipping its edit state.
+    onStartEdit?: () => void;
 }
 
-export function DescriptionField({ readOnly }: DescriptionFieldProps) {
-    const [isEditing, setIsEditing] = useState(false);
+export function DescriptionField({ readOnly, isEditing, onStartEdit }: DescriptionFieldProps) {
+    const [internalEditing, setInternalEditing] = useState(false);
+    const controlled = isEditing !== undefined;
+    const editing = controlled ? isEditing : internalEditing;
 
     const {
         watch,
@@ -33,19 +42,21 @@ export function DescriptionField({ readOnly }: DescriptionFieldProps) {
 
     // Revert to read-only after a successful global Save. RHF flips
     // isSubmitSuccessful true on success and resets it to false at the start
-    // of the next submit — a host-agnostic robust mechanism.
+    // of the next submit — a host-agnostic robust mechanism. Only the
+    // uncontrolled (internal) mode reverts here: a controlled parent manages
+    // its own edit state (the modal's Cancel path does its own revert).
     useEffect(() => {
-        if (isSubmitSuccessful) {
-            setIsEditing(false);
+        if (!controlled && isSubmitSuccessful) {
+            setInternalEditing(false);
         }
-    }, [isSubmitSuccessful]);
+    }, [controlled, isSubmitSuccessful]);
 
     // Show the editor only when actively editing an editable ticket. `readOnly`
     // always wins (no editor, no Edit button).
-    const showEditor = isEditing && !readOnly;
+    const showEditor = editing && !readOnly;
     // Render the Edit button only for editable tickets that are not currently
     // editing (exit only via the global Save).
-    const showEditButton = !readOnly && !isEditing;
+    const showEditButton = !readOnly && !editing;
 
     return (
         <Field
@@ -58,7 +69,10 @@ export function DescriptionField({ readOnly }: DescriptionFieldProps) {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => setIsEditing(true)}
+                        onClick={() => {
+                            onStartEdit?.();
+                            if (!controlled) setInternalEditing(true);
+                        }}
                         aria-label="Edit description"
                     >
                         <Pencil className="h-4 w-4" aria-hidden="true" />

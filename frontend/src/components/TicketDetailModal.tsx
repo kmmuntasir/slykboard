@@ -73,6 +73,10 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    // Owns the DescriptionField edit session (controlled via `isEditing`). The
+    // footer Cancel gates on this and reverts the description via the snapshot
+    // ref below — it does NOT close the modal (X/Esc/backdrop still do).
+    const [isEditingDescription, setIsEditingDescription] = useState(false);
     // DEL-01 T7: active detail tab. Defaults to 'metadata' on (re)mount; reset
     // to 'metadata' whenever the ticket changes while the modal stays open. We
     // reset during render (React docs "reset state when a prop changes" pattern)
@@ -149,6 +153,9 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     // reference, which changes on every 30s background refetch) so a drift
     // refetch never clobbers in-flight edits.
     const seededTicketId = useRef<string | null>(null);
+    // Snapshot of the description taken when the user starts editing. The
+    // footer Cancel restores from this to undo the in-progress description edit.
+    const descriptionSnapshotRef = useRef<string>('');
     useEffect(() => {
         if (!ticket || seededTicketId.current === ticket.id) return;
         seededTicketId.current = ticket.id;
@@ -170,6 +177,21 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     // The confirm shows when the user tried to close (Esc/backdrop/button) while
     // dirty, OR when route navigation was blocked — derived, no setState-in-effect.
     const showConfirm = confirmOpen || blocker.state === 'blocked';
+
+    // Start a description edit session: snapshot the current description so the
+    // footer Cancel can restore it, then flip the field into edit mode.
+    const handleStartEditDescription = () => {
+        descriptionSnapshotRef.current = methods.getValues('description') ?? '';
+        setIsEditingDescription(true);
+    };
+
+    // Footer Cancel: undo the in-progress description edit (restore the snapshot)
+    // and return the field to its read-only display view. Does NOT close the
+    // modal and does NOT touch other fields (title, etc.).
+    const handleCancelDescriptionEdit = () => {
+        methods.setValue('description', descriptionSnapshotRef.current);
+        setIsEditingDescription(false);
+    };
 
     // Esc / backdrop / close-button: confirm before close when dirty.
     const requestClose = () => {
@@ -300,7 +322,11 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                             </div>
 
                             <TitleField readOnly={ticket.deletedAt ? true : undefined} />
-                            <DescriptionField readOnly={!!ticket.deletedAt} />
+                            <DescriptionField
+                                readOnly={!!ticket.deletedAt}
+                                isEditing={isEditingDescription}
+                                onStartEdit={handleStartEditDescription}
+                            />
 
                             <CommentsSection
                                 ticketId={ticket.id}
@@ -397,13 +423,13 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         // Modal's footer slot so it stays visible while the body scrolls.
         //   • Save changes — primary; submits via handleValidSubmit (jsdom-safe
         //     programmatic submit; same handler as <form onSubmit>).
-        //   • Cancel — secondary; reuses requestClose (confirm-if-dirty →
-        //     ConfirmDiscardDialog; clean → close). Preserves the discard/blocker
-        //     machinery — no new flow.
+        //   • Cancel — secondary; visible ONLY while a description edit is
+        //     active. Reverts the description to its pre-edit snapshot and
+        //     returns the field to read-only (display mode). It does NOT close
+        //     the modal (closing is via the X/Esc/backdrop → requestClose).
         //   • Delete ticket — destructive-outline; opens its existing
         //     DeleteTicketConfirm (one-click, confirmed). Gated on canDelete.
-        // Cancel is always present (a close affordance); Save/Delete are gated
-        // on a live (non-soft-deleted) ticket.
+        // Save/Delete are gated on a live (non-soft-deleted) ticket.
         modalFooter = (
             <div className="flex items-center justify-end gap-2">
                 {canDelete && !ticket.deletedAt && (
@@ -414,9 +440,11 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                         Delete ticket
                     </Button>
                 )}
-                <Button variant="outline" onClick={requestClose}>
-                    Cancel
-                </Button>
+                {isEditingDescription && (
+                    <Button variant="outline" onClick={handleCancelDescriptionEdit}>
+                        Cancel
+                    </Button>
+                )}
                 {!ticket.deletedAt && (
                     <Button
                         type="button"

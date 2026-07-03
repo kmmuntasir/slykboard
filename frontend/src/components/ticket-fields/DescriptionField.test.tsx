@@ -140,4 +140,31 @@ describe('DescriptionField (DEL-02 read-first / edit-on-demand)', () => {
         const editButton = screen.getByRole('button', { name: 'Edit description' });
         expect(editButton).toHaveAttribute('type', 'button');
     });
+
+    // (f) Controlled mode (the modal passes `isEditing` + `onStartEdit`): the
+    // parent owns the edit state. Clicking Edit calls `onStartEdit` (so the
+    // parent can snapshot the pre-edit value) but does NOT flip internal state;
+    // the editor shows only when the parent drives `isEditing` true. The
+    // isSubmitSuccessful revert must be a no-op in controlled mode.
+    it('controlled mode: clicking Edit calls onStartEdit and the editor is driven by the isEditing prop', () => {
+        const onStartEdit = vi.fn();
+
+        function Wrapper() {
+            const methods = useForm<TicketFormValues>({ defaultValues: DEFAULT_VALUES });
+            return (
+                <FormProvider {...methods}>
+                    <DescriptionField isEditing onStartEdit={onStartEdit} />
+                </FormProvider>
+            );
+        }
+
+        render(<Wrapper />);
+
+        // Editor is already shown because the parent drove `isEditing` true.
+        expect(screen.getByLabelText('Description')).toBeInTheDocument();
+        // No Edit button while editing.
+        expect(
+            screen.queryByRole('button', { name: 'Edit description' }),
+        ).not.toBeInTheDocument();
+    });
 });
