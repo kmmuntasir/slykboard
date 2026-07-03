@@ -159,4 +159,65 @@ describe('Modal', () => {
         expect(closeBtn.querySelector('svg')).toBeInTheDocument();
         expect(screen.queryByText('×')).toBeNull();
     });
+
+    // DEL-01: optional pinned `footer` prop. When passed, the panel restructures
+    // into a flex column (scrollable body + pinned footer slot); when omitted it
+    // keeps the legacy single-scroll layout byte-for-byte (regression guard for
+    // the seven other consumers).
+    describe('Modal footer prop', () => {
+        it('renders the footer content in a pinned slot inside the dialog', () => {
+            render(
+                <Modal
+                    isOpen
+                    onClose={vi.fn()}
+                    titleId="t1"
+                    title="Footer test"
+                    footer={<button type="button">Go</button>}
+                >
+                    body
+                </Modal>,
+            );
+            const dialog = screen.getByRole('dialog');
+            const footerBtn = screen.getByRole('button', { name: 'Go' });
+            // The footer content renders inside the dialog panel (not browser-fixed).
+            expect(dialog).toContainElement(footerBtn);
+            // Footer-mode panel is a bounded flex column (no panel-level scroll).
+            expect(dialog.className).toContain('flex-col');
+            expect(dialog.className).toContain('overflow-hidden');
+            expect(dialog.className).not.toContain('overflow-y-auto');
+        });
+
+        it('omitting the footer keeps the legacy single-scroll layout (backward compatible)', () => {
+            render(
+                <Modal isOpen onClose={vi.fn()} titleId="t1" title="Legacy">
+                    body
+                </Modal>,
+            );
+            const dialog = screen.getByRole('dialog');
+            // Legacy panel scrolls itself and carries the p-6 padding exactly as before.
+            expect(dialog.className).toContain('overflow-y-auto');
+            expect(dialog.className).toContain('p-6');
+            expect(dialog.className).not.toContain('flex-col');
+            expect(dialog.className).not.toContain('overflow-hidden');
+        });
+
+        it('passes the size class on the panel in footer mode too', () => {
+            render(
+                <Modal
+                    isOpen
+                    onClose={vi.fn()}
+                    titleId="t1"
+                    title="Sized footer"
+                    size="full"
+                    footer={<span>foot</span>}
+                >
+                    body
+                </Modal>,
+            );
+            // The max-w-* size class stays on the dialog panel in footer mode.
+            expect(screen.getByRole('dialog').className).toContain(
+                'max-w-[min(95vw,1400px)]',
+            );
+        });
+    });
 });

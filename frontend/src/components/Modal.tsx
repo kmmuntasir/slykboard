@@ -21,6 +21,15 @@ const MODAL_SIZE_CLASS: Record<ModalSize, string> = {
 // document.body, wires the useModalA11y hook (focus trap, Esc, scroll lock,
 // focus restore), and exposes backdrop-click + a labelled close button.
 // `blockBackdropClose` disables backdrop-click close (e.g. for a dirty form).
+//
+// DEL-01: optional `footer` prop. When provided, the panel becomes a flex
+// column — a fixed header, a single scrollable body (the children), and a
+// pinned footer slot — so the body scrolls while the footer stays visible
+// (the ticket-detail modal's Save/Cancel/Delete stay reachable on long
+// tickets). Backward compatible: when omitted/null the panel keeps its legacy
+// single-scroll layout (`overflow-y-auto p-6`) byte-for-byte, so the seven
+// other consumers are untouched. The size `max-w-*` class and the a11y
+// `dialogRef` stay on the panel div in BOTH branches.
 interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -33,6 +42,12 @@ interface ModalProps {
     blockBackdropClose?: boolean;
     /** Panel width preset. Defaults to 'md' (max-w-lg, backward-compatible). */
     size?: ModalSize;
+    /**
+     * Optional pinned footer. When provided, the panel switches to a flex
+     * column with a scrollable body and a pinned footer slot. Omitted (or null)
+     * keeps the legacy single-scroll layout — fully backward compatible.
+     */
+    footer?: ReactNode;
 }
 
 export function Modal({
@@ -44,9 +59,13 @@ export function Modal({
     children,
     blockBackdropClose,
     size = 'md',
+    footer,
 }: ModalProps) {
     const { dialogRef } = useModalA11y({ isOpen, onClose, onEsc });
     if (!isOpen) return null;
+
+    // Footer mode = pinned footer slot. Omitted (or null) → legacy single-scroll.
+    const hasFooter = footer !== undefined && footer !== null;
 
     return createPortal(
         <div
@@ -63,11 +82,20 @@ export function Modal({
                 aria-labelledby={titleId}
                 tabIndex={-1}
                 className={cn(
-                    'max-h-[90vh] w-full overflow-y-auto rounded-lg border border-border bg-background p-6 text-foreground shadow-xl outline-none',
+                    'max-h-[90vh] w-full rounded-lg border border-border bg-background text-foreground shadow-xl outline-none',
+                    // DEL-01: footer mode restructures the panel into a flex
+                    // column (no panel-level scroll); legacy mode scrolls the
+                    // whole panel exactly as before.
+                    hasFooter ? 'flex flex-col overflow-hidden' : 'overflow-y-auto p-6',
                     MODAL_SIZE_CLASS[size],
                 )}
             >
-                <div className="mb-4 flex items-center justify-between">
+                <div
+                    className={cn(
+                        'flex items-center justify-between',
+                        hasFooter ? 'shrink-0 px-6 pt-6 pb-4' : 'mb-4',
+                    )}
+                >
                     <h2 id={titleId} className="text-lg font-semibold">
                         {title}
                     </h2>
@@ -80,7 +108,18 @@ export function Modal({
                         <X size={20} />
                     </button>
                 </div>
-                {children}
+                {hasFooter ? (
+                    <>
+                        {/* Single scroll region — the body scrolls while the
+                            footer below stays pinned inside the panel. */}
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">{children}</div>
+                        <div className="shrink-0 border-t border-border bg-background px-6 py-4">
+                            {footer}
+                        </div>
+                    </>
+                ) : (
+                    children
+                )}
             </div>
         </div>,
         document.body,
