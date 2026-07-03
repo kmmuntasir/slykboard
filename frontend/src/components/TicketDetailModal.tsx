@@ -47,9 +47,12 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip
 // static-left / dynamic-right split inside one <FormProvider> + <form>:
 //   LEFT (static across tabs)  — creator header + timestamps, Title, Description, Comments
 //   RIGHT (dynamic, tabbed)    — Metadata · Time Tracking · Activity (forceMount+hidden)
-//   FOOTER (spans both columns, inside the form, outside the Tabs) — Save changes + Delete ticket
+//   FOOTER (pinned via Modal's footer slot — Save changes + Cancel + Delete ticket)
 //
-// The split keeps RHF state alive across tab switches (FormProvider spans both
+// DEL-01 (pinned-footer): the footer moved OUT of the scrolling body into the
+// shared Modal's pinned `footer` slot, so Save/Cancel/Delete stay visible while
+// the body scrolls. Save submits via a shared handler (handleValidSubmit); the
+// body/grid split keeps RHF state alive across tab switches (FormProvider spans both
 // DOM columns; TabsContent uses forceMount+hidden so the Metadata fields never
 // unmount). Dirty-guard machinery (useBlocker, blockBackdropClose, requestClose,
 // ConfirmDiscardDialog, DeleteTicketConfirm) is preserved — onDirtyChange flows
@@ -120,17 +123,25 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         return onSubmit(dto);
     };
 
+    // DEL-01: shared valid-submit handler. Wired into BOTH the <form onSubmit>
+    // (native submit — Enter submits) AND the pinned footer Save button's
+    // onClick via methods.handleSubmit(...)() (RHF programmatic submit —
+    // jsdom-safe; avoids relying on the HTML5 `form` attribute to associate a
+    // submit button that lives in the pinned footer slot outside the <form>).
+    // Commits the ticket edit, clears the dirty flag, then closes the modal.
+    const handleValidSubmit = async (values: TicketFormValues) => {
+        await handleSubmit(values);
+        setIsDirty(false);
+        onClose();
+    };
+
     // The form methods. useTicketForm hoists isDirty via onDirtyChange so the
     // guard trio (useBlocker, requestClose, blockBackdropClose) stays armed.
     // Initialized with EMPTY defaults (hook order must be stable across the
     // loading/resolved states); the effect below seeds the real ticket values.
     const methods = useTicketForm({
         defaultValues: EMPTY_DEFAULT_VALUES,
-        onSubmit: async (values) => {
-            await handleSubmit(values);
-            setIsDirty(false);
-            onClose();
-        },
+        onSubmit: handleValidSubmit,
         onDirtyChange: setIsDirty,
     });
 
@@ -196,6 +207,10 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     const modalTitle = ticket ? formatTicketId(slug, ticket.ticketNumber) : 'Loading ticket…';
 
     let modalBody: React.ReactNode;
+    // DEL-01: pinned-footer node. Set only in the resolved branch; left
+    // undefined for loading/error/not-found (those states use the legacy
+    // single-scroll panel — no pinned footer).
+    let modalFooter: React.ReactNode;
     if (isLoading) {
         modalBody = <TicketModalSkeleton />;
     } else if (isError) {
@@ -227,11 +242,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
 
         modalBody = (
             <FormProvider {...methods}>
-                <form onSubmit={methods.handleSubmit(async (values) => {
-                    await handleSubmit(values);
-                    setIsDirty(false);
-                    onClose();
-                })}>
+                <form onSubmit={methods.handleSubmit(handleValidSubmit)}>
                     {ticket.deletedAt && (
                         <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2">
                             <span className="inline-flex items-center rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-destructive-foreground">
@@ -299,7 +310,10 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                         </div>
 
                         {/* --- RIGHT (dynamic sidebar) ----------------------------- */}
-                        <div className="lg:max-h-[80vh] lg:overflow-y-auto">
+                        {/* DEL-01: the sidebar no longer scrolls independently. With
+                            the pinned footer, the Modal's body wrapper is the single
+                            scroll region — a second nested scrollbar would compete. */}
+                        <div className="min-w-0">
                             {/*
                               CRITICAL (RHF form-state preservation): every
                               TabsContent uses forceMount and is hidden via the
@@ -374,29 +388,46 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                             </Tabs>
                         </div>
 
-                        {/* --- FOOTER (spans both columns, inside the form) -------- */}
-                        <div className="col-span-full mt-2 flex items-center justify-end gap-2 border-t border-border pt-4">
-                            {!ticket.deletedAt && (
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    disabled={methods.formState.isSubmitting}
-                                >
-                                    {methods.formState.isSubmitting ? 'Saving…' : 'Save changes'}
-                                </Button>
-                            )}
-                            {canDelete && !ticket.deletedAt && (
-                                <Button
-                                    variant="destructive-outline"
-                                    onClick={() => setDeleteConfirmOpen(true)}
-                                >
-                                    Delete ticket
-                                </Button>
-                            )}
-                        </div>
                     </div>
                 </form>
             </FormProvider>
+        );
+
+        // DEL-01: pinned footer (Save / Cancel / Delete). Rendered via the
+        // Modal's footer slot so it stays visible while the body scrolls.
+        //   • Save changes — primary; submits via handleValidSubmit (jsdom-safe
+        //     programmatic submit; same handler as <form onSubmit>).
+        //   • Cancel — secondary; reuses requestClose (confirm-if-dirty →
+        //     ConfirmDiscardDialog; clean → close). Preserves the discard/blocker
+        //     machinery — no new flow.
+        //   • Delete ticket — destructive-outline; opens its existing
+        //     DeleteTicketConfirm (one-click, confirmed). Gated on canDelete.
+        // Cancel is always present (a close affordance); Save/Delete are gated
+        // on a live (non-soft-deleted) ticket.
+        modalFooter = (
+            <div className="flex items-center justify-end gap-2">
+                {canDelete && !ticket.deletedAt && (
+                    <Button
+                        variant="destructive-outline"
+                        onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                        Delete ticket
+                    </Button>
+                )}
+                <Button variant="outline" onClick={requestClose}>
+                    Cancel
+                </Button>
+                {!ticket.deletedAt && (
+                    <Button
+                        type="button"
+                        variant="primary"
+                        disabled={methods.formState.isSubmitting}
+                        onClick={() => void methods.handleSubmit(handleValidSubmit)()}
+                    >
+                        {methods.formState.isSubmitting ? 'Saving…' : 'Save changes'}
+                    </Button>
+                )}
+            </div>
         );
     }
 
@@ -410,6 +441,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 title={modalTitle}
                 blockBackdropClose={isDirty}
                 size="full"
+                footer={modalFooter}
             >
                 {modalBody}
             </Modal>
