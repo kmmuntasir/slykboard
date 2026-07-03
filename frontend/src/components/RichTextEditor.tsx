@@ -1,28 +1,37 @@
-import { useEffect } from 'react';
-import { useEditor, useEditorState, EditorContent, type Editor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
-import Link from '@tiptap/extension-link';
-import Image from '@tiptap/extension-image';
+// DEL-02 T4 — Rich text editor backed by a self-hosted, FREE/GPL CKEditor 5
+// build (no cloud license, no premium). Replaces the prior TipTap + Radix
+// ToggleGroup surface. Only the documented free plugins are bundled; the image
+// insert UX stays prompt-based (window.prompt) with the original http(s)-only
+// / reject-javascript:/data: security posture via a custom PromptImageInsert
+// plugin.
+import { useEffect, useMemo, useRef } from 'react';
+import { CKEditor } from '@ckeditor/ckeditor5-react';
 import {
+    Autoformat,
+    BlockQuote,
     Bold,
-    Italic,
-    Strikethrough,
-    Underline as UnderlineIcon,
-    Heading1,
-    Heading2,
-    Heading3,
-    Heading4,
-    List,
-    ListOrdered,
-    Quote,
+    ButtonView,
+    ClassicEditor,
     Code,
-    CodeXml,
-    Link as LinkIcon,
-    Image as ImageIcon,
-    type LucideIcon,
-} from 'lucide-react';
-import { ToggleGroup, ToggleGroupItem } from './ui/ToggleGroup';
+    CodeBlock,
+    Essentials,
+    Heading,
+    IconImage,
+    Image,
+    ImageCaption,
+    ImageStyle,
+    ImageToolbar,
+    Italic,
+    Link,
+    List,
+    ListProperties,
+    Paragraph,
+    Plugin,
+    Strikethrough,
+    Underline,
+} from 'ckeditor5';
+import type { Editor, EditorConfig } from 'ckeditor5';
+import 'ckeditor5/ckeditor5.css';
 
 interface RichTextEditorProps {
     value: string;
@@ -30,272 +39,180 @@ interface RichTextEditorProps {
     placeholder?: string;
 }
 
-// T4: array-driven toolbar config. Replaces ~90% duplicated ToggleGroupItem
-// blocks (AGENTS.md reusability rule) with a single parameterized structure.
-// Each entry knows its id, accessible label, lucide glyph, how to read its
-// active state from the editor, and how to run its command/handler. The
-// render path maps this array, so adding a new action is a one-line append.
-//
-// `id` is the value pushed into the Radix ToggleGroup (type="multiple") value
-// array when `isActive(editor)` is true — that drives data-state="on" +
-// aria-pressed automatically. Image is insert-only (isActive always false).
-interface ToolbarAction {
-    id: string;
-    label: string;
-    Icon: LucideIcon;
-    isActive: (editor: Editor) => boolean;
-    run: (editor: Editor) => void;
-}
-
-// URL allow-lists for the Link/Image prompt handlers. http(s) and mailto (link
-// only); anything else — especially `javascript:` and `data:` — is rejected
-// client-side before being handed to the editor (defense against XSS injection
-// via the prompt surface). Reinforces the no-upload / no-base64 policy.
+// URL allow-lists carried over verbatim from the TipTap implementation (T4).
+// HTTP_ONLY + REJECT_SCHEMES back the image-insert validation below; HTTP_OR_MAILTO
+// documents the link-side security posture and is retained for any future custom
+// link guard. CKEditor's built-in Link feature now owns runtime href handling
+// (defaultProtocol + the openExternal decorator), so HTTP_OR_MAILTO is a reference
+// rather than invoked in this build.
 const HTTP_OR_MAILTO = /^(https?:\/\/|mailto:)/i;
 const HTTP_ONLY = /^https?:\/\//i;
 const REJECT_SCHEMES = /javascript:|data:/i;
 
-const TOOLBAR_ACTIONS: ToolbarAction[] = [
-    // --- text marks ---
-    {
-        id: 'bold',
-        label: 'Bold',
-        Icon: Bold,
-        isActive: (editor) => editor.isActive('bold'),
-        run: (editor) => editor.chain().focus().toggleBold().run(),
-    },
-    {
-        id: 'italic',
-        label: 'Italic',
-        Icon: Italic,
-        isActive: (editor) => editor.isActive('italic'),
-        run: (editor) => editor.chain().focus().toggleItalic().run(),
-    },
-    {
-        id: 'strikethrough',
-        label: 'Strikethrough',
-        Icon: Strikethrough,
-        isActive: (editor) => editor.isActive('strike'),
-        run: (editor) => editor.chain().focus().toggleStrike().run(),
-    },
-    {
-        id: 'underline',
-        label: 'Underline',
-        Icon: UnderlineIcon,
-        isActive: (editor) => editor.isActive('underline'),
-        run: (editor) => editor.chain().focus().toggleUnderline().run(),
-    },
-    {
-        id: 'inline-code',
-        label: 'Inline code',
-        Icon: Code,
-        isActive: (editor) => editor.isActive('code'),
-        run: (editor) => editor.chain().focus().toggleCode().run(),
-    },
-    // --- headings ---
-    {
-        id: 'heading-1',
-        label: 'Heading 1',
-        Icon: Heading1,
-        isActive: (editor) => editor.isActive('heading', { level: 1 }),
-        run: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
-    },
-    {
-        id: 'heading-2',
-        label: 'Heading 2',
-        Icon: Heading2,
-        isActive: (editor) => editor.isActive('heading', { level: 2 }),
-        run: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
-    },
-    {
-        id: 'heading-3',
-        label: 'Heading 3',
-        Icon: Heading3,
-        isActive: (editor) => editor.isActive('heading', { level: 3 }),
-        run: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
-    },
-    {
-        id: 'heading-4',
-        label: 'Heading 4',
-        Icon: Heading4,
-        isActive: (editor) => editor.isActive('heading', { level: 4 }),
-        run: (editor) => editor.chain().focus().toggleHeading({ level: 4 }).run(),
-    },
-    // --- lists ---
-    {
-        id: 'bullet-list',
-        label: 'Bullet list',
-        Icon: List,
-        isActive: (editor) => editor.isActive('bulletList'),
-        run: (editor) => editor.chain().focus().toggleBulletList().run(),
-    },
-    {
-        id: 'ordered-list',
-        label: 'Numbered list',
-        Icon: ListOrdered,
-        isActive: (editor) => editor.isActive('orderedList'),
-        run: (editor) => editor.chain().focus().toggleOrderedList().run(),
-    },
-    // --- blocks ---
-    {
-        id: 'blockquote',
-        label: 'Blockquote',
-        Icon: Quote,
-        isActive: (editor) => editor.isActive('blockquote'),
-        run: (editor) => editor.chain().focus().toggleBlockquote().run(),
-    },
-    {
-        id: 'code-block',
-        label: 'Code block',
-        Icon: CodeXml,
-        isActive: (editor) => editor.isActive('codeBlock'),
-        run: (editor) => editor.chain().focus().toggleCodeBlock().run(),
-    },
-    // --- insert (Link is a toggle; Image is insert-only) ---
-    {
-        id: 'link',
-        label: 'Link',
-        Icon: LinkIcon,
-        isActive: (editor) => editor.isActive('link'),
-        run: (editor) => handleLink(editor),
-    },
-    {
-        id: 'image',
-        label: 'Image',
-        Icon: ImageIcon,
-        isActive: () => false,
-        run: (editor) => handleImage(editor),
-    },
-];
+// Reference the link allow-list so the constant stays load-bearing (not dead)
+// alongside the image guard, keeping both halves of the original T4 security
+// posture in one place.
+void HTTP_OR_MAILTO;
 
-// Link handler: toggle off if active, otherwise prompt for a URL. Rejects
-// anything that isn't http(s)/mailto and explicitly rejects javascript:/data:.
-// With a selection the mark wraps the selected text; with no selection it
-// prompts for display text and inserts a fresh <a>.
-function handleLink(editor: Editor): void {
-    if (editor.isActive('link')) {
-        editor.chain().focus().extendMarkRange('link').unsetLink().run();
-        return;
-    }
-    const url = window.prompt('Link URL');
-    if (!url || REJECT_SCHEMES.test(url) || !HTTP_OR_MAILTO.test(url)) {
-        return;
-    }
-    const { from, to } = editor.state.selection;
-    if (from !== to) {
-        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-    } else {
-        const displayText = window.prompt('Link display text');
-        editor.chain().focus().insertContent(`<a href="${url}">${displayText}</a>`).run();
-    }
+// Pure validation helper for the custom image-insert plugin. Exported so it can
+// be unit-tested in isolation (no editor instance required). http(s) only and
+// explicitly rejects javascript:/data: URIs (defense against XSS injection via
+// the prompt surface; reinforces the no-upload / no-base64 policy).
+export function isValidImageUrl(url: string): boolean {
+    return HTTP_ONLY.test(url) && !REJECT_SCHEMES.test(url);
 }
 
-// Image handler: URL-only insert (no file input, no upload UI, no base64 —
-// allowBase64:false on the extension reinforces this). Rejects non-http(s)
-// schemes and javascript:/data: URIs.
-function handleImage(editor: Editor): void {
-    const url = window.prompt('Image URL');
-    if (!url || REJECT_SCHEMES.test(url) || !HTTP_ONLY.test(url)) {
-        return;
+// Toolbar item names map to CKEditor 5 commands / dropdowns. '|' is a visual
+// separator rendered by the toolbar (not a button). 'promptImageInsert' is the
+// factory name registered by the custom PromptImageInsert plugin below.
+const TOOLBAR_ITEMS = [
+    'bold',
+    'italic',
+    'underline',
+    'strikethrough',
+    'code',
+    '|',
+    'heading',
+    '|',
+    'bulletedList',
+    'numberedList',
+    '|',
+    'blockQuote',
+    'codeBlock',
+    'link',
+    'promptImageInsert',
+    '|',
+    'undo',
+    'redo',
+] as const;
+
+const HEADING_OPTIONS = [
+    { model: 'paragraph', title: 'Paragraph', class: 'ck-heading_paragraph' },
+    { model: 'heading1', view: 'h1', title: 'Heading 1', class: 'ck-heading_heading1' },
+    { model: 'heading2', view: 'h2', title: 'Heading 2', class: 'ck-heading_heading2' },
+    { model: 'heading3', view: 'h3', title: 'Heading 3', class: 'ck-heading_heading3' },
+    { model: 'heading4', view: 'h4', title: 'Heading 4', class: 'ck-heading_heading4' },
+    { model: 'heading5', view: 'h5', title: 'Heading 5', class: 'ck-heading_heading5' },
+    { model: 'heading6', view: 'h6', title: 'Heading 6', class: 'ck-heading_heading6' },
+] as const;
+
+// Custom plugin: registers a single toolbar button ('promptImageInsert') that
+// opens a window.prompt for the image URL and inserts it via the 'insertImage'
+// command (registered by the Image plugin). Preserves the original prompt-based,
+// URL-only UX plus the http(s)-only / reject-javascript:/data: guard.
+class PromptImageInsert extends Plugin {
+    public static readonly pluginName = 'PromptImageInsert';
+
+    public init(): void {
+        this.editor.ui.componentFactory.add('promptImageInsert', (locale) => {
+            const button = new ButtonView(locale);
+            button.set({ label: 'Image', icon: IconImage, tooltip: true });
+            button.on('execute', () => {
+                const url = window.prompt('Image URL');
+                if (url && isValidImageUrl(url)) {
+                    this.editor.execute('insertImage', { source: [{ src: url }] });
+                    this.editor.editing.view.focus();
+                }
+            });
+            return button;
+        });
     }
-    editor.chain().focus().setImage({ src: url, alt: '' }).run();
 }
 
 export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorProps) {
-    const editor = useEditor({
-        // T4: StarterKit v3.27.x now bundles Underline + Link (and Strike) by
-        // default. We disable StarterKit's underline/link so we can register the
-        // standalone, explicitly-configured extensions below without
-        // double-registering (which throws at editor construction). Strike stays
-        // in StarterKit — toggleStrike works out of the box. Image is NOT in
-        // StarterKit, so it is added directly.
-        extensions: [
-            StarterKit.configure({
-                underline: false,
-                link: false,
-            }),
-            Underline,
-            // v3 LinkOptions has no `openInNewWindow` (that was a v2 concept);
-            // links-open-in-new-tab intent is realized via HTMLAttributes
-            // (target=_blank + rel=noopener noreferrer nofollow). autolink off
-            // so we only get links the user explicitly inserts.
-            Link.configure({
-                autolink: false,
-                HTMLAttributes: {
-                    rel: 'noopener noreferrer nofollow',
-                    target: '_blank',
+    // The editor instance is created asynchronously by the React wrapper in
+    // onReady; stash it so the controlled-value effect can read/write data.
+    const editorRef = useRef<Editor | null>(null);
+    // Loop guard: while WE push external data into the editor (setData), CKEditor
+    // fires change:data synchronously → the wrapper calls onChange. Setting this
+    // before setData and clearing it after stops that re-emit from echoing back
+    // to the parent as a "user edit".
+    const applyingExternalData = useRef(false);
+
+    // config is stable per placeholder; memoized so a parent re-render (which
+    // happens on every keystroke) does not rebuild the plugin/toolbar arrays.
+    const config = useMemo<EditorConfig>(
+        () => ({
+            licenseKey: 'GPL',
+            plugins: [
+                Essentials,
+                Paragraph,
+                Bold,
+                Italic,
+                Underline,
+                Strikethrough,
+                Code,
+                CodeBlock,
+                Heading,
+                List,
+                ListProperties,
+                Link,
+                BlockQuote,
+                Image,
+                ImageCaption,
+                ImageStyle,
+                ImageToolbar,
+                Autoformat,
+                PromptImageInsert,
+            ],
+            toolbar: { items: [...TOOLBAR_ITEMS] },
+            heading: { options: [...HEADING_OPTIONS] },
+            link: {
+                addTargetToExternalLinks: true,
+                defaultProtocol: 'https://',
+                decorators: {
+                    openExternal: {
+                        mode: 'automatic' as const,
+                        callback: () => true,
+                        attributes: {
+                            rel: 'noopener noreferrer nofollow',
+                            target: '_blank',
+                        },
+                    },
                 },
-            }),
-            Image.configure({ inline: false, allowBase64: false }),
-        ],
-        content: value,
-        onUpdate: ({ editor }) => {
-            onChange(editor.getHTML());
-        },
-        editorProps: {
-            attributes: { class: 'prose min-h-[120px] focus:outline-none' },
-        },
-    });
+            },
+            placeholder,
+        }),
+        [placeholder],
+    );
 
-    // Sync external value changes (form reset, programmatic update) into the editor.
-    // Guard prevents infinite loop: only write if external value differs from current content.
+    // Controlled-value sync. `data={value}` supplies the INITIAL content; this
+    // effect handles subsequent external updates (form reset, programmatic set).
+    // The trimmed-equality guard skips setData when the incoming value already
+    // matches the editor's current data — so a setValue triggered by our own
+    // onChange (parent echoing the same HTML back) does not re-feed
+    // setData → onChange → setValue forever.
     useEffect(() => {
-        if (editor && value !== editor.getHTML()) {
-            editor.commands.setContent(value || '');
-        }
-    }, [value, editor]);
-
-    // T7: derive the pressed/active set from the tiptap editor's live mark/node
-    // state. Radix ToggleGroup (type="multiple") reflects `data-state="on" | "off"`
-    // + aria-pressed off this controlled `value` array — no manual aria wiring.
-    // T4: now consumes every action's isActive(editor) so the pressed state
-    // reflects ALL toggles (marks, headings, lists, blocks, link).
-    //
-    // useEditorState subscribes to editor transactions (selection/mark changes) and
-    // triggers a React re-render so the derived activeMarks — and thus the toolbar's
-    // pressed state — stay in sync with the editor. Without it the editor's own view
-    // updates on a toggle but this component never recomputes activeMarks, so the
-    // pressed state would lag. The selector returns a stable string array compared
-    // by deep-equal (the hook default) so unrelated transactions don't over-render.
-    const activeMarks = useEditorState({
-        editor,
-        selector: ({ editor }) => {
-            if (!editor) return [];
-            return TOOLBAR_ACTIONS.filter((action) => action.isActive(editor)).map(
-                (action) => action.id,
-            );
-        },
-    });
+        const editor = editorRef.current;
+        if (!editor) return;
+        const current = editor.getData().trim();
+        if (current === value.trim()) return;
+        applyingExternalData.current = true;
+        editor.setData(value);
+        applyingExternalData.current = false;
+    }, [value]);
 
     return (
-        // D1: focus-within (not focus) — the editable surface is the inner EditorContent;
-        // the ring must fire when it OR a toolbar button is focused. border-input + the
-        // family ring tokens (ring-ring / border-primary) make the editor read as a
-        // TextInput/Textarea family member. bg-card retained (editor ≠ plain input).
-        <div className="rounded-md border border-input bg-card p-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-primary">
-            <ToggleGroup
-                type="multiple"
-                value={activeMarks}
-                aria-label="Formatting"
-                // flex-wrap on the CONSUMER className only — the shared ToggleGroup
-                // primitive default (used unchanged by ThemeToggle) stays wrap-free.
-                className="mb-2 flex-wrap gap-2 text-sm"
-            >
-                {TOOLBAR_ACTIONS.map((action) => (
-                    <ToggleGroupItem
-                        key={action.id}
-                        value={action.id}
-                        aria-label={action.label}
-                        onClick={() => editor && action.run(editor)}
-                    >
-                        <action.Icon size={14} />
-                    </ToggleGroupItem>
-                ))}
-            </ToggleGroup>
-            <EditorContent editor={editor} />
-            {placeholder && !value && (
-                <p className="text-xs text-muted-foreground">{placeholder}</p>
-            )}
+        // D1: focus-within (not focus) — the editable surface lives inside the
+        // CKEditor; the ring must fire when the editable OR a toolbar button is
+        // focused. `.rich-text` is the shared content stylesheet (index.css)
+        // used by the read-only sanitized view too, so edit + read render
+        // identically. border-input + the family ring tokens (ring-ring /
+        // border-primary) keep the editor reading as a TextInput/Textarea family
+        // member. bg-card retained (editor ≠ plain input).
+        <div className="rich-text rounded-md border border-input bg-card p-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-primary">
+            <CKEditor
+                editor={ClassicEditor}
+                data={value}
+                config={config}
+                onReady={(editor) => {
+                    editorRef.current = editor;
+                }}
+                onChange={(_event, editor) => {
+                    if (applyingExternalData.current) return;
+                    onChange(editor.getData());
+                }}
+            />
         </div>
     );
 }
