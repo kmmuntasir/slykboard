@@ -86,7 +86,7 @@ export function DescriptionField({ readOnly }: DescriptionFieldProps) {
             ) : (
                 // F17: read-only view of the (sanitized) description.
                 <div
-                    className="max-w-none rounded border border-border bg-muted p-2 text-sm"
+                    className="rich-text max-w-none rounded border border-border bg-muted p-2 text-sm"
                     dangerouslySetInnerHTML={{
                         __html: sanitizeDescription(descriptionValue),
                     }}
