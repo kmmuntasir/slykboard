@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type MouseEvent } from 'react';
 
 import { Button } from './ui/Button';
 import { Textarea } from './ui/Textarea';
@@ -38,7 +38,7 @@ export function CommentForm({
     const trimmed = body.trim();
     const isDisabled = trimmed.length === 0 || isPending;
 
-    const handleSubmit = (event: FormEvent) => {
+    const handleSubmit = (event: MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         if (isDisabled) return;
         onSubmit(trimmed);
@@ -54,7 +54,7 @@ export function CommentForm({
     const textareaLabel = mode === 'edit' ? 'Edit comment' : 'Write a comment';
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+        <div role="group" aria-label={mode === 'edit' ? 'Comment editor' : 'Comment composer'} className="flex flex-col gap-2">
             <Textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
@@ -75,10 +75,10 @@ export function CommentForm({
                         Cancel
                     </Button>
                 )}
-                <Button type="submit" variant="primary" size="sm" disabled={isDisabled}>
+                <Button type="button" variant="primary" size="sm" disabled={isDisabled} onClick={handleSubmit}>
                     {label}
                 </Button>
             </div>
-        </form>
+        </div>
     );
 }
