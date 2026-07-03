@@ -142,6 +142,64 @@ describe('sanitizeDescription', () => {
       check: (o) => o === '<p>hello <strong>world</strong></p>',
       expected: '<p>hello <strong>world</strong></p>',
     },
+    {
+      name: 'keeps <figure>/<figcaption> image block with class, img src + style',
+      input:
+        '<figure class="image image-resized"><img src="https://example.com/a.png" style="width:50%"><figcaption>cap</figcaption></figure>',
+      check: (o) =>
+        o.includes('<figure') &&
+        o.includes('class="image image-resized"') &&
+        o.includes('<img') &&
+        o.includes('src="https://example.com/a.png"') &&
+        o.includes('style="width:50%"') &&
+        o.includes('<figcaption') &&
+        o.includes('cap</figcaption>'),
+    },
+    {
+      name: 'keeps width, style, and class on <img>',
+      input:
+        '<img src="https://example.com/a.png" width="100" style="float:right" class="editor-img">',
+      check: (o) =>
+        o.includes('src="https://example.com/a.png"') &&
+        o.includes('width="100"') &&
+        o.includes('style="float:right"') &&
+        o.includes('class="editor-img"'),
+    },
+    {
+      name: 'strips style from <p> but keeps text',
+      input: '<p style="color:red">x</p>',
+      check: (o) => !o.includes('style=') && o.includes('x'),
+    },
+    {
+      name: 'strips class from non-img/figure/figcaption tag',
+      input: '<p class="foo">x</p>',
+      check: (o) => !o.includes('class=') && o.includes('x'),
+    },
+    {
+      name: 'still strips javascript: href after allow-list widening',
+      input: '<a href="javascript:alert(1)">x</a>',
+      check: (o) => !o.toLowerCase().includes('javascript:'),
+    },
+    {
+      name: 'still strips javascript: img src after allow-list widening',
+      input: '<img src="javascript:alert(1)">',
+      check: (o) => !o.toLowerCase().includes('javascript:'),
+    },
+    {
+      name: 'still strips data: img src after allow-list widening',
+      input: '<img src="data:image/png;base64,abc">',
+      check: (o) => !o.toLowerCase().includes('data:'),
+    },
+    {
+      name: 'strips data: href',
+      input: '<a href="data:text/html,abc">x</a>',
+      check: (o) => !o.toLowerCase().includes('data:') && o.includes('x'),
+    },
+    {
+      name: 'keeps <h5> and <h6>',
+      input: '<h5>five</h5><h6>six</h6>',
+      check: (o) => o.includes('<h5>five</h5>') && o.includes('<h6>six</h6>'),
+    },
   ];
 
   cases.forEach(({ name, input, check, expected }) => {

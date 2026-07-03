@@ -27,6 +27,10 @@ const ALLOWED_TAGS = [
   'u',
   'h1',
   'h2',
+  'h5',
+  'h6',
+  'figure',
+  'figcaption',
   'img',
 ];
 const ALLOWED_ATTR = ['href', 'src', 'alt', 'target', 'rel'];
@@ -45,11 +49,39 @@ const ALLOWED_URI_REGEXP =
 // ALLOWED_URI_REGEXP check, which would otherwise let `img src="data:..."`
 // slip through despite the regex rejecting `data:`. This hook closes that
 // gap so the URI policy matches the backend canonical list byte-for-byte.
-purify.addHook('uponSanitizeAttribute', (_node, data) => {
+//
+// The hook also scopes CKEditor's layout attributes — `width`, `style`, and
+// `class` — to the elements that legitimately need them, instead of adding
+// them to the global ALLOWED_ATTR (which would let every tag carry them).
+// `img` may carry all three; `figure`/`figcaption` may carry only `class`.
+// Because these names are NOT in ALLOWED_ATTR, `_isValidAttribute` would drop
+// them after this hook — so we set `forceKeepAttr = true` to retain them on
+// the scoped elements, and `keepAttr = false` to strip them everywhere else
+// (e.g. `<p style="...">`, `<div class="...">`).
+purify.addHook('uponSanitizeAttribute', (node, data) => {
   const name = data.attrName.toLowerCase();
+
+  // Reject `javascript:`/`data:` URIs on src/href (defense-in-depth with
+  // ALLOWED_URI_REGEXP). src/href are in the global allow-list, so they need
+  // no further scoping here.
   if (name === 'src' || name === 'href') {
     const value = (data.attrValue ?? '').trim().toLowerCase();
     if (value.startsWith('javascript:') || value.startsWith('data:')) {
+      data.keepAttr = false;
+    }
+    return;
+  }
+
+  // Scope `width`/`style`/`class` to specific elements.
+  if (name === 'width' || name === 'style' || name === 'class') {
+    const tag = node.nodeName.toLowerCase();
+    const isImg = tag === 'img';
+    const isFigureCaption = tag === 'figure' || tag === 'figcaption';
+    // img keeps all three; figure/figcaption keep only `class`.
+    const keep = isImg || (name === 'class' && isFigureCaption);
+    if (keep) {
+      data.forceKeepAttr = true;
+    } else {
       data.keepAttr = false;
     }
   }
