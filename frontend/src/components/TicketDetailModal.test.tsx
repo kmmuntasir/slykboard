@@ -855,12 +855,38 @@ describe('TicketDetailModal', () => {
 
     // --- DEL-01 T7: footer + widened delete-gate coverage --------------------
 
-    it('footer: renders Save changes (no Cancel button)', async () => {
+    it('footer: renders Save changes and Cancel (pinned three-action footer)', async () => {
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
         expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
-        // DEL-01 T7: the footer is Save + Delete only — no Cancel.
-        expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+        // DEL-01: the pinned footer now exposes Cancel (discard-and-close with
+        // confirm-if-dirty) alongside Save. (Delete is admin-gated — covered below.)
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
+
+    it('Cancel (footer) on a clean form closes the modal immediately', async () => {
+        const { onClose } = renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        // Clean form → Cancel routes through requestClose → onClose (no confirm).
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument();
+    });
+
+    it('Cancel (footer) on a dirty form opens the discard confirm instead of closing', async () => {
+        const { onClose } = renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // Edit the registered title field → form becomes dirty.
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Edited' } });
+        await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Edited'));
+
+        // Footer Cancel → requestClose → dirty → ConfirmDiscardDialog (NOT onClose).
+        // At click time only the footer Cancel exists (the confirm is not open
+        // yet), so the unscoped query is unambiguous.
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onClose).not.toHaveBeenCalled();
+        expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument();
     });
 
     it('DEL-01 widened delete gate: a PROJECT ADMIN (not platform admin) sees the Delete ticket button', async () => {
