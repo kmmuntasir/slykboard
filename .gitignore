@@ -2,6 +2,12 @@
 node_modules/
 .pi/npm/
 
+# pnpm artifacts (this monorepo uses npm workspaces — root package-lock.json
+# is authoritative; subagents occasionally run pnpm in subdirs and these
+# stray files get regenerated, so ignore them)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
 # Environment
 .env
 .env.*
