@@ -36,7 +36,7 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
         },
     });
 
-    const handleSubmit = (event: React.FormEvent) => {
+    const handleSubmit = (event: React.SyntheticEvent) => {
         event.preventDefault();
         const minutes = parseDuration(duration);
         if (minutes === null || minutes < MIN_MINUTES || minutes > MAX_MINUTES) {
@@ -56,7 +56,11 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
         validationError ?? (mutation.error instanceof Error ? mutation.error.message : null);
 
     return (
-        <form onSubmit={handleSubmit} className="mt-3 border-t border-border pt-3">
+        <div
+            role="group"
+            aria-label="Manual time entry"
+            className="mt-3 border-t border-border pt-3"
+        >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                 <TextInput
                     type="text"
@@ -65,6 +69,12 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
                     placeholder="2h 30m, 90m, or 90"
                     aria-label="Duration"
                     className="flex-1 text-sm"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSubmit(e);
+                        }
+                    }}
                 />
                 <TextInput
                     type="text"
@@ -74,12 +84,24 @@ export function ManualEntryForm({ ticketId }: ManualEntryFormProps) {
                     maxLength={MAX_DESCRIPTION}
                     aria-label="Description"
                     className="flex-1 text-sm"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSubmit(e);
+                        }
+                    }}
                 />
-                <Button type="submit" variant="primary" size="sm" disabled={mutation.isPending}>
+                <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={mutation.isPending}
+                    onClick={handleSubmit}
+                >
                     {mutation.isPending ? 'Logging…' : 'Log Time'}
                 </Button>
             </div>
             {errorMessage && <p className="mt-1 text-sm text-destructive">{errorMessage}</p>}
-        </form>
+        </div>
     );
 }
