@@ -171,6 +171,48 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
                     },
                 },
             },
+            image: {
+                toolbar: [
+                    'imageStyle:resizeFull',
+                    'imageStyle:resizeLarge',
+                    'imageStyle:resizeMedium',
+                    'imageStyle:resizeSmall',
+                    '|',
+                    'imageTextAlternative',
+                ],
+                styles: {
+                    options: [
+                        {
+                            name: 'resizeFull',
+                            modelElements: ['imageBlock'],
+                            title: 'Full width',
+                            icon: 'full',
+                            isDefault: true,
+                        },
+                        {
+                            name: 'resizeLarge',
+                            modelElements: ['imageBlock'],
+                            title: 'Large (75%)',
+                            icon: 'left',
+                            className: 'image-resize-large',
+                        },
+                        {
+                            name: 'resizeMedium',
+                            modelElements: ['imageBlock'],
+                            title: 'Medium (50%)',
+                            icon: 'center',
+                            className: 'image-resize-medium',
+                        },
+                        {
+                            name: 'resizeSmall',
+                            modelElements: ['imageBlock'],
+                            title: 'Small (25%)',
+                            icon: 'right',
+                            className: 'image-resize-small',
+                        },
+                    ],
+                },
+            },
             placeholder,
         }),
         [placeholder],

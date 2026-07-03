@@ -200,6 +200,22 @@ describe('sanitizeDescription', () => {
       input: '<h5>five</h5><h6>six</h6>',
       check: (o) => o.includes('<h5>five</h5>') && o.includes('<h6>six</h6>'),
     },
+    {
+      name: 'keeps ImageStyle medium width-preset class on <figure> (resize round-trip)',
+      input:
+        '<figure class="image image-resize-medium"><img src="https://example.com/a.png"></figure>',
+      check: (o) =>
+        o.includes('class="image image-resize-medium"') &&
+        o.includes('src="https://example.com/a.png"') &&
+        o.includes('<figure') &&
+        o.includes('<img'),
+    },
+    {
+      name: 'keeps ImageStyle small width-preset class on <figure>',
+      input:
+        '<figure class="image image-resize-small"><img src="https://example.com/a.png"></figure>',
+      check: (o) => o.includes('image-resize-small') && o.includes('<img'),
+    },
   ];
 
   cases.forEach(({ name, input, check, expected }) => {

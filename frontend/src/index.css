@@ -327,6 +327,19 @@
   text-align: center;
 }
 
+/* DEL-02 T6 — ImageStyle width-preset fallback. Width round-trips via a class
+   on the <figure> (survives sanitizeDescription; figure keeps `class`). Full
+   width is the unstyled default (the base .rich-text img max-width:100% rule). */
+.rich-text figure.image-resize-large img {
+  width: 75%;
+}
+.rich-text figure.image-resize-medium img {
+  width: 50%;
+}
+.rich-text figure.image-resize-small img {
+  width: 25%;
+}
+
 /* ── Dark-mode refinements — most surfaces re-skin via tokens, but code fills
    and the blockquote rail need a nudge: --muted == gray-800 == the read
    container in dark, so code surfaces drop to --background (gray-900) for
