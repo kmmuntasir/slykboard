@@ -57,6 +57,16 @@ When asked to write file:
 ### .gitignore
 Ensure these exist; never commit sensitive build artifacts: `node_modules/`, `.env` (not `.env.example`), `dist/`, `build/`, `*.log`, `.DS_Store`.
 
+## Package Manager
+
+**Use npm ONLY.** This is an npm-workspaces monorepo (root `package.json` declares `"workspaces": ["frontend", "backend"]`); the root `package-lock.json` is the single source of truth for dependency resolution.
+
+- **NEVER run `pnpm`, `yarn`, or `bun`** anywhere in the repo — not `pnpm install`, `pnpm add`, `pnpm run`, nothing.
+- Install/deps: `npm install` (run at repo root; workspaces resolve automatically).
+- Run scripts: `npm run <script>` (root) or `npm run <script> -w <workspace>` (e.g. `-w frontend`, `-w backend`).
+- Add a dep: `npm install <pkg> -w <workspace>` (or `-D` for devDeps).
+- Do NOT commit `pnpm-lock.yaml` or `pnpm-workspace.yaml` — they are gitignored stray artifacts. If one appears untracked, leave it ignored; never stage it.
+
 ---
 
 ## JavaScript Development Rules
