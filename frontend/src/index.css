@@ -340,3 +340,123 @@
 .dark .rich-text blockquote {
   border-left-color: var(--primary);
 }
+
+/* ── CKEditor 5 chrome theming (DEL-02 T5) — UNLAYERED top-level rules,
+   continuing the react-day-picker / .rich-text precedent above. CKEditor's own
+   stylesheet (ckeditor5.css) drives its chrome off `--ck-color-*` design tokens
+   (declared on :root) and uses doubled selectors like `.ck.ck-button`
+   (specificity 0,2,0). Rather than fight that with !important, we re-point
+   CKEditor's design tokens at the app's OKLCH tokens. The redefinition is
+   scoped to `.ck` — a class CKEditor puts on EVERY chrome element — so it is
+   set directly on each element and overrides the value inherited from :root,
+   regardless of stylesheet load order or CKEditor's 0,2,0 specificity. Because
+   every value references a theme-aware token (:root / .dark), dark mode
+   cascades automatically; the small `.dark .ck` block below only nudges a
+   literal drop shadow tokens can't express. The "Powered by CKEditor"
+   attribution is intentionally left VISIBLE (legibility tweaks only — never
+   hidden). `.rich-text` is the editor wrapper (RichTextEditor.tsx), so every
+   `.ck-*` element lives inside it; it doubles as a specificity booster
+   (`.rich-text .ck.ck-x` = 0,3,0 beats CKEditor's `.ck.ck-x` = 0,2,0) for the
+   few properties CKEditor does NOT expose as tokens. ── */
+.ck {
+  /* Base palette → app tokens (drives resets, borders, inherited text color). */
+  --ck-color-base-background: var(--card);
+  --ck-color-base-foreground: var(--card);
+  --ck-color-base-border: var(--border);
+  --ck-color-base-text: var(--foreground);
+  --ck-color-text: var(--foreground);
+  --ck-color-base-active: var(--primary);
+  --ck-color-base-active-focus: var(--primary);
+
+  /* Focus ring → app ring. CKEditor renders its focus border off this token. */
+  --ck-color-focus-border: var(--ring);
+  --ck-color-focus-outer-shadow: color-mix(in oklch, var(--ring), transparent 72%);
+
+  /* Toolbar (.ck-toolbar / .ck-toolbar__items) — background, border, radius. */
+  --ck-color-toolbar-background: var(--card);
+  --ck-color-toolbar-border: var(--border);
+
+  /* Buttons — rest / hover / active / toggled (.ck-on) / disabled. The toggled
+     state uses a primary fill with readable primary-foreground text/icon. */
+  --ck-color-button-default-background: transparent;
+  --ck-color-button-default-hover-background: var(--accent);
+  --ck-color-button-default-active-background: var(--accent);
+  --ck-color-button-on-background: var(--primary);
+  --ck-color-button-on-hover-background: color-mix(
+    in oklch,
+    var(--primary),
+    var(--foreground) 14%
+  );
+  --ck-color-button-on-active-background: var(--primary);
+  --ck-color-button-on-disabled-background: var(--accent);
+  --ck-color-button-on-color: var(--primary-foreground);
+
+  /* Dropdown + balloon panels (.ck-dropdown__panel / .ck-balloon-panel). */
+  --ck-color-dropdown-panel-background: var(--popover);
+  --ck-color-dropdown-panel-border: var(--border);
+  --ck-color-panel-background: var(--popover);
+  --ck-color-panel-border: var(--border);
+
+  /* Lists (heading / style pickers) — hover = accent, selected = primary. */
+  --ck-color-list-background: var(--popover);
+  --ck-color-list-button-hover-background: var(--accent);
+  --ck-color-list-button-on-background: var(--primary);
+  --ck-color-list-button-on-background-focus: var(--primary);
+  --ck-color-list-button-on-text: var(--primary-foreground);
+
+  /* Tooltip. */
+  --ck-color-tooltip-background: var(--popover);
+  --ck-color-tooltip-text: var(--popover-foreground);
+
+  /* Inputs (link URL field, etc.). */
+  --ck-color-input-background: var(--background);
+  --ck-color-input-border: var(--input);
+  --ck-color-input-text: var(--foreground);
+
+  /* Content links inside the editable — CKEditor's `.ck-content a` (0,2,1)
+     out-ranks `.rich-text a` (0,1,1), so re-point its token too. */
+  --ck-color-link-default: var(--primary);
+
+  /* Placeholder text in an empty editor. */
+  --ck-color-engine-placeholder-text: var(--muted-foreground);
+
+  /* "Powered by CKEditor" attribution — kept VISIBLE; a themed, non-transparent
+     surface + muted label so it is legible in both themes (never display:none). */
+  --ck-powered-by-background: var(--popover);
+  --ck-powered-by-text-color: var(--muted-foreground);
+
+  /* Corner radius — the app defines no --radius token; 0.375rem matches the
+     .rich-text radii above for a consistent family feel. */
+  --ck-rounded-corners-radius: 0.375rem;
+}
+
+/* Dark-mode nudge: nearly everything flips via the theme-aware tokens above;
+   only the drop shadow needs a literal so floating panels read on gray-900. */
+.dark .ck {
+  --ck-color-shadow-drop: oklch(0 0 0 / 0.45);
+}
+
+/* ── Editable surface (.ck-editor__main > .ck-content / .ck-editor__editable):
+   the writing area reads as an app surface and coexists with the .rich-text
+   content styles — `.rich-text` is the WRAPPER, `.ck-content` lives INSIDE it,
+   so .rich-text's element rules (h1/p/ul/…) still govern the editable's
+   contents while this rule only sets the editable's own background/text.
+   `.rich-text .ck.ck-editor__editable` (0,3,0) beats CKEditor's
+   `.ck.ck-editor__editable` (0,2,0). ── */
+.rich-text .ck.ck-editor__editable {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/* Disabled toolbar buttons: muted text/icon (CKEditor only dims by opacity). */
+.rich-text .ck.ck-button.ck-disabled {
+  color: var(--muted-foreground);
+}
+
+/* Keyboard focus ring on toolbar buttons, in the app ring color. CKEditor's
+   own :focus border is already ring-coloured via --ck-color-focus-border above;
+   this adds a crisp outline for keyboard (:focus-visible) navigation only. */
+.rich-text .ck.ck-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
