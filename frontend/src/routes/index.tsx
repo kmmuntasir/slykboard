@@ -4,6 +4,7 @@ import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
 import { RequirePlatformAdmin } from '@/components/RequirePlatformAdmin';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
+import { AccountSettingsPage } from '@/pages/AccountSettingsPage';
 import { BoardPage, TicketDetailRoute } from '@/pages/BoardPage';
 import { ComingSoonPage } from '@/pages/ComingSoonPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
@@ -114,9 +115,9 @@ export const router = createBrowserRouter([
                                             { index: true, element: <ComingSoonPage title='Settings' /> },
                                         ],
                                     },
-                                    // SLYK-03: account settings placeholder — authenticated only,
-                                    // no platform-admin guard. Real implementation to follow.
-                                    { path: '/account', element: <ComingSoonPage title='Account Settings' /> },
+                                    // KMM-5: per-user Account Settings — authenticated only, no
+                                    // platform-admin guard. UI-only (no backend yet).
+                                    { path: '/account', element: <AccountSettingsPage /> },
                                     // SLYK-F28: dedicated 403 page, reachable directly.
                                     { path: '/forbidden', element: <ForbiddenPage /> },
                                     { path: '*', element: <NotFoundPage /> },
