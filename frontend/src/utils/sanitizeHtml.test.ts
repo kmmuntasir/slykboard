@@ -143,7 +143,20 @@ describe('sanitizeDescription', () => {
       expected: '<p>hello <strong>world</strong></p>',
     },
     {
-      name: 'keeps <figure>/<figcaption> image block with class, img src + style',
+      name: 'keeps drag-resized <figure> style=width (CKEditor output)',
+      input:
+        '<figure class="image image-resized" style="width:50%"><img src="https://example.com/a.png" alt="alt"><figcaption>cap</figcaption></figure>',
+      check: (o) =>
+        o.includes('<figure') &&
+        o.includes('class="image image-resized"') &&
+        o.includes('style="width:50%"') &&
+        o.includes('<img') &&
+        o.includes('src="https://example.com/a.png"') &&
+        o.includes('<figcaption') &&
+        o.includes('cap</figcaption>'),
+    },
+    {
+      name: 'keeps width-style on <img> inside <figure> (class on figure)',
       input:
         '<figure class="image image-resized"><img src="https://example.com/a.png" style="width:50%"><figcaption>cap</figcaption></figure>',
       check: (o) =>
@@ -156,14 +169,15 @@ describe('sanitizeDescription', () => {
         o.includes('cap</figcaption>'),
     },
     {
-      name: 'keeps width, style, and class on <img>',
+      name: 'keeps width + class on <img>, strips non-width style (float)',
       input:
         '<img src="https://example.com/a.png" width="100" style="float:right" class="editor-img">',
       check: (o) =>
         o.includes('src="https://example.com/a.png"') &&
         o.includes('width="100"') &&
-        o.includes('style="float:right"') &&
-        o.includes('class="editor-img"'),
+        o.includes('class="editor-img"') &&
+        !o.includes('style=') &&
+        !o.includes('float'),
     },
     {
       name: 'strips style from <p> but keeps text',

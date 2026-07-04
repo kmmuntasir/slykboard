@@ -68,6 +68,39 @@ describe('sanitizeDescription', () => {
     { name: 'empty input', input: '', expected: '' },
     { name: 'null input', input: null, expected: '' },
     { name: 'undefined input', input: undefined, expected: '' },
+    {
+      name: 'figure-resize markup survives',
+      input:
+        '<figure class="image image-resized" style="width:50%"><img src="https://example.com/a.png" alt="alt"><figcaption>cap</figcaption></figure>',
+      expected:
+        '<figure class="image image-resized" style="width:50%"><img src="https://example.com/a.png" alt="alt"><figcaption>cap</figcaption></figure>',
+    },
+    {
+      name: 'non-width style props stripped on figure, width kept',
+      input:
+        '<figure class="image" style="width:50%; color:red; position:fixed;"><img src="https://example.com/a.png"><figcaption>cap</figcaption></figure>',
+      expected:
+        '<figure class="image" style="width:50%"><img src="https://example.com/a.png"><figcaption>cap</figcaption></figure>',
+    },
+    {
+      name: 'style dropped when only disallowed props on figure',
+      input:
+        '<figure style="float:right"><img src="https://example.com/a.png"></figure>',
+      expected:
+        '<figure><img src="https://example.com/a.png"></figure>',
+    },
+    {
+      name: 'CSS-borne script (url javascript:) blocked by subsetting',
+      input:
+        '<figure style="background:url(javascript:alert(1))"><img src="https://example.com/a.png"></figure>',
+      expected:
+        '<figure><img src="https://example.com/a.png"></figure>',
+    },
+    {
+      name: 'style stripped on non-scoped tag (<p>)',
+      input: '<p style="width:50%">x</p>',
+      expected: '<p>x</p>',
+    },
   ];
 
   cases.forEach(({ name, input, expected }) => {

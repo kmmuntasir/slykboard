@@ -44,6 +44,24 @@ const ALLOWED_ATTR = ['href', 'src', 'alt', 'target', 'rel'];
 const ALLOWED_URI_REGEXP =
   /^(?!javascript:|data:)(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
 
+/**
+ * Keep only width / max-width declarations from an inline style string.
+ * Returns "" when nothing survives, so callers can drop the attribute.
+ */
+function subsetWidthStyle(style: string): string {
+  const kept: string[] = [];
+  for (const decl of (style ?? '').split(';')) {
+    const idx = decl.indexOf(':');
+    if (idx === -1) continue;
+    const prop = decl.slice(0, idx).trim().toLowerCase();
+    if (prop === 'width' || prop === 'max-width') {
+      const val = decl.slice(idx + 1).trim();
+      if (val) kept.push(`${decl.slice(0, idx).trim()}:${val}`);
+    }
+  }
+  return kept.join('; ');
+}
+
 // DOMPurify 3.x keeps a built-in data-URI allowance for media tags
 // (DATA_URI_TAGS includes `img`) that runs in a branch AFTER the
 // ALLOWED_URI_REGEXP check, which would otherwise let `img src="data:..."`
@@ -53,7 +71,9 @@ const ALLOWED_URI_REGEXP =
 // The hook also scopes CKEditor's layout attributes — `width`, `style`, and
 // `class` — to the elements that legitimately need them, instead of adding
 // them to the global ALLOWED_ATTR (which would let every tag carry them).
-// `img` may carry all three; `figure`/`figcaption` may carry only `class`.
+// `img` and `figure` may carry all three (CKEditor serializes a drag-resized
+// image’s width as an inline style on the <figure>); `figcaption` may carry
+// only `class`. The `style` value is subset to width / max-width only.
 // Because these names are NOT in ALLOWED_ATTR, `_isValidAttribute` would drop
 // them after this hook — so we set `forceKeepAttr = true` to retain them on
 // the scoped elements, and `keepAttr = false` to strip them everywhere else
@@ -72,18 +92,43 @@ purify.addHook('uponSanitizeAttribute', (node, data) => {
     return;
   }
 
-  // Scope `width`/`style`/`class` to specific elements.
+  // Scope `width`/`style`/`class` to specific elements. `img` keeps all
+  // three; `figure` keeps `style`/`width`/`class`; `figcaption` keeps only
+  // `class`. Because these names are NOT in ALLOWED_ATTR, forceKeepAttr
+  // retains them on scoped elements and keepAttr=false strips them elsewhere.
   if (name === 'width' || name === 'style' || name === 'class') {
     const tag = node.nodeName.toLowerCase();
     const isImg = tag === 'img';
-    const isFigureCaption = tag === 'figure' || tag === 'figcaption';
-    // img keeps all three; figure/figcaption keep only `class`.
-    const keep = isImg || (name === 'class' && isFigureCaption);
-    if (keep) {
-      data.forceKeepAttr = true;
-    } else {
+    const isFigure = tag === 'figure';
+    const isFigcaption = tag === 'figcaption';
+    const keep =
+      isImg ||
+      (isFigure && (name === 'style' || name === 'width' || name === 'class')) ||
+      (isFigcaption && name === 'class');
+
+    if (!keep) {
       data.keepAttr = false;
+      return;
     }
+
+    if (name === 'style') {
+      const subset = subsetWidthStyle(data.attrValue ?? '');
+      if (subset === '') {
+        data.keepAttr = false; // never emit style=""
+        return;
+      }
+      // forceKeepAttr skips DOMPurify's attrValue write-back, so write the
+      // subset directly to the node BEFORE setting forceKeepAttr (the
+      // dompurify@3.4.11 forceKeepAttr path early-continues past
+      // _setAttributeValue).
+      if (node && typeof (node as Element).setAttribute === 'function') {
+        (node as Element).setAttribute('style', subset);
+      }
+      data.forceKeepAttr = true;
+      return;
+    }
+
+    data.forceKeepAttr = true;
   }
 });
 
