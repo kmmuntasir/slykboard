@@ -129,6 +129,17 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
     // before setData and clearing it after stops that re-emit from echoing back
     // to the parent as a "user edit".
     const applyingExternalData = useRef(false);
+    // Tracks the exact data the editor last emitted to the parent. Used to detect
+    // the controlled round-trip echo (parent setValue -> watch -> value) so we do
+    // NOT call setData() for content the editor itself just produced. Initialized
+    // to the initial value so the very first render does not redundantly setData.
+    const lastEmittedDataRef = useRef<string>(value);
+    // Freeze the data seed passed to <CKEditor> at the initial value. The
+    // @ckeditor/ckeditor5-react wrapper reconciles data on every re-render via
+    // shouldUpdateEditorData (calls instance.data.set(nextProps.data)) — a SECOND
+    // setData path outside our applyingExternalData guard. Freezing the prop makes
+    // the sync effect below the single setData authority.
+    const initialDataRef = useRef<string>(value);
 
     // config is stable per placeholder; memoized so a parent re-render (which
     // happens on every keystroke) does not rebuild the plugin/toolbar arrays.
@@ -220,20 +231,25 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         [placeholder],
     );
 
-    // Controlled-value sync. `data={value}` supplies the INITIAL content; this
-    // effect handles subsequent external updates (form reset, programmatic set).
-    // The trimmed-equality guard skips setData when the incoming value already
-    // matches the editor's current data — so a setValue triggered by our own
-    // onChange (parent echoing the same HTML back) does not re-feed
-    // setData → onChange → setValue forever.
+    // Controlled-value sync. `data={initialDataRef.current}` supplies the INITIAL
+    // content (frozen so the wrapper's own reconciliation never re-pushes); this
+    // effect is the single setData authority for subsequent external updates
+    // (form reset, programmatic set, loaded ticket). The guard compares `value`
+    // against the data this editor last emitted (lastEmittedDataRef), so a
+    // setValue triggered by our own onChange (parent echoing the same HTML back)
+    // is recognized as an echo and skipped — no setData → onChange → setValue loop.
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor) return;
-        const current = editor.getData().trim();
-        if (current === value.trim()) return;
+        // Only push GENUINE EXTERNAL changes (loaded ticket, programmatic/form reset).
+        // Skip when `value` is just the echo of what this editor last emitted via
+        // onChange — otherwise setData() reloads the model and resets the selection,
+        // which flinches the toolbar and disrupts an in-progress selection.
+        if (value === lastEmittedDataRef.current) return;
         applyingExternalData.current = true;
         editor.setData(value);
         applyingExternalData.current = false;
+        lastEmittedDataRef.current = value;
     }, [value]);
 
     return (
@@ -247,14 +263,26 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         <div className="rich-text rounded-md border border-input bg-card p-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-primary">
             <CKEditor
                 editor={ClassicEditor}
-                data={value}
+                data={initialDataRef.current}
                 config={config}
                 onReady={(editor) => {
                     editorRef.current = editor;
+                    // Gap-closer: if a genuine external value arrived between mount
+                    // and onReady (the effect bailed with no editor yet), apply it now.
+                    if (value !== lastEmittedDataRef.current) {
+                        applyingExternalData.current = true;
+                        editor.setData(value);
+                        applyingExternalData.current = false;
+                        lastEmittedDataRef.current = value;
+                    }
                 }}
                 onChange={(_event, editor) => {
                     if (applyingExternalData.current) return;
-                    onChange(editor.getData());
+                    const html = editor.getData();
+                    // Record the exact emitted string so the parent's echo (value === html)
+                    // is recognized by the sync effect and does NOT trigger setData().
+                    lastEmittedDataRef.current = html;
+                    onChange(html);
                 }}
             />
         </div>

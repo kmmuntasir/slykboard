@@ -15,9 +15,20 @@
 // not reachable at hoist time. (Consumer mocks in this repo that use JSX without
 // a React import also work, but an onReady-once + onInput stand-in needs hooks,
 // hence the dynamic-import pattern.)
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach, type Mock } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { RichTextEditor, isValidImageUrl } from './RichTextEditor';
+
+// Shared holder for the fake editor instance built inside the mocked <CKEditor>.
+// vi.hoisted ensures it is initialized BEFORE the hoisted vi.mock factory runs,
+// so the factory can stash the editor it builds on mount. Tests await this holder,
+// then read `setData` (a vi.fn spy) for call-count assertions.
+const { currentEditor } = vi.hoisted(() => ({
+    // A mutable ref-like holder: tests read `currentEditor.current` after mount.
+    currentEditor: {
+        current: null as null | { getData: () => string; setData: (value: string) => void },
+    },
+}));
 
 vi.mock('@ckeditor/ckeditor5-react', async () => {
     const { useEffect, useRef, createElement } = await import('react');
@@ -50,11 +61,12 @@ vi.mock('@ckeditor/ckeditor5-react', async () => {
             el.innerHTML = data ?? '';
             const editor: EditorLike = {
                 getData: () => el.innerHTML,
-                setData: (value: string) => {
+                setData: vi.fn((value: string) => {
                     el.innerHTML = value;
-                },
+                }),
             };
             editorRef.current = editor;
+            currentEditor.current = editor;
             onReady?.(editor);
         }, []);
 
@@ -170,6 +182,78 @@ describe('RichTextEditor', () => {
         // guard must skip setData (no re-emit, no loop).
         rerender(<RichTextEditor value="<p>second</p>" onChange={vi.fn()} />);
         expect(editable.textContent).toBe('second');
+    });
+
+    // The shared editor holder persists across tests in this file. Reset it so each
+    // test re-waits for its OWN editor instance instead of seeing the previous
+    // (unmounted) test's editor.
+    afterEach(() => {
+        currentEditor.current = null;
+    });
+
+    it('does not call setData when the parent echoes the just-emitted value (round-trip guard)', async () => {
+        const onChange = vi.fn();
+        const { rerender } = render(
+            <RichTextEditor value="<p>first</p>" onChange={onChange} />,
+        );
+
+        // Wait until the mocked editor has mounted and stashed itself in the holder.
+        await waitFor(() => expect(currentEditor.current).not.toBeNull());
+        const setData = currentEditor.current!.setData as unknown as Mock;
+        const callsBefore = setData.mock.calls.length;
+
+        // Simulate a user edit: mutate the editable, then fire input so onChange
+        // fires and records the emitted HTML in lastEmittedDataRef.
+        const editable = screen.getByTestId('ck-editable');
+        editable.innerHTML = '<p>edited</p>';
+        fireEvent.input(editable);
+
+        // Capture the exact HTML the component emitted to the parent.
+        const emittedHtml = onChange.mock.calls.at(-1)?.[0] as string;
+        expect(emittedHtml).toContain('edited');
+
+        // Re-render with that SAME emitted HTML (the controlled round-trip echo).
+        // The guarded sync effect must recognize it as an echo and NOT call setData.
+        rerender(<RichTextEditor value={emittedHtml} onChange={onChange} />);
+        expect(setData.mock.calls.length).toBe(callsBefore);
+    });
+
+    it('calls setData for a genuine external value change', async () => {
+        const { rerender } = render(
+            <RichTextEditor value="<p>first</p>" onChange={vi.fn()} />,
+        );
+
+        await waitFor(() => expect(currentEditor.current).not.toBeNull());
+        const setData = currentEditor.current!.setData as unknown as Mock;
+
+        // A genuine external change (different from anything emitted) must push via setData.
+        rerender(<RichTextEditor value="<p>second</p>" onChange={vi.fn()} />);
+
+        expect(setData).toHaveBeenCalledWith('<p>second</p>');
+        expect(screen.getByTestId('ck-editable').textContent).toBe('second');
+    });
+
+    it('does not call setData on repeated echoed re-renders during editing', async () => {
+        const onChange = vi.fn();
+        const { rerender } = render(
+            <RichTextEditor value="<p>start</p>" onChange={onChange} />,
+        );
+
+        await waitFor(() => expect(currentEditor.current).not.toBeNull());
+        const setData = currentEditor.current!.setData as unknown as Mock;
+        const callsBefore = setData.mock.calls.length;
+
+        const editable = screen.getByTestId('ck-editable');
+        // Several edits; each emitted value is echoed straight back by the parent
+        // (the controlled round-trip). setData must never fire on these echoes.
+        for (const text of ['<p>edit one</p>', '<p>edit two</p>', '<p>edit three</p>']) {
+            editable.innerHTML = text;
+            fireEvent.input(editable);
+            const emitted = onChange.mock.calls.at(-1)?.[0] as string;
+            rerender(<RichTextEditor value={emitted} onChange={onChange} />);
+        }
+
+        expect(setData.mock.calls.length).toBe(callsBefore);
     });
 });
 
