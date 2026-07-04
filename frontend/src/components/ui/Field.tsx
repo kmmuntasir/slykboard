@@ -24,12 +24,42 @@ export interface FieldProps {
      * constraint on why this is a sibling rather than nested in <label>.
      */
     action?: ReactNode;
+    /**
+     * Whether the children should be wrapped inside the <label> (true) or
+     * rendered as a sibling of it (false). Defaults to true for full
+     * backward compatibility with every existing consumer.
+     *
+     * Set to false when the child is a rich-text editor (e.g. CKEditor) or
+     * any control whose own interactive descendants must NOT receive a
+     * forwarded native click from the <label>: per the HTML spec a
+     * <label> with no `for` attribute forwards a click to its first
+     * labelable descendant, which for a toolbar-wrapping editor is its
+     * first toolbar button (Bold) — every click in the content would
+     * then toggle Bold. Render such children outside the <label>.
+     */
+    labelWrap?: boolean;
 }
 
-export function Field({ label, htmlFor, children, error, className, icon, action }: FieldProps) {
-    // No action: keep the historical byte-identical structure (root <label> wrapping
-    // the text span + children + error) so every existing consumer is unaffected.
-    if (!action) {
+export function Field({
+    label,
+    htmlFor,
+    children,
+    error,
+    className,
+    icon,
+    action,
+    labelWrap = true,
+}: FieldProps) {
+    // Single structural decision: should the children live INSIDE the <label>?
+    // Historical behavior = yes (labelWrap defaults true) AND no action present
+    // (the action branch has never wrapped children in <label>). When false, we
+    // render the <label> wrapping only icon + label text, with children + error
+    // as siblings — the same non-wrapping structure the action branch uses.
+    const wrapChildren = labelWrap && !action;
+
+    // Historical byte-identical structure: root <label> wrapping the text span +
+    // children + error. Every default consumer is unaffected.
+    if (wrapChildren) {
         return (
             <label htmlFor={htmlFor} className={cn('block', className)}>
                 {icon ? (
@@ -50,13 +80,12 @@ export function Field({ label, htmlFor, children, error, className, icon, action
         );
     }
 
-    // An action is provided. The action is typically an interactive control (e.g. a
-    // Button) and MUST NOT be nested inside the <label> element: a <label> implicitly
-    // associates every descendant with the field, so an interactive action inside it
-    // would be bound to the input and break the label-input association. We therefore
-    // render the label row as a flex container where <label> wraps only the icon +
-    // label text, and the action renders as a right-aligned (ml-auto) flex sibling
-    // that is outside the <label>.
+    // Non-wrapping structure. <label> wraps ONLY the icon + label text; the
+    // optional action renders in the same label row as a right-aligned sibling,
+    // and children + error render as siblings of the entire label row — all
+    // outside the <label>. This is required for the action path (an interactive
+    // action must not be nested in <label>) and for any child whose own
+    // descendants must not receive a forwarded click (e.g. a rich-text editor).
     return (
         <div className={cn('block', className)}>
             <div className="mb-1 flex items-center gap-1.5">

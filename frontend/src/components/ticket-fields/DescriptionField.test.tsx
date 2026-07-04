@@ -167,4 +167,28 @@ describe('DescriptionField (DEL-02 read-first / edit-on-demand)', () => {
             screen.queryByRole('button', { name: 'Edit description' }),
         ).not.toBeInTheDocument();
     });
+
+    // (g) Regression: when editing, the RichTextEditor MUST NOT be a descendant
+    // of a <label> element. A <label> with no `for` forwards a native click to
+    // its first labelable descendant — for CKEditor that is the Bold toolbar
+    // button, so every click in the content would otherwise toggle Bold. This
+    // test fails on the pre-fix code (where Field always wraps children in a
+    // <label>) and passes once `labelWrap={!showEditor}` is set.
+    it('does not render the editor inside a <label> when editing', () => {
+        renderWithForm();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+
+        // The editor (mocked textarea) is mounted...
+        const editor = screen.getByLabelText('Description');
+        expect(editor).toBeInTheDocument();
+
+        // ...but it is NOT a descendant of a <label>.
+        expect(editor.closest('label')).toBeNull();
+        // Belt-and-braces: no <label> element contains the editor via a selector.
+        expect(document.querySelector('label textarea')).toBeNull();
+
+        // The "Description" label text still renders somewhere.
+        expect(screen.getByText('Description')).toBeInTheDocument();
+    });
 });

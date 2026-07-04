@@ -58,11 +58,17 @@ export function DescriptionField({ readOnly, isEditing, onStartEdit }: Descripti
     // editing (exit only via the global Save).
     const showEditButton = !readOnly && !editing;
 
+    // labelWrap={!showEditor}: never wrap the CKEditor in a <label>. Per the HTML
+    // spec, a <label> with no `for` forwards a native click to its first labelable
+    // descendant — the editor's first toolbar button (Bold) — so every click in the
+    // content would toggle Bold. The read-only view (a non-labelable <div>) is
+    // unaffected and keeps its historical wrapping structure.
     return (
         <Field
             label="Description"
             error={errors.description?.message}
             icon={<AlignLeft size={14} />}
+            labelWrap={!showEditor}
             action={
                 showEditButton ? (
                     <Button
