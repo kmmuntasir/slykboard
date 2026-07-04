@@ -29,6 +29,9 @@ coverage/
 # Vite cache
 .vite/
 
+# Playwright MCP server artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
+
 # Local-only files
 *.local
 
