@@ -47,10 +47,10 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip
 // static-left / dynamic-right split inside one <FormProvider> + <form>:
 //   LEFT (static across tabs)  — creator header + timestamps, Title, Description, Comments
 //   RIGHT (dynamic, tabbed)    — Metadata · Time Tracking · Activity (forceMount+hidden)
-//   FOOTER (pinned via Modal's footer slot — Save changes + Cancel + Delete ticket)
+//   FOOTER (pinned via Modal's footer slot — Save changes + Cancel)
 //
 // DEL-01 (pinned-footer): the footer moved OUT of the scrolling body into the
-// shared Modal's pinned `footer` slot, so Save/Cancel/Delete stay visible while
+// shared Modal's pinned `footer` slot, so Save/Cancel stay visible while
 // the body scrolls. Save submits via a shared handler (handleValidSubmit); the
 // body/grid split keeps RHF state alive across tab switches (FormProvider spans both
 // DOM columns; TabsContent uses forceMount+hidden so the Metadata fields never
@@ -410,6 +410,23 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                     className="mt-4"
                                 >
                                     <ActivityFeed ticketId={ticket.id} />
+                                    {canDelete && !ticket.deletedAt && (
+                                        <div className="mt-6 rounded-md border border-destructive bg-destructive/10 p-4">
+                                            <h3 className="mb-1 text-sm font-semibold text-destructive">
+                                                Danger zone
+                                            </h3>
+                                            <p className="mb-3 text-sm text-muted-foreground">
+                                                Permanently remove this ticket from the board. This cannot be
+                                                undone.
+                                            </p>
+                                            <Button
+                                                variant="destructive-outline"
+                                                onClick={() => setDeleteConfirmOpen(true)}
+                                            >
+                                                Delete ticket
+                                            </Button>
+                                        </div>
+                                    )}
                                 </TabsContent>
                             </Tabs>
                         </div>
@@ -419,7 +436,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             </FormProvider>
         );
 
-        // DEL-01: pinned footer (Save / Cancel / Delete). Rendered via the
+        // DEL-01: pinned footer (Save / Cancel). Rendered via the
         // Modal's footer slot so it stays visible while the body scrolls.
         //   • Save changes — primary; submits via handleValidSubmit (jsdom-safe
         //     programmatic submit; same handler as <form onSubmit>).
@@ -427,19 +444,9 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         //     active. Reverts the description to its pre-edit snapshot and
         //     returns the field to read-only (display mode). It does NOT close
         //     the modal (closing is via the X/Esc/backdrop → requestClose).
-        //   • Delete ticket — destructive-outline; opens its existing
-        //     DeleteTicketConfirm (one-click, confirmed). Gated on canDelete.
-        // Save/Delete are gated on a live (non-soft-deleted) ticket.
+        // Save is gated on a live (non-soft-deleted) ticket.
         modalFooter = (
             <div className="flex items-center justify-end gap-2">
-                {canDelete && !ticket.deletedAt && (
-                    <Button
-                        variant="destructive-outline"
-                        onClick={() => setDeleteConfirmOpen(true)}
-                    >
-                        Delete ticket
-                    </Button>
-                )}
                 {isEditingDescription && (
                     <Button variant="outline" onClick={handleCancelDescriptionEdit}>
                         Cancel

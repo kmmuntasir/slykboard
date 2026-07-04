@@ -452,6 +452,13 @@ describe('TicketDetailModal', () => {
         vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
         expect(screen.getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
     });
 
@@ -459,6 +466,13 @@ describe('TicketDetailModal', () => {
         vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
 
         fireEvent.click(screen.getByRole('button', { name: 'Delete ticket' }));
         expect(await screen.findByRole('dialog', { name: 'Delete ticket?' })).toBeInTheDocument();
@@ -468,6 +482,13 @@ describe('TicketDetailModal', () => {
         vi.mocked(useRequirePlatformAdmin).mockReturnValue(false);
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
         expect(screen.queryByRole('button', { name: 'Delete ticket' })).not.toBeInTheDocument();
     });
 
@@ -475,6 +496,13 @@ describe('TicketDetailModal', () => {
         vi.mocked(useRequirePlatformAdmin).mockReturnValue(true);
         renderModal({ ticket: makeTicket({ deletedAt: '2026-06-24T00:00:00.000Z' }) });
         await screen.findByRole('dialog', { name: 'SLYK-101' });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
         // Deleted badge banner is present.
         expect(screen.getByText('Deleted')).toBeInTheDocument();
         // Delete button hidden (can't delete an already-deleted ticket).
@@ -941,6 +969,13 @@ describe('TicketDetailModal', () => {
         });
         renderModal();
         await screen.findByRole('dialog', { name: 'SLYK-101' });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /activity/i }));
+        await waitFor(() =>
+            expect(screen.getByRole('tab', { name: /activity/i })).toHaveAttribute(
+                'data-state',
+                'active',
+            ),
+        );
         expect(screen.getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
     });
 });
