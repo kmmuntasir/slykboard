@@ -236,8 +236,11 @@ with confirm-text pattern (search for `confirm` in components).
 Node's `http.ServerResponse` directly:
 
 ```ts
-// backend/src/routes/internal.routes.ts (paraphrased)
-internalRouter.get('/me/tickets/:id/events', requireAgentMode, authenticate, async (req, res) => {
+// backend/src/routes/agent-chat.routes.ts (paraphrased)
+// NOTE: SSE route is USER-FACING (PM browser connects), so it mounts on
+// agentChatRouter under /api/v1/me/* with `authenticate` middleware —
+// NOT on internalRouter (which is HMAC-gated for dispatcher callbacks).
+agentChatRouter.get('/tickets/:id/events', requireAgentMode, authenticate, async (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -305,7 +308,7 @@ export function generateOpenAPISpec() {
 Mounted at `GET /api/v1/openapi.json` behind `requirePlatformAdmin()`
 (Phase 5 task).
 
-## `/healthz` schemaVersion
+## `/api/health` schemaVersion
 
 Existing `/api/health` in `backend/src/index.ts` returns:
 

@@ -67,7 +67,8 @@ cookie. `ALLOWED_DOMAIN` filters at login callback. Roles:
   users.
 
 In agent mode, admin-only routes mount under `/api/v1/admin/*` behind
-`requirePlatformAdmin` middleware.
+`requirePlatformAdmin()` middleware (factory — invoke with `()`; see
+`11-existing-patterns.md`).
 
 ### Dispatcher → slykboard (HMAC)
 
@@ -76,7 +77,7 @@ in the `X-Dispatcher-Signature` header. Signing key =
 `SLYKBOARD_DISPATCHER_TOKEN` (shared symmetric secret).
 
 ```ts
-// backend/src/middleware/agentToken.ts (paraphrased)
+// backend/src/middleware/agentTokenAuth.ts (paraphrased)
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const agentTokenAuth: RequestHandler = (req, res, next) => {

@@ -274,7 +274,7 @@ export const notificationPreferences = pgTable('NotificationPreferences', {
 pipelineJobs.createIndex('idx_pipeline_jobs_state_lease', [sql`state, lease_expires_at, priority DESC, created_at`]);
 
 // PipelineJobs — UI "needs PM attention" badge query
-pipelineJobs.createIndex('idx_pipeline_jobs_needs_attention', [sql`needs_pm_attention WHERE needs_pm_attention = true`]);
+pipelineJobs.createIndex('idx_pipeline_jobs_needs_pm_attention', [sql`needs_pm_attention WHERE needs_pm_attention = true`]);
 
 // PipelineEvents — UI timeline query
 pipelineEvents.createIndex('idx_pipeline_events_ticket_created', [sql`ticket_id, created_at`]);

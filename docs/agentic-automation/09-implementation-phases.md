@@ -60,13 +60,13 @@ Onboarding MVP        Pipeline State + SSE
 - [ ] Update `backend/src/db/migrate.ts` to run agent migrations only
       when `SLYKBOARD_AGENT_MODE=true` (see `02-dual-mode.md`).
 - [ ] Add `requireAgentMode` middleware at
-      `backend/src/middleware/agentMode.ts`.
+      `backend/src/middleware/requireAgentMode.ts`.
 - [ ] Add `agentTokenAuth` middleware at
-      `backend/src/middleware/agentToken.ts` (HMAC verify, raw body
+      `backend/src/middleware/agentTokenAuth.ts` (HMAC verify, raw body
       capture pattern from `03-security.md`).
 - [ ] Add `runtimeConfig` endpoint integration — `/api/v1/me` returns
       `{agentMode: boolean, dispatcherUrl: string|null}`.
-- [ ] Frontend: `useRuntimeConfig` Zustand store, populated from `/me`
+- [ ] Frontend: `useRuntimeConfigStore` Zustand store, populated from `/me`
       response. Default `{agentMode: false, dispatcherUrl: null}`.
 - [ ] Add `/api/v1/internal/*` route mounting point with stub handlers
       returning `501` until Phase 1.
@@ -86,7 +86,7 @@ Onboarding MVP        Pipeline State + SSE
   returns `501`. Frontend renders no agent UI.
 - `SLYKBOARD_AGENT_MODE=true`: migrate — agent tables created. Server
   boots. `/api/v1/internal/*` returns `401` without signature (routes
-  exist but auth fails — expected). Frontend `useRuntimeConfig.agentMode`
+  exist but auth fails — expected). Frontend `useRuntimeConfigStore.agentMode`
   is `true`.
 
 ### Acceptance
@@ -105,7 +105,8 @@ real) receives it; onboarding timeline renders.
 - [ ] Implement `POST /api/v1/admin/projects` route with full Zod
       validation per `05-backend-routes.md`.
 - [ ] Implement `POST /api/v1/admin/projects/:slug/decommission` with
-      three-word destructive confirmation.
+      slug-match destructive confirmation (confirmSlug equals
+      project slug per `05-backend-routes.md` + `06-frontend-ui.md`).
 - [ ] Implement `POST /api/v1/internal/projects/:slug/onboarding/events`
       (dispatcher callback).
 - [ ] Implement `GET /api/v1/internal/projects/:slug/deploy-target`.

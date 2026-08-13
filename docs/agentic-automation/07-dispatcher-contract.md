@@ -265,14 +265,14 @@ inbound calls:
 
 ## Versioning
 
-Both services ship with a version string in `/healthz`:
+Both services ship with a version string in `/api/health`:
 
 ```json
 {
   "service": "slykboard",
   "version": "1.4.2",
   "agentMode": true,
-  "schemaVersion": 3
+  "schemaVersion": 1
 }
 ```
 

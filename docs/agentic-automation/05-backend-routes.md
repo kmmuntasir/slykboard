@@ -5,8 +5,9 @@ Two mount points:
 
 - `/api/v1/internal/*` — dispatcher callbacks. Auth: `agentTokenAuth`
   middleware (HMAC signature from dispatcher).
-- `/api/v1/admin/*` — admin UI actions. Auth: `requirePlatformAdmin`
-  middleware (existing `is_platform_admin = true`).
+- `/api/v1/admin/*` — admin UI actions. Auth: `requirePlatformAdmin()`
+  (factory — invoke with `()`; existing `is_platform_admin` JWT claim).
+  `authenticate` must mount before it to populate `req.user`.
 - `/api/v1/me/*` — user-facing routes that have agent-mode additions
   (chat, ticket pipeline view). Auth: existing `authenticate`.
 

@@ -405,17 +405,33 @@ grep -l 'PipelinePanel' frontend/dist/assets/*.js
 # Expected: one or more matches
 ```
 
-### Task 6 — Doc README fixes
+### Task 6 — Doc consistency fixes (ALREADY APPLIED)
 
-After refactor lands, update these doc references to match reality:
+The following doc fixes were applied during the doc-edit pass that
+landed alongside this refactor plan. **No action needed by the agent
+executing the refactor** — listed here for traceability:
 
-- `README.md` → "Conventions reminder" section: change "Route → Controller → Service → Repository" to "Route handler → Service → Repository (no controllers dir — routes own handler logic directly; matches existing projects.routes.ts pattern)".
-- `02-dual-mode.md` → middleware examples: change `requirePlatformAdmin` (bare) to `requirePlatformAdmin()` (invoked factory).
-- `02-dual-mode.md` → add a note that `requireAgentMode` must mount BEFORE `agentTokenAuth` BEFORE the route handler.
-- `02-dual-mode.md` → tree-shaking section: replace the misleading claim with the `__AGENT_MODE__` build-time switch + `React.lazy` pattern from Task 5 above.
-- `03-security.md` → keep references to `requirePlatformAdmin` but correct the invocation style.
-- `05-backend-routes.md` → API base path: change `/api/v1/internal/*`, `/api/v1/admin/*`, `/api/v1/me/*` to either keep `/api/v1/*` (new mount, doesn't touch existing) or update task description to clarify that v1 is additive. Decision: keep `/api/v1/*` as documented — it's new code, doesn't conflict.
-- `06-frontend-ui.md` → store name: change `useRuntimeConfig` to `useRuntimeConfigStore` (matches existing `useAuthStore` / `useBoardUiStore` prefix convention).
+- `README.md` "Conventions reminder": corrected to "Route handler →
+  Service → Repository (no controllers dir)".
+- `02-dual-mode.md` middleware example: `requirePlatformAdmin` →
+  `requirePlatformAdmin()` (factory invocation); `authenticate`
+  mounted before it; ordering note `requireAgentMode → agentTokenAuth
+  → handler` added.
+- `02-dual-mode.md` tree-shaking section: replaced with the
+  `__AGENT_MODE__` build-time switch + `React.lazy` pattern (Task 5).
+- `02-dual-mode.md` middleware filename: `agentMode.ts` →
+  `requireAgentMode.ts`.
+- `03-security.md` middleware references: invocation style corrected;
+  filename `agentToken.ts` → `agentTokenAuth.ts`.
+- `05-backend-routes.md` `/api/v1/admin/*` description: invocation
+  style corrected; `authenticate` ordering noted.
+- `06-frontend-ui.md` store references: `useRuntimeConfig` →
+  `useRuntimeConfigStore`.
+- `09-implementation-phases.md` middleware filenames + store name +
+  Phase 0 task list updated to match.
+
+If a future doc edit reverts any of these, this Task 6 list is the
+canonical reference to restore.
 
 ### Task 7 — Env var validation
 

@@ -1,6 +1,6 @@
 # 06 — Frontend UI (Agent Mode)
 
-All components feature-gated on `useRuntimeConfig(s => s.agentMode)`.
+All components feature-gated on `useRuntimeConfigStore(s => s.agentMode)`.
 Plain mode imports zero of these files. The build must not pull agent
 code into the plain-mode bundle (use dynamic imports for any cross-
 mode shared utility).
@@ -268,7 +268,7 @@ Frontend router gains these routes in agent mode:
 
 ```tsx
 // frontend/src/App.tsx (paraphrased)
-const agentMode = useRuntimeConfig(s => s.agentMode);
+const agentMode = useRuntimeConfigStore(s => s.agentMode);
 
 <Routes>
   <Route path="/login" element={<LoginPage />} />
@@ -308,4 +308,4 @@ Tests must cover:
 - Chat input enable/disable based on ticket state.
 - Decommission dialog: submit button stays disabled until slug matches.
 - Feature-gating: components render in agent mode, absent in plain mode
-  (test by mocking `useRuntimeConfig`).
+  (test by mocking `useRuntimeConfigStore`).

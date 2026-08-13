@@ -54,7 +54,7 @@ callbacks) or `/api/v1/admin/*` (admin UI actions like onboarding).
 Both mount points sit behind middleware:
 
 ```ts
-// backend/src/middleware/agentMode.ts
+// backend/src/middleware/requireAgentMode.ts
 import type { RequestHandler } from 'express';
 
 export const requireAgentMode: RequestHandler = (req, res, next) => {
@@ -66,12 +66,14 @@ export const requireAgentMode: RequestHandler = (req, res, next) => {
 
 // backend/src/index.ts (route mounting)
 app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRoutes);
-app.use('/api/v1/admin', requireAgentMode, requirePlatformAdmin, adminRoutes);
+app.use('/api/v1/admin', requireAgentMode, authenticate, requirePlatformAdmin(), adminRoutes);
 ```
 
 `agentTokenAuth` verifies the HMAC token from dispatcher (see
-`07-dispatcher-contract.md`). `requirePlatformAdmin` checks
-`users.is_platform_admin = true` on the authenticated session.
+`07-dispatcher-contract.md`). `requirePlatformAdmin()` is a factory —
+invoke with `()` when mounting (see `11-existing-patterns.md` § middleware).
+Checks the `isPlatformAdmin` claim on the authenticated session
+(populated by `authenticate`, which must mount before it).
 
 Plain mode: any HTTP verb to `/api/v1/internal/*` or `/api/v1/admin/*`
 returns `501 Disabled` before reaching route handlers. Tree-shaking +
@@ -102,20 +104,20 @@ router.get('/me', authenticate, (req, res) => {
 Frontend stores it in a Zustand store:
 
 ```ts
-// frontend/src/stores/runtimeConfig.ts
+// frontend/src/stores/useRuntimeConfigStore.ts
 interface RuntimeConfig { agentMode: boolean; dispatcherUrl: string | null }
-export const useRuntimeConfig = create<RuntimeConfig>(() => ({
+export const useRuntimeConfigStore = create<RuntimeConfig>(() => ({
   agentMode: false,
   dispatcherUrl: null,
 }));
 // AuthProvider calls /me, populates this store from response.config.
 ```
 
-Components + routes feature-gate on `useRuntimeConfig(s => s.agentMode)`:
+Components + routes feature-gate on `useRuntimeConfigStore(s => s.agentMode)`:
 
 ```tsx
 // frontend/src/components/Navbar.tsx (paraphrased)
-const agentMode = useRuntimeConfig(s => s.agentMode);
+const agentMode = useRuntimeConfigStore(s => s.agentMode);
 return (
   <nav>
     <NavLink to="/boards">Boards</NavLink>
@@ -176,7 +178,7 @@ global default) or a specific backend name.
 ## Anti-patterns to avoid
 
 - **Don't** check `SLYKBOARD_AGENT_MODE` inside component render bodies
-  scattered across the codebase. Centralize in `useRuntimeConfig`.
+  scattered across the codebase. Centralize in `useRuntimeConfigStore`.
 - **Don't** import agent code (services, types, components) from plain-
   mode entry points. Use dynamic imports if absolutely necessary; the
   build should not pull agent code into the plain bundle.
