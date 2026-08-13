@@ -7,6 +7,43 @@ phases align with the upstream plan's Phase 0 / 0.5 / 1 / 2 / 5
 **Total estimate:** ~3 weekends of focused work inside this repo.
 The dispatcher (separate repo) ships in parallel on its own schedule.
 
+## Prerequisites + phase dependencies
+
+```
+[PREREQ] 00-refactor-plan.md (must be merged first)
+     │
+     ▼
+[Phase 0] Foundations: dual-mode schema, env gating, stub routes
+     │
+     ├──────────────────────┐
+     ▼                      ▼
+[Phase 0.5]           [Phase 1]
+Onboarding MVP        Pipeline State + SSE
+     │                      │
+     │                      ▼
+     │                 [Phase 2]
+     │                 PM ↔ Agent Chat
+     │                      │
+     ├──────────────────────┘
+     ▼
+[Phase 5] Polish + Notifications + Admin Tools
+     │
+     ▼
+[Phase 6.5] Production-readiness gate (conditional)
+```
+
+**Rules:**
+- Phase 0 unblocks everything. Cannot start 0.5 or 1 without it.
+- Phase 0.5 and Phase 1 are **independent** — can be done in parallel
+  by different engineers / agents. Phase 0.5 needs mock dispatcher
+  scenarios `happy-path` + `decommission`; Phase 1 needs
+  `ticket_created` + `state_update.*`.
+- Phase 2 requires Phase 1 (SSE infrastructure + state machine +
+  transition matrix).
+- Phase 5 requires both Phase 0.5 (decommission) and Phase 2 (chat
+  state) to be in.
+- Phase 6.5 is conditional on research findings.
+
 ## Phase 0 — Foundations (1 weekend)
 
 **Goal:** plain-mode contract preserved + agent schema in place +
@@ -34,6 +71,13 @@ The dispatcher (separate repo) ships in parallel on its own schedule.
 - [ ] Add `/api/v1/internal/*` route mounting point with stub handlers
       returning `501` until Phase 1.
 - [ ] Add `/api/v1/admin/*` route mounting point with stub handlers.
+- [ ] Extend `/api/health` response to include `{agentMode: bool,
+      schemaVersion: 1}`. Define `SCHEMA_VERSION` constant in
+      `backend/src/config/version.ts`. Used by dispatcher on boot
+      (`07-dispatcher-contract.md` § Versioning).
+- [ ] Build mock dispatcher skeleton per `10-mock-dispatcher.md` —
+      enough to test HMAC sign/verify round-trip + return `202` stubs.
+      Scenarios filled in per-phase (0.5 / 1 / 2 / 5).
 
 ### Smoke tests
 
@@ -178,7 +222,9 @@ Notifications fire when agent asks a question.
 - [ ] Structured logging (`pino`) on all dispatcher calls — direction,
       path, status, duration, traceId.
 - [ ] OpenAPI spec generated from Zod schemas; served at
-      `/api/v1/openapi.json` (admin-only).
+      `/api/v1/openapi.json` (admin-only). Library:
+      `@asteasolutions/zod-to-openapi` (see `11-existing-patterns.md`
+      § OpenAPI generation).
 - [ ] Project admin dashboard (`/admin/projects`) with filters by
       onboarding state, search.
 - [ ] Frontend polling reconciliation: every 60s, for any
@@ -304,6 +350,7 @@ A phase is "done" when:
 | Conditional migration runner breaks existing installs | Test against a clone of the production DB before each release; ship Phase 0 with extra manual verification. |
 | HMAC signing bug causes dispatcher↔slykboard auth failure | Integration test that signs + verifies round-trip; test against real dispatcher in staging. |
 | SSE connection leak (PM opens many tabs) | Heartbeat every 15s; server closes idle connections after 5 min; client auto-reconnects. |
+| SSE multi-pod deploy breaks emitter (events lost on pod A don't reach clients on pod B) | **v1 invariant: single-pod slykboard deployment** — enforced in deploy config. Phase 6.5 migration path: Redis pub/sub with same emitter interface. Documented in `11-existing-patterns.md`. |
 | PM chat input XSS via markdown | `rehype-sanitize` strips dangerous tags; CSP headers; manual test with adversarial input. |
 | `traceId` propagation breaks observability | Integration test asserts traceId present in every cross-service call's logs. |
 | Source-mode toggle confuses PMs | Default to "New from template" (most common path); inline help text on the toggle. |

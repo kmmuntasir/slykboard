@@ -172,6 +172,7 @@ export const pipelineJobs = pgTable('PipelineJobs', {
   agentBackend: text('agent_backend'),                  // snapshot of projects.agent_backend at dispatch time
   githubPrNumber: integer('github_pr_number'),
   githubPrSha: text('github_pr_sha'),
+  needsPmAttention: boolean('needs_pm_attention').default(false).notNull(),  // set true on AGENT_WAITING, cleared on PM reply or state exit
   traceId: text('trace_id'),                            // uuid v4, propagated across services for observability
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).$onUpdate(() => new Date()).notNull(),
@@ -209,6 +210,10 @@ export const pipelineEvents = pgTable('PipelineEvents', {
 // ─────────────────────────────────────────────────────────────────────
 // AgentMessages — PM ↔ agent chat thread on a ticket (slykboard-origin
 // only; Linear-origin tickets keep their Linear threads).
+// Pattern follows existing `Comments` table + `commentService.ts` —
+// read those first as a structural template. Differences: (1) authorRole
+// enum vs single authorId FK; (2) idempotencyKey for dispatcher retry
+// safety; (3) agentSessionId for routing PM replies to Cyrus.
 // ─────────────────────────────────────────────────────────────────────
 export const agentMessages = pgTable('AgentMessages', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -217,6 +222,9 @@ export const agentMessages = pgTable('AgentMessages', {
   authorUserId: uuid('author_user_id').references(() => users.id),  // null when AGENT or SYSTEM
   body: text('body').notNull(),                                       // markdown, ≤4000 chars
   agentSessionId: text('agent_session_id'),                           // for routing PM replies
+  // Required when authorRole=AGENT (dispatcher forwards with key for dedup).
+  // Null for PM (slykboard-generated) + SYSTEM. Unique where non-null.
+  idempotencyKey: text('idempotency_key'),
   readAt: timestamp('read_at', { withTimezone: true, mode: 'date' }),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
@@ -233,6 +241,30 @@ export const onboardingEvents = pgTable('OnboardingEvents', {
   detail: jsonb('detail'),                               // {ctid, lanIp, repoUrl, proxyHostId, error, ...}
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// NotificationPreferences — per-user, per-project email opt-ins.
+// Three booleans covering the only states that trigger email (see
+// 06-frontend-ui.md "Notifications"). Composite PK = one row per
+// (user, project). Default row created lazily on first interaction
+// (ticket view, project membership grant) with all three = true.
+// ─────────────────────────────────────────────────────────────────────
+export const notificationPreferences = pgTable('NotificationPreferences', {
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  notifyOnDone: boolean('notify_on_done').default(true).notNull(),
+  notifyOnBlockedHuman: boolean('notify_on_blocked_human').default(true).notNull(),
+  notifyOnAgentWaiting: boolean('notify_on_agent_waiting').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 ```
 
 ## Indexes
@@ -241,14 +273,23 @@ export const onboardingEvents = pgTable('OnboardingEvents', {
 // PipelineJobs — dispatcher's lease query
 pipelineJobs.createIndex('idx_pipeline_jobs_state_lease', [sql`state, lease_expires_at, priority DESC, created_at`]);
 
+// PipelineJobs — UI "needs PM attention" badge query
+pipelineJobs.createIndex('idx_pipeline_jobs_needs_attention', [sql`needs_pm_attention WHERE needs_pm_attention = true`]);
+
 // PipelineEvents — UI timeline query
 pipelineEvents.createIndex('idx_pipeline_events_ticket_created', [sql`ticket_id, created_at`]);
 
 // AgentMessages — UI chat thread query
 agentMessages.createIndex('idx_agent_messages_ticket_created', [sql`ticket_id, created_at`]);
 
+// AgentMessages — inbound dedup lookup (dispatcher retry safety)
+agentMessages.createIndex('idx_agent_messages_idempotency', [sql`idempotency_key WHERE idempotency_key IS NOT NULL`]);
+
 // OnboardingEvents — UI timeline query
 onboardingEvents.createIndex('idx_onboarding_events_project_created', [sql`project_id, created_at`]);
+
+// NotificationPreferences — composite PK handles uniqueness + lookup
+// (no extra index needed)
 
 // ProjectAgentMeta — uniqueness (already on slug via .unique())
 // No additional indexes needed; queries join on projectId (PK).
@@ -256,23 +297,45 @@ onboardingEvents.createIndex('idx_onboarding_events_project_created', [sql`proje
 
 ## Migration files
 
-```
-backend/src/db/migrations/agent/
-  0001_initial/
-    0001_create_pipeline_state_enum.sql
-    0002_create_onboarding_state_enum.sql
-    0003_create_message_author_role_enum.sql
-    0004_create_agent_tokens.sql
-    0005_create_pipeline_jobs.sql
-    0006_create_pipeline_events.sql
-    0007_create_agent_messages.sql
-    0008_create_onboarding_events.sql
-    0009_create_project_agent_meta.sql
-    0010_create_indexes.sql
+Drizzle-kit auto-generates filenames like `0000_<two_words>.sql` plus a
+`meta/_journal.json` entry — do NOT hand-number migration files. After
+the refactor in `00-refactor-plan.md`, the agent migration folder is
+`backend/src/db/migrations/agent/`. Generate via:
+
+```bash
+npm run db:generate:agent
 ```
 
-Drizzle migration format. Use `npm run db:generate -- --schema=agent`
-to auto-generate from schema changes (script TBD in `package.json`).
+Drizzle-kit picks up `backend/drizzle.config.agent.ts` (created in
+refactor Task 1) and writes one new `.sql` file + journal entry per
+schema diff. Run as many times as needed during Phase 0 — each
+iteration produces a new file. Order is enforced by the journal, not
+filename prefixes.
+
+Initial Phase-0 `db:generate:agent` run will emit a single `.sql` file
+covering all 7 tables + 3 enums + indexes. Subsequent phases (1, 2, 5)
+emit additional files as schema evolves. The pattern below shows the
+*logical* content; drizzle-kit will likely collapse it into one file
+on first generation:
+
+```
+backend/src/db/migrations/agent/
+  meta/
+    _journal.json
+    0000_snapshot.json
+  0000_<auto_generated_name>.sql    # creates:
+    #   - PipelineState enum
+    #   - OnboardingState enum
+    #   - MessageAuthorRole enum
+    #   - AgentTokens table
+    #   - PipelineJobs table (with needs_pm_attention)
+    #   - PipelineEvents table
+    #   - AgentMessages table (with idempotency_key)
+    #   - OnboardingEvents table
+    #   - NotificationPreferences table
+    #   - ProjectAgentMeta table
+    #   - all indexes
+```
 
 ## Plain-mode verification
 
@@ -285,12 +348,12 @@ psql $DATABASE_URL -c '\dt'
 # Expected: only core tables (Users, Projects, ProjectMembers, Tickets,
 # Labels, TicketLabels, ActivityLogs, TimeEntries, Comments,
 # ProjectSequences). None of: AgentTokens, PipelineJobs, PipelineEvents,
-# AgentMessages, OnboardingEvents, ProjectAgentMeta.
+# AgentMessages, OnboardingEvents, NotificationPreferences, ProjectAgentMeta.
 
 # Then in agent mode
 SLYKBOARD_AGENT_MODE=true npm run db:migrate
 psql $DATABASE_URL -c '\dt'
-# Expected: all core tables + all agent tables.
+# Expected: all core tables + all 7 agent tables.
 ```
 
 ## Test fixtures
@@ -301,7 +364,12 @@ verify:
 1. Enum values match the spec above.
 2. Foreign keys cascade correctly (delete a ticket → pipeline job +
    events + messages gone; delete a project → meta + onboarding events
-   gone).
+   + notification preferences gone).
 3. Unique constraints (`AgentTokens.token_hash`, `ProjectAgentMeta.slug`).
-4. Default values (`sourceMode = 'new'`, `onboardingState = 'PENDING'`,
-   `githubRepoCreated = false`).
+4. Composite primary key on `NotificationPreferences` (one row per
+   user × project).
+5. Idempotency: inserting two `AgentMessages` rows with the same
+   `idempotencyKey` rejects the second (use ON CONFLICT or check first).
+6. Default values (`sourceMode = 'new'`, `onboardingState = 'PENDING'`,
+   `githubRepoCreated = false`, `needsPmAttention = false`,
+   notification prefs default true).

@@ -58,9 +58,11 @@ const stateUpdateSchema = z.object({
    - Update `PipelineJobs.state = body.state`, bump `updatedAt`.
    - If `body.state === 'DONE'`, also update the core `Tickets` row:
      set `statusColumn = 'Done'` (drives kanban column move).
-   - If `body.state === 'AGENT_WAITING'`, mark the ticket as needing
-     PM attention (sets `tickets.needs_attention = true` — drives UI
-     badge + optional email notification).
+   - If `body.state === 'AGENT_WAITING'`, set
+     `PipelineJobs.needsPmAttention = true` (drives UI badge + optional
+     email notification). Cleared when PM posts a reply (see
+     `POST /api/v1/me/tickets/:id/messages`) or dispatcher transitions
+     out of `AGENT_WAITING`.
 3. Return `200 OK` with the updated job row.
 
 **Errors:**
@@ -392,6 +394,51 @@ Emitted on:
 
 Signed with `X-Slykboard-Signature` header (HMAC-SHA256 hex of raw
 body, key = `SLYKBOARD_DISPATCHER_TOKEN`).
+
+## Pipeline state transitions (legal map)
+
+`POST /api/v1/internal/jobs/:ticketId/state` validates against the
+matrix below. Illegal transitions return `400 INVALID_STATE_TRANSITION`
+with `{details: {from, to}}`.
+
+Rows = `fromState`, columns = `toState`. ✓ = legal, · = rejected.
+
+| from \ to | BACKLOG | QUEUED | AGENT_RUN | AGENT_WAIT | PR_OPEN | CI_RUN | MERGING | CONFLICT | DEPLOY | DONE | FAIL_AGENT | FAIL_CI | FAIL_CONFLICT | FAIL_DEPLOY | BLOCKED |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **BACKLOG**        | · | ✓ | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| **QUEUED**         | · | · | ✓ | · | · | · | · | · | · | · | ✓ | · | · | · | · |
+| **AGENT_RUNNING**  | · | · | · | ✓ | ✓ | · | · | · | · | · | ✓ | · | · | · | · |
+| **AGENT_WAITING**  | · | · | ✓ | · | · | · | · | · | · | · | ✓ | · | · | · | · |
+| **PR_OPEN**        | · | · | · | · | · | ✓ | · | · | · | · | · | · | · | · | · |
+| **CI_RUNNING**     | · | · | · | · | · | · | ✓ | · | · | · | · | ✓ | · | · | · |
+| **MERGING**        | · | · | · | · | · | · | · | ✓ | · | ✓ | · | · | · | · | · |
+| **CONFLICT_RETRY** | · | · | · | · | · | · | ✓ | · | · | · | · | · | ✓ | · | · |
+| **DEPLOYING**      | · | · | · | · | · | · | · | · | · | ✓ | · | · | · | ✓ | · |
+| **DONE**           | · | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
+| **FAILED_AGENT**   | · | ✓ | · | · | · | · | · | · | · | · | · | · | · | · | ✓ |
+| **FAILED_CI**      | · | ✓ | · | · | · | · | · | · | · | · | · | · | · | · | ✓ |
+| **FAILED_CONFLICT**| · | ✓ | · | · | · | · | · | · | · | · | · | · | · | · | ✓ |
+| **FAILED_DEPLOY**  | · | ✓ | · | · | · | · | · | · | · | · | · | · | · | · | ✓ |
+| **BLOCKED_HUMAN**  | · | ✓ | · | · | · | · | · | · | · | · | · | · | · | · | · |
+
+Invariants:
+
+- **`DONE`, `DECOMMISSIONED`** are terminal — no transitions out.
+- **`BLOCKED_HUMAN`** can only resume to `QUEUED` (full pipeline
+  restart) — dispatcher must re-acknowledge via the ticket webhook.
+- **`FAILED_*`** states retry to `QUEUED` (next attempt bumps
+  `PipelineJobs.attempts`) OR escalate to `BLOCKED_HUMAN`. No direct
+  `FAILED_*` → running-state jumps; the queue loop must re-pick them.
+- **`AGENT_WAITING`** can transition to `AGENT_RUNNING` (PM replied,
+  agent resumed) or `FAILED_AGENT` (timeout). Cannot skip directly to
+  `PR_OPEN` — only the agent decides when work is ready for PR.
+- **Auto-retry cap**: `attempts` counter on `PipelineJobs` drives max
+  retries (default 3). On exceeding cap, dispatcher must transition to
+  `BLOCKED_HUMAN` instead of `QUEUED`.
+
+Implementation: encode as a `Set<string>` of `"${from}->${to}"` in
+`backend/src/services/pipelineStateService.ts` + unit-test every cell
+of the matrix above.
 
 ## Error envelope (consistent across all routes)
 

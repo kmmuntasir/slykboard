@@ -2,8 +2,27 @@
 
 > **Read this first.** This folder contains the full specification for
 > adding an opt-in "agentic development" mode to slykboard. The work is
-> executed by an AI agent with **no prior context** — every doc here is
-> self-contained.
+> executed by an AI agent with **no prior context** — docs are designed
+> to be readable individually, with cross-references for detail. Read
+> `00-refactor-plan.md` first (mandatory refactor), then `01-overview.md`
+> for the architecture, then `09-implementation-phases.md` for build
+> order.
+
+## ⚠️ Prerequisite: refactor BEFORE Phase 0
+
+The docs in this folder assume a repo layout (split schema, split
+migrations, build-time agent-mode switch) that does **not match the
+current slykboard codebase**. Before starting Phase 0, the repo must be
+refactored to match. **See [`00-refactor-plan.md`](./00-refactor-plan.md)
+for the complete, comprehensive refactor instructions.**
+
+Skipping the refactor and proceeding to Phase 0 will produce non-
+compiling code. The refactor is ~1 day of focused work and lands as a
+single atomic commit. After it merges, all other docs (01–09) become
+implementable as written.
+
+The refactor does NOT change plain-mode behavior. Existing kanban
+flows keep working identically.
 
 ## What we are building
 
@@ -47,6 +66,7 @@ the dispatcher. See `03-security.md`.
 
 | Doc | Purpose |
 |---|---|
+| `00-refactor-plan.md` | **Pre-Phase-0 repo refactor.** Must be completed before any other doc is implementable. |
 | `01-overview.md` | System architecture, component roles, data flow diagram. Read this before anything else. |
 | `02-dual-mode.md` | How `SLYKBOARD_AGENT_MODE` gates schema, routes, UI. Plain-mode contract. |
 | `03-security.md` | Threat model, secret boundaries, auth flows, decommission safety. |
@@ -56,18 +76,23 @@ the dispatcher. See `03-security.md`.
 | `07-dispatcher-contract.md` | The HTTP/HMAC contract between slykboard and dispatcher. Exact request shapes slykboard must emit / consume. |
 | `08-cyrus-contract.md` | What Cyrus (the default agent) expects in the Linear-shape webhook. Slykboard never talks to Cyrus directly — included for context. |
 | `09-implementation-phases.md` | Phase 0 → Phase 5 build order. What to ship first, smoke tests per phase. |
+| `10-mock-dispatcher.md` | Mock dispatcher contract — required for every phase's smoke tests. Scenarios, fixtures, npm scripts. |
+| `11-existing-patterns.md` | Existing slykboard code to use as templates (routes, services, middleware, API client, SSE, tests). |
 
 ## Conventions reminder (from `AGENTS.md`)
 
 - **npm only** — never pnpm/yarn/bun. npm-workspaces monorepo.
-- **Layered backend** — Route → Controller → Service → Repository. No
-  skipping layers. Transactions live in services.
+- **Layered backend** — Route handler → Service → Repository. No
+  controllers dir in this repo (routes own handler logic directly, see
+  `projects.routes.ts`). Transactions live in services.
 - **Drizzle** for schema. snake_case column names, camelCase access keys.
 - **Rebase and Merge only** — never squash, never merge commits.
 - **Branch naming:** `feature/SLYK-<n>-hyphenated-desc`. Commit prefix:
   `SLYK-<n>: message`.
 - **Tests:** Vitest, co-located as `*.test.ts`.
 - **Single-line commit messages.**
+- **Middleware factories:** `requirePlatformAdmin()` is a factory —
+  invoke with `()` when mounting, not as a bare reference.
 
 ## What is out of scope for slykboard
 
