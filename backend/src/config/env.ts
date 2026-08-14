@@ -23,6 +23,13 @@ export interface Config {
   dispatcherUrl?: string;
   dispatcherToken?: string;
   slackEscalationWebhook?: string;
+  // SLYK-0350 email (AGENT_WAITING notifications). All optional — unset
+  // means the emailService stays on its no-op transport (nothing sent).
+  smtpHost?: string;
+  smtpPort: number;
+  smtpUser?: string;
+  smtpPassword?: string;
+  smtpFrom: string;
 }
 
 // SLYK-0130: agent-mode vars. All optional at the schema level — the cross-field
@@ -95,6 +102,17 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
   }
   const agentEnv = validateAgentEnv(agentParsed.data);
 
+  // SLYK-0350: SMTP for outbound email. host is the switch — unset keeps the
+  // emailService on its no-op transport. from has a sane default so ops only
+  // sets host (+user/password when the relay requires auth).
+  const smtpConfig = {
+    host: envSource.SLYKBOARD_SMTP_HOST?.trim() || undefined,
+    port: Number(envSource.SLYKBOARD_SMTP_PORT ?? 587),
+    user: envSource.SLYKBOARD_SMTP_USER?.trim() || undefined,
+    password: envSource.SLYKBOARD_SMTP_PASSWORD || undefined,
+    from: envSource.SLYKBOARD_SMTP_FROM?.trim() || 'noreply@slykboard.local',
+  };
+
   return {
     port: Number(envSource.PORT ?? 3000),
     frontendUrl: envSource.FRONTEND_URL,
@@ -119,6 +137,11 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     dispatcherUrl: agentEnv.SLYKBOARD_DISPATCHER_URL,
     dispatcherToken: agentEnv.SLYKBOARD_DISPATCHER_TOKEN,
     slackEscalationWebhook: agentEnv.SLYKBOARD_SLACK_ESCALATION_WEBHOOK,
+    smtpHost: smtpConfig.host,
+    smtpPort: smtpConfig.port,
+    smtpUser: smtpConfig.user,
+    smtpPassword: smtpConfig.password,
+    smtpFrom: smtpConfig.from,
   };
 }
 

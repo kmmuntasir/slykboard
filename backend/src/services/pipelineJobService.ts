@@ -1,4 +1,5 @@
 import { db } from '../db/client';
+import { logger } from '../config/logger';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import type { StateUpdateBody } from '../routes/internal.schema';
@@ -6,6 +7,7 @@ import { assertLegalTransition, type PipelineState } from './pipelineStateServic
 import * as pipelineJobRepository from '../repositories/pipelineJobRepository';
 import type { PipelineJobRow } from '../repositories/pipelineJobRepository';
 import { sseEmit } from './sseEmitter';
+import { notifyAgentWaitingEmail } from './agentWaitingNotifyService';
 
 // SLYK-0260 — dispatcher state-write endpoint's business logic
 // (docs/agentic-automation/05-backend-routes.md § jobs/:ticketId/state,
@@ -138,6 +140,22 @@ export async function updateJobState(args: {
     detail: body.detail ?? null,
     traceId: body.traceId ?? null,
   });
+
+  // 8. SLYK-0350 — AGENT_WAITING entry emails the ticket creator. The notify
+  //    service never rejects by contract, but belt-and-braces: email is
+  //    best-effort and must never fail the durable state write (same swallow
+  //    posture as sseEmit above). Plain mode never reaches here —
+  //    requireAgentMode 501s the route before the service is invoked.
+  if (to === 'AGENT_WAITING') {
+    try {
+      await notifyAgentWaitingEmail(ticketId);
+    } catch (err) {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err), ticketId },
+        'AGENT_WAITING email hook threw',
+      );
+    }
+  }
 
   return job;
 }
