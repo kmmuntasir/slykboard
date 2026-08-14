@@ -1,7 +1,0 @@
-{
-  "packages": [
-    "npm:@kmmuntasir/pi-nested-subagents",
-    "npm:pi-web-extension",
-    "npm:pi-web-access"
-  ]
-}
