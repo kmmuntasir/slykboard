@@ -69,14 +69,23 @@ const pipelineJobMock = vi.hoisted(() => ({
   updateJobState: vi.fn(),
 }));
 vi.mock('../services/pipelineJobService', () => pipelineJobMock);
+// SLYK-0320 — same seam for the agent-message endpoint. Idempotency replay,
+// SSE frame shape, and insert semantics live in agentMessageService.test.ts;
+// here we cover the route matrix (validation, envelope, auth chain).
+const agentMessageMock = vi.hoisted(() => ({
+  recordAgentMessage: vi.fn(),
+}));
+vi.mock('../services/agentMessageService', () => agentMessageMock);
 
 import { SignJWT } from 'jose';
 import * as onboardingEventService from '../services/onboardingEventService';
 import * as pipelineJobService from '../services/pipelineJobService';
+import * as agentMessageService from '../services/agentMessageService';
 
 const mockedRecord = vi.mocked(onboardingEventService.recordOnboardingEvent);
 const mockedGetDeployTarget = vi.mocked(onboardingEventService.getDeployTarget);
 const mockedUpdateJobState = vi.mocked(pipelineJobService.updateJobState);
+const mockedRecordAgentMessage = vi.mocked(agentMessageService.recordAgentMessage);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -174,16 +183,24 @@ describe('agent-mode /api/v1/internal — HMAC auth chain', () => {
     expect(res.body.error.message).toBe('Invalid dispatcher signature');
   });
 
-  it('valid signature over non-ASCII body → 501 (multi-byte UTF-8 signed verbatim)', async () => {
+  it('valid signature over non-ASCII body → passes auth verbatim (multi-byte UTF-8)', async () => {
+    // SLYK-0320 replaced the 501 stub with the real messages route, so the
+    // multi-byte-verbatim property now surfaces as a service call (mocked
+    // here) rather than a 501. The auth-chain property under test — signature
+    // computed over the exact raw bytes — is unchanged.
+    mockedRecordAgentMessage.mockResolvedValue({ id: 'm1' } as never);
     const app = await bootAgentModeApp();
-    const body = { detail: { note: 'ファイル作成 — émoji 🚀 ünïcødé' } };
+    const body = {
+      authorRole: 'AGENT',
+      body: 'ファイル作成 — émoji 🚀 ünïcødé',
+    };
     const res = await request(app)
       .post('/api/v1/internal/jobs/11111111-1111-4111-8111-111111111111/messages')
       .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
       .send(body);
 
-    expect(res.status).toBe(501);
-    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(res.status).toBe(201);
+    expect(mockedRecordAgentMessage).toHaveBeenCalledTimes(1);
   });
 
   it('signature computed over re-serialized (whitespace-differing) body → 401', async () => {
@@ -591,6 +608,134 @@ describe('agent-mode job-state endpoint (SLYK-0260)', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_STATE_TRANSITION');
+  });
+});
+
+describe('agent-mode agent-message endpoint (SLYK-0320)', () => {
+  const MESSAGES_PATH = (ticketId: string) => `/api/v1/internal/jobs/${ticketId}/messages`;
+  const TICKET_ID = '11111111-1111-4111-8111-111111111111';
+  const KEY = '9b7c6d5e-1111-4222-8333-444455556666';
+
+  const messageRow = {
+    id: '44444444-4444-4444-8444-444444444444',
+    ticketId: TICKET_ID,
+    authorRole: 'AGENT',
+    authorUserId: null,
+    body: 'Should I add a confirm dialog before deleting the user?',
+    agentSessionId: 'cyrus-session-abc',
+    idempotencyKey: KEY,
+    readAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    mockedRecordAgentMessage.mockReset();
+    mockedRecordAgentMessage.mockResolvedValue(messageRow as never);
+  });
+
+  it('signed happy path → 201 with the inserted row envelope', async () => {
+    const app = await bootAgentModeApp();
+    const body = {
+      authorRole: 'AGENT',
+      body: 'Should I add a confirm dialog before deleting the user?',
+      agentSessionId: 'cyrus-session-abc',
+      idempotencyKey: KEY,
+      traceId: '8b7c6d5e-1111-4222-8333-444455556666',
+    };
+    const res = await request(app)
+      .post(MESSAGES_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ data: messageRow });
+    expect(mockedRecordAgentMessage).toHaveBeenCalledWith({ ticketId: TICKET_ID, body });
+  });
+
+  it('duplicate idempotencyKey → 201 with the ORIGINAL row (service-level idempotency)', async () => {
+    const app = await bootAgentModeApp();
+    const body = { authorRole: 'AGENT', body: 'retry', idempotencyKey: KEY };
+    const res = await request(app)
+      .post(MESSAGES_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    // The no-second-insert row-count assert lives in
+    // agentMessageService.test.ts (the service owns replay semantics); the
+    // route contract pins that a replay is still 201 + original row.
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ data: messageRow });
+    expect(mockedRecordAgentMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      name: "authorRole 'PM' (dispatcher may not impersonate PM)",
+      body: { authorRole: 'PM', body: 'hi' },
+    },
+    { name: 'body longer than 4000 chars', body: { authorRole: 'AGENT', body: 'x'.repeat(4001) } },
+    { name: 'empty body', body: { authorRole: 'AGENT', body: '' } },
+    {
+      name: 'non-uuid idempotencyKey',
+      body: { authorRole: 'AGENT', body: 'hi', idempotencyKey: 'nope' },
+    },
+    { name: 'missing authorRole', body: { body: 'hi' } },
+    {
+      name: 'non-uuid ticketId param',
+      body: { authorRole: 'AGENT', body: 'hi' },
+      path: 'not-a-uuid',
+    },
+  ])('$name → 400 VALIDATION_FAILED before the service runs', async ({ body, path }) => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH(path ?? TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedRecordAgentMessage).not.toHaveBeenCalled();
+  });
+
+  it('unknown ticket (service 404) → 404 NOT_FOUND envelope', async () => {
+    mockedRecordAgentMessage.mockRejectedValue(
+      freshAppError.build!(ErrorCode.NOT_FOUND, `Ticket '${TICKET_ID}' is not in the pipeline`, {
+        ticketId: TICKET_ID,
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const body = { authorRole: 'AGENT', body: 'hi' };
+    const res = await request(app)
+      .post(MESSAGES_PATH('22222222-2222-4222-8222-222222222222'))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(res.body.error.details).toEqual({ ticketId: TICKET_ID });
+  });
+
+  it('unsigned → 401 before the service runs (auth chain first)', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH(TICKET_ID))
+      .send({ authorRole: 'AGENT', body: 'hi' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedRecordAgentMessage).not.toHaveBeenCalled();
+  });
+
+  it('SYSTEM role passes validation and reaches the service', async () => {
+    const app = await bootAgentModeApp();
+    const body = { authorRole: 'SYSTEM', body: 'PR #12 opened' };
+    const res = await request(app)
+      .post(MESSAGES_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(201);
+    expect(mockedRecordAgentMessage).toHaveBeenCalledWith({ ticketId: TICKET_ID, body });
   });
 });
 

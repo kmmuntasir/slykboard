@@ -9,6 +9,10 @@ import { onboardingStateEnum, pipelineStateEnum } from '../db/schema';
 // param-only GET — no body schema needed).
 // SLYK-0260 adds the job-state body schema (05-backend-routes.md §
 // jobs/:ticketId/state: 15-value state enum, detail record, uuid traceId).
+// SLYK-0320 adds the agent-message body schema (05-backend-routes.md §
+// jobs/:ticketId/messages: authorRole AGENT|SYSTEM — PM is rejected here so
+// the dispatcher can never impersonate the PM — body 1..4000, optional
+// agentSessionId + uuid idempotencyKey/traceId).
 
 export const ticketIdParam = z.object({
   ticketId: z.uuid(),
@@ -36,7 +40,18 @@ export const stateUpdateBody = z.object({
   traceId: z.uuid().optional(),
 });
 
+// authorRole: AGENT | SYSTEM only — PM messages originate from the frontend
+// (POST /api/v1/me/tickets/:id/messages, Phase 2), never from the dispatcher.
+export const agentMessageBody = z.object({
+  authorRole: z.enum(['AGENT', 'SYSTEM']),
+  body: z.string().min(1).max(4000),
+  agentSessionId: z.string().optional(),
+  idempotencyKey: z.uuid().optional(),
+  traceId: z.uuid().optional(),
+});
+
 export type TicketIdParam = z.infer<typeof ticketIdParam>;
 export type SlugParam = z.infer<typeof slugParam>;
 export type OnboardingEventBody = z.infer<typeof onboardingEventBody>;
 export type StateUpdateBody = z.infer<typeof stateUpdateBody>;
+export type AgentMessageBody = z.infer<typeof agentMessageBody>;
