@@ -1,4 +1,4 @@
-import { Navigate, Outlet, createBrowserRouter } from 'react-router';
+import { Navigate, Outlet, createBrowserRouter, type RouteObject } from 'react-router';
 import { AppLayout } from '@/components/AppLayout';
 import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
@@ -48,7 +48,14 @@ function ReportsRedirect() {
     );
 }
 
-export const router = createBrowserRouter([
+// SLYK-0120: agent-route spread site (docs/agentic-automation/06-frontend-ui.md
+// §Routing). Agent routes are `React.lazy(() => import(...))` entries appended
+// here in later phases; `__AGENT_MODE__` is a build-time constant, so plain
+// builds (`SLYKBOARD_AGENT_MODE=false`) statically prune this spread — agent
+// chunks are never emitted. Empty for now: this only establishes the pattern.
+const agentRoutes: RouteObject[] = [];
+
+const routes: RouteObject[] = [
     {
         element: <RootLayout />,
         children: [
@@ -112,7 +119,10 @@ export const router = createBrowserRouter([
                                         path: '/settings',
                                         element: <RequirePlatformAdmin />,
                                         children: [
-                                            { index: true, element: <ComingSoonPage title='Settings' /> },
+                                            {
+                                                index: true,
+                                                element: <ComingSoonPage title="Settings" />,
+                                            },
                                         ],
                                     },
                                     // KMM-5: per-user Account Settings — authenticated only, no
@@ -120,6 +130,9 @@ export const router = createBrowserRouter([
                                     { path: '/account', element: <AccountSettingsPage /> },
                                     // SLYK-F28: dedicated 403 page, reachable directly.
                                     { path: '/forbidden', element: <ForbiddenPage /> },
+                                    // Agent routes (agent mode only). Empty until later
+                                    // phases populate `agentRoutes` above.
+                                    ...(__AGENT_MODE__ ? agentRoutes : []),
                                     { path: '*', element: <NotFoundPage /> },
                                 ],
                             },
@@ -129,4 +142,7 @@ export const router = createBrowserRouter([
             },
         ],
     },
-]);
+    ...(__AGENT_MODE__ ? agentRoutes : []),
+];
+
+export const router = createBrowserRouter(routes);
