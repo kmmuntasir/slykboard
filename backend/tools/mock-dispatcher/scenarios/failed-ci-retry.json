@@ -1,6 +1,6 @@
 {
-  "name": "happy-path",
-  "description": "Onboard → onboarding event stream to LIVE → full ticket pipeline to DONE",
+  "name": "failed-ci-retry",
+  "description": "CI fails once (attempts 0→1 on requeue) → second attempt merges → DONE",
   "onboardReply": { "status": 202, "body": { "orchestratorId": "mock-orch-001" } },
   "onboardingEvents": [
     {
@@ -20,6 +20,19 @@
     { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "abc1234" } },
     { "delayMs": 1500, "state": "CI_RUNNING" },
     {
+      "delayMs": 2000,
+      "state": "FAILED_CI",
+      "detail": { "error": "vitest: 2 tests failed (attempt 1)", "attempt": 1 }
+    },
+    { "delayMs": 2000, "state": "QUEUED", "detail": { "source": "auto-retry after FAILED_CI" } },
+    {
+      "delayMs": 1500,
+      "state": "AGENT_RUNNING",
+      "detail": { "agentSessionId": "mock-cyrus-002", "attempt": 2 }
+    },
+    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "abc9999" } },
+    { "delayMs": 1500, "state": "CI_RUNNING" },
+    {
       "delayMs": 3000,
       "state": "MERGING",
       "detail": {
@@ -30,6 +43,10 @@
         "touchedSensitivePaths": { "infra": false, "migrations": false, "deployConfig": false }
       }
     },
-    { "delayMs": 1500, "state": "DONE", "detail": { "deployedAt": "2026-08-13T12:30:00Z" } }
+    {
+      "delayMs": 1500,
+      "state": "DONE",
+      "detail": { "deployedAt": "2026-08-13T12:50:00Z", "attempt": 2 }
+    }
   ]
 }

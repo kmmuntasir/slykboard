@@ -6,11 +6,13 @@ harness for slykboard's agent mode per
 **Not part of the runtime backend bundle** (`backend/tsconfig.json` keeps
 `tools/` out of `dist/`).
 
-Current scope: **SLYK-0220 Phase 0.5** — HMAC round-trip, `202` stubs, and
-the **scenario engine**: `--scenario=<name>` replays scripted
-onboarding/decommission callbacks to slykboard's `/api/v1/internal` routes.
-Ticket-event `state_update.*` streaming arrives with SLYK-0300 (Phase 1),
-messages with SLYK-0360 (Phase 2), latency/rate-limit profiles with Phase 5.
+Current scope: **SLYK-0300 Phase 1** — HMAC round-trip, `202` stubs, the
+**scenario engine** (SLYK-0220: `--scenario=<name>` replays scripted
+onboarding/decommission callbacks), and **ticket-event handling**: a signed
+`ticket_created` (or `queue_for_agent`) webhook streams scripted
+`state_update.*` callbacks to slykboard's `/api/v1/internal/jobs/:ticketId/state`.
+Agent messages arrive with SLYK-0360 (Phase 2), latency/rate-limit profiles
+with Phase 5.
 
 ## Run
 
@@ -39,13 +41,13 @@ npm run dev
 # Terminal 3: drive UI / curl, watch mock log (state.json)
 ```
 
-## Scenarios (SLYK-0220)
+## Scenarios (SLYK-0220 / SLYK-0300)
 
 `--scenario=<name>` loads `scenarios/<name>.json` and replays its scripted
-callback stream when slykboard calls `/onboard` or `/decommission`. One
-process runs one scenario; unset → `202` stubs only (skeleton behavior).
-`--slykboard-url=<url>` sets the base URL for outbound callbacks
-(default `http://localhost:3000`).
+callback stream when slykboard calls `/onboard`, `/decommission`, or
+`/webhooks/ticket-events`. One process runs one scenario; unset → `202`
+stubs only (skeleton behavior). `--slykboard-url=<url>` sets the base URL
+for outbound callbacks (default `http://localhost:3000`).
 
 ### happy-path — onboard to LIVE
 
@@ -61,9 +63,60 @@ with `202 {orchestratorId}` and immediately streams six signed
 
 `PENDING → PROVISIONING_LXC → WIRING_GITHUB → WIRING_AGENT → WIRING_ZORAXY → SMOKE_TEST → LIVE`
 
-Slykboard's meta reaches `LIVE` with `onboardedAt` set. The scenario file
-also carries the Phase-1 `ticketCreatedStateSequence` per doc 10 — the
-mock ignores it until SLYK-0300 implements ticket-event emission.
+Slykboard's meta reaches `LIVE` with `onboardedAt` set.
+
+**Phase 1 (SLYK-0300):** the scenario's `ticketCreatedStateSequence` is live.
+Create a ticket in an agent-mode project → slykboard auto-queues it (BACKLOG
+job row + signed `ticket_created` webhook) → the mock acks `202` and streams
+six signed `state_update` callbacks to
+`POST /api/v1/internal/jobs/:ticketId/state`:
+
+`BACKLOG → QUEUED → AGENT_RUNNING → PR_OPEN → CI_RUNNING → MERGING → DONE`
+
+The job reaches `DONE` and the ticket auto-moves to the project's Done
+column. (Note: `MERGING` goes straight to `DONE` — the 15×15 matrix in
+05-backend-routes.md has no edge into `DEPLOYING`, so the doc-10 example's
+`MERGING → DEPLOYING → DONE` hop is not replayable as written.)
+
+### agent-waiting — mid-task question + resume (state part)
+
+```bash
+npm run mock:dispatcher -- --scenario=agent-waiting
+```
+
+Create a ticket → the stream pauses on a question and resumes:
+
+`QUEUED → AGENT_RUNNING → AGENT_WAITING → AGENT_RUNNING → PR_OPEN → CI_RUNNING → MERGING → DONE`
+
+`AGENT_WAITING` sets `needsPmAttention` (UI badge); the exit clears it. The
+`AGENT_WAITING` chat message emission itself arrives with SLYK-0360 (Phase 2).
+
+### failed-ci-retry — one CI failure, then success
+
+```bash
+npm run mock:dispatcher -- --scenario=failed-ci-retry
+```
+
+`QUEUED → AGENT_RUNNING → PR_OPEN → CI_RUNNING → FAILED_CI → QUEUED → AGENT_RUNNING → PR_OPEN → CI_RUNNING → MERGING → DONE`
+
+The `FAILED_CI → QUEUED` requeue bumps `PipelineJobs.attempts` 0 → 1 (visible
+in the ticket's Pipeline tab); the second attempt merges and deploys.
+
+### blocked-human — retry cap escalation
+
+```bash
+npm run mock:dispatcher -- --scenario=blocked-human
+```
+
+Three full attempts, each ending `FAILED_CI`:
+
+- attempt 1: `… CI_RUNNING → FAILED_CI → QUEUED` (attempts 1)
+- attempt 2: `… CI_RUNNING → FAILED_CI → QUEUED` (attempts 2)
+- attempt 3: `… CI_RUNNING → FAILED_CI → BLOCKED_HUMAN`
+
+The third failure is over the cap (3) so the only legal exit is
+`BLOCKED_HUMAN` — terminal for auto-retry; the PM sees the red badge and
+"Need human help".
 
 ### decommission — teardown to DECOMMISSIONED
 
@@ -100,7 +153,7 @@ Inbound (slykboard → mock, signed with `X-Slykboard-Signature`):
 | ------------------------------------ | ------------------------------- |
 | `POST /onboard`                      | `202 {orchestratorId}` (+ streams onboarding events when a scenario is loaded) |
 | `POST /decommission`                 | `202` (+ streams teardown events when a scenario is loaded) |
-| `POST /webhooks/ticket-events`       | `202 {acceptedAt}`              |
+| `POST /webhooks/ticket-events`       | `202 {acceptedAt}` (+ `ticket_created` streams the scenario's state sequence; `queue_for_agent` follows with `AGENT_RUNNING`; `pm_reply` logs only until SLYK-0360) |
 | `POST /webhooks/pm-action/need-human-help` | `202`                     |
 | `GET /admin/next-status`             | local control — see above       |
 
@@ -111,7 +164,7 @@ Outbound (mock → slykboard, signed with `X-Dispatcher-Signature`):
 | Method + path | Purpose |
 |---|---|
 | `POST /api/v1/internal/projects/:slug/onboarding/events` | Stream onboarding lifecycle (Phase 0.5) |
-| `POST /api/v1/internal/jobs/:ticketId/state` | Phase 1 (SLYK-0300) |
+| `POST /api/v1/internal/jobs/:ticketId/state` | Stream ticket pipeline states (Phase 1, SLYK-0300) |
 
 Every received call (valid or rejected) is appended to `state.json` as one
 JSON line: `{at, method, path, signatureValid, body, injectedStatus?}`.
@@ -159,15 +212,22 @@ exported `sign()` helper in [`sign.ts`](./sign.ts) — slykboard's
     { "delayMs": 1000, "toState": "DECOMMISSIONING" },
     { "delayMs": 1000, "toState": "DECOMMISSIONED" }
   ],
-  "ticketCreatedStateSequence": []
+  "ticketCreatedStateSequence": [
+    { "delayMs": 500, "state": "QUEUED" },
+    { "delayMs": 1500, "state": "AGENT_RUNNING", "detail": { "agentSessionId": "mock-cyrus-001" } }
+  ]
 }
 ```
 
-The mock sleeps `delayMs` before each callback. `fromState` is derived
-(seed: `PENDING` for onboard, `DECOMMISSIONING` for decommission, then the
-previous step's `toState`) unless a step sets it explicitly. Steps without
-`detail` fall back to the matching `fixtures/onboarding_event.*.json`
-template.
+The mock sleeps `delayMs` before each callback. For onboarding/decommission
+steps `fromState` is derived (seed: `PENDING` for onboard,
+`DECOMMISSIONING` for decommission, then the previous step's `toState`)
+unless a step sets it explicitly. State steps POST only `{state, detail?}` —
+slykboard derives `fromState` from the job row. Steps without `detail` fall
+back to the matching `fixtures/onboarding_event.*.json` /
+`fixtures/state_update.*.json` template. State values are validated against
+the 15-value `PipelineState` enum at load; every edge must exist in the
+15×15 matrix (05-backend-routes.md).
 
 ## Layout
 
@@ -175,11 +235,21 @@ template.
 tools/mock-dispatcher/
   README.md       # this file
   index.ts        # the server itself (Express, single file)
+  index.test.ts   # unit suite (supertest + transport double)
   sign.ts         # shared HMAC sign/verify helpers
   scenarios/
-    happy-path.json   # onboard → LIVE (+ Phase-1 ticket sequence, unused until SLYK-0300)
-    decommission.json # DECOMMISSIONING → DECOMMISSIONED
-  fixtures/       # onboarding_event payload templates (detail fallback)
+    happy-path.json      # onboard → LIVE; ticket → DONE
+    agent-waiting.json   # ticket pauses on a question, resumes, DONE
+    failed-ci-retry.json # one CI failure, requeue, DONE (attempts 1)
+    blocked-human.json   # three failures over cap → BLOCKED_HUMAN
+    decommission.json    # DECOMMISSIONING → DECOMMISSIONED
+  fixtures/       # onboarding_event.* + state_update.* payload templates
   .token          # generated on first run (gitignored)
   state.json      # runtime: append-only log of received calls (gitignored)
 ```
+
+E2E coverage: `backend/src/routes/internal.e2e.test.ts` boots the mock and
+slykboard on paired random ports against the real test Postgres and asserts
+all three ticket scenarios propagate to their terminal states (happy-path +
+failed-ci-retry → `DONE` with the kanban move; blocked-human →
+`BLOCKED_HUMAN`), with zero `401`s on the mock's signed callbacks.

@@ -1,0 +1,10 @@
+{
+  "state": "MERGING",
+  "detail": {
+    "checksPassed": ["lint", "test", "build"],
+    "checksFailed": [],
+    "coverageDelta": { "files": 2, "lines": 24 },
+    "diffSize": { "filesChanged": 3, "insertions": 120, "deletions": 15 },
+    "touchedSensitivePaths": { "infra": false, "migrations": false, "deployConfig": false }
+  }
+}

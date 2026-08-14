@@ -20,7 +20,14 @@ vi.hoisted(() => {
 });
 
 import { readFileSync } from 'node:fs';
-import { buildApp, verifySignature, loadScenario, parseArgs } from './index';
+import {
+  buildApp,
+  verifySignature,
+  loadScenario,
+  parseArgs,
+  parseStateSteps,
+  streamStateUpdates,
+} from './index';
 import { sign, signaturesMatch, DISPATCHER_SIGNATURE_HEADER } from './sign';
 
 let app: Express;
@@ -275,8 +282,123 @@ describe('SLYK-0220 — loadScenario + parseArgs', () => {
       'SMOKE_TEST',
       'LIVE',
     ]);
-    // Phase 1 field carried per doc 10, ignored until SLYK-0300.
-    expect(Array.isArray(scenario.ticketCreatedStateSequence)).toBe(true);
+    // Phase 1 field carried per doc 10 — SLYK-0300 parses it into steps.
+    expect(scenario.ticketCreatedStateSequence?.map((s) => s.state)).toEqual([
+      'QUEUED',
+      'AGENT_RUNNING',
+      'PR_OPEN',
+      'CI_RUNNING',
+      'MERGING',
+      'DONE',
+    ]);
+  });
+
+  // SLYK-0300 — the three Phase-1 scenarios, each validated against the
+  // 15×15 matrix (05-backend-routes.md): no MERGING→DEPLOYING hop (illegal —
+  // no edge enters DEPLOYING; MERGING goes straight to DONE).
+  it.each([
+    {
+      name: 'agent-waiting',
+      states: [
+        'QUEUED',
+        'AGENT_RUNNING',
+        'AGENT_WAITING',
+        'AGENT_RUNNING',
+        'PR_OPEN',
+        'CI_RUNNING',
+        'MERGING',
+        'DONE',
+      ],
+    },
+    {
+      name: 'failed-ci-retry',
+      states: [
+        'QUEUED',
+        'AGENT_RUNNING',
+        'PR_OPEN',
+        'CI_RUNNING',
+        'FAILED_CI',
+        'QUEUED',
+        'AGENT_RUNNING',
+        'PR_OPEN',
+        'CI_RUNNING',
+        'MERGING',
+        'DONE',
+      ],
+    },
+    {
+      name: 'blocked-human',
+      states: [
+        'QUEUED',
+        'AGENT_RUNNING',
+        'PR_OPEN',
+        'CI_RUNNING',
+        'FAILED_CI',
+        'QUEUED',
+        'AGENT_RUNNING',
+        'PR_OPEN',
+        'CI_RUNNING',
+        'FAILED_CI',
+        'QUEUED',
+        'AGENT_RUNNING',
+        'PR_OPEN',
+        'CI_RUNNING',
+        'FAILED_CI',
+        'BLOCKED_HUMAN',
+      ],
+    },
+  ])('loads scenarios/$name.json with a legal $name sequence', ({ name, states }) => {
+    const scenario = loadScenario(name);
+    expect(scenario.name).toBe(name);
+    expect(scenario.ticketCreatedStateSequence?.map((s) => s.state)).toEqual(states);
+    // Every edge in the sequence must exist in slykboard's matrix, and the
+    // FAILED_*→QUEUED requeues must stay under the attempts cap of 3
+    // (attempts bumps on each requeue: 1, 2 — the third FAILED_CI escalates).
+    const LEGAL = new Set([
+      'BACKLOG->QUEUED',
+      'QUEUED->AGENT_RUNNING',
+      'QUEUED->FAILED_AGENT',
+      'AGENT_RUNNING->AGENT_WAITING',
+      'AGENT_RUNNING->PR_OPEN',
+      'AGENT_RUNNING->FAILED_AGENT',
+      'AGENT_WAITING->AGENT_RUNNING',
+      'AGENT_WAITING->FAILED_AGENT',
+      'PR_OPEN->CI_RUNNING',
+      'CI_RUNNING->MERGING',
+      'CI_RUNNING->FAILED_CI',
+      'MERGING->CONFLICT_RETRY',
+      'MERGING->DONE',
+      'CONFLICT_RETRY->MERGING',
+      'CONFLICT_RETRY->FAILED_CONFLICT',
+      'DEPLOYING->DONE',
+      'DEPLOYING->FAILED_DEPLOY',
+      'FAILED_AGENT->QUEUED',
+      'FAILED_AGENT->BLOCKED_HUMAN',
+      'FAILED_CI->QUEUED',
+      'FAILED_CI->BLOCKED_HUMAN',
+      'FAILED_CONFLICT->QUEUED',
+      'FAILED_CONFLICT->BLOCKED_HUMAN',
+      'FAILED_DEPLOY->QUEUED',
+      'FAILED_DEPLOY->BLOCKED_HUMAN',
+      'BLOCKED_HUMAN->QUEUED',
+    ]);
+    let attempts = 0;
+    for (let i = 1; i < states.length; i++) {
+      const edge = `${states[i - 1]}->${states[i]}`;
+      expect(LEGAL.has(edge), `illegal edge ${edge} in scenario ${name}`).toBe(true);
+      if (edge === 'FAILED_CI->QUEUED') attempts += 1;
+    }
+    expect(attempts).toBeLessThan(3); // cap check reads pre-bump value; 3 requeues would break
+  });
+
+  it('rejects ticketCreatedStateSequence steps with an unknown state', () => {
+    expect(() => parseStateSteps('happy-path', [{ delayMs: 1, state: 'NOT_A_STATE' }])).toThrow(
+      /must be one of/,
+    );
+    expect(() => parseStateSteps('happy-path', [{ state: 'QUEUED' }])).toThrow(
+      /delayMs must be a non-negative number/,
+    );
+    expect(() => parseStateSteps('happy-path', 'nope')).toThrow(/must be an array/);
   });
 
   it('loads scenarios/decommission.json streaming DECOMMISSIONING → DECOMMISSIONED', () => {
@@ -542,5 +664,292 @@ describe('SLYK-0220 — /admin/next-status failure injection', () => {
     expect((await request(app).get('/admin/next-status?path=/onboard&status=200')).status).toBe(
       400,
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SLYK-0300 — /webhooks/ticket-events handling + state_update.* streaming
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TICKET_ID = '11111111-1111-4111-8111-111111111111';
+
+function signedTicketEvent(app: Express, body: unknown) {
+  return request(app)
+    .post('/webhooks/ticket-events')
+    .set('X-Slykboard-Signature', signPayload(body, TEST_DISPATCHER_TOKEN))
+    .send(body as Record<string, unknown>);
+}
+
+function ticketCreatedBody(ticketId: string) {
+  // Field-for-field 07-dispatcher-contract.md § ticket_created — slykboard's
+  // ticketAgentService.emitTicketCreated emits exactly this shape.
+  return {
+    eventType: 'ticket_created',
+    ticket: {
+      id: ticketId,
+      projectId: '33333333-3333-4333-8333-333333333333',
+      projectSlug: 'inventory-tracker',
+      teamKey: 'INVENTORYTRACKER',
+      agentBackend: null,
+      number: 42,
+      title: 'Add CSV import',
+      description: 'Allow users to bulk-import inventory from a CSV file.',
+      priority: 'HIGH',
+      labels: ['feature'],
+      createdAt: '2026-08-13T12:34:56.789Z',
+    },
+  };
+}
+
+describe('SLYK-0300 — ticket_created streams signed state callbacks', () => {
+  it('happy-path: 202 ack, then 6 signed callbacks to jobs/:id/state ending at DONE', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('happy-path'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    expect(res.status).toBe(202);
+    expect(res.body.acceptedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    await drain();
+
+    expect(transport.requests).toHaveLength(6);
+    for (const r of transport.requests) {
+      expect(r.url).toBe(`http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/state`);
+      expect(r.method).toBe('POST');
+    }
+
+    // Body shape = stateUpdateBody (05-backend-routes.md): {state, detail?}.
+    // NO fromState on the wire — slykboard derives it from the job row.
+    const bodies = transport.requests.map((r) => JSON.parse(r.rawBody));
+    expect(bodies.map((b) => b.state)).toEqual([
+      'QUEUED',
+      'AGENT_RUNNING',
+      'PR_OPEN',
+      'CI_RUNNING',
+      'MERGING',
+      'DONE',
+    ]);
+    expect(bodies.every((b) => b.fromState === undefined)).toBe(true);
+    // Detail flows verbatim: agentSessionId, PR fields, mergebot decision log.
+    expect(bodies[1]!.detail).toEqual({ agentSessionId: 'mock-cyrus-001' });
+    expect(bodies[2]!.detail).toEqual({ prNumber: 137, sha: 'abc1234' });
+    expect(bodies[4]!.detail).toMatchObject({
+      checksPassed: ['lint', 'test', 'build'],
+      checksFailed: [],
+      coverageDelta: { files: 2, lines: 24 },
+      diffSize: { filesChanged: 3, insertions: 120, deletions: 15 },
+      touchedSensitivePaths: { infra: false, migrations: false, deployConfig: false },
+    });
+    expect(bodies[5]!.detail).toEqual({ deployedAt: '2026-08-13T12:30:00Z' });
+
+    // Every callback HMAC-signed over its exact raw bytes — zero-401 contract.
+    for (const r of transport.requests) {
+      expect(r.headers[DISPATCHER_SIGNATURE_HEADER]).toBe(sign(r.rawBody, TEST_DISPATCHER_TOKEN));
+      expect(r.headers['Content-Type']).toBe('application/json');
+    }
+  });
+
+  it('steps without detail fall back to the state_update.*.json fixture', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: {
+        name: 'fixture-fallback',
+        ticketCreatedStateSequence: [
+          { delayMs: 1, state: 'QUEUED' }, // no detail → fixture
+          { delayMs: 1, state: 'AGENT_WAITING', detail: { question: 'custom?' } }, // detail wins
+        ],
+      },
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    await drain();
+
+    const bodies = transport.requests.map((r) => JSON.parse(r.rawBody));
+    expect(bodies[0]!.detail).toEqual({ source: 'mock-dispatcher auto-queue' });
+    expect(bodies[1]!.detail).toEqual({ question: 'custom?' });
+  });
+
+  it('a 400 from slykboard is logged and skipped, not retried or aborted', async () => {
+    const requests: string[] = [];
+    let calls = 0;
+    const rejectingFetch = async (_url: string, init: RequestInit) => {
+      calls += 1;
+      requests.push(String(init.body));
+      // First callback rejected (illegal transition), the rest accepted —
+      // the stream must continue to DONE.
+      const ok = calls > 1;
+      return {
+        ok,
+        status: ok ? 200 : 400,
+        text: async () => (ok ? '{}' : '{"error":{"code":"INVALID_STATE_TRANSITION"}}'),
+      };
+    };
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: {
+        name: 'resilient-states',
+        ticketCreatedStateSequence: [
+          { delayMs: 1, state: 'QUEUED' },
+          { delayMs: 1, state: 'AGENT_RUNNING' },
+          { delayMs: 1, state: 'DONE' },
+        ],
+      },
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: rejectingFetch,
+      sleepImpl: instantSleep,
+    });
+
+    await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    await drain();
+
+    expect(calls).toBe(3); // exactly one POST per step — no retry loop
+    expect(requests).toHaveLength(3);
+  });
+
+  it('no scenario loaded → 202 stub only, zero state callbacks', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    expect(res.status).toBe(202);
+    await drain();
+    expect(transport.requests).toHaveLength(0);
+  });
+
+  it('scenario without ticketCreatedStateSequence → 202, zero state callbacks', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: { name: 'onboard-only', onboardingEvents: [{ delayMs: 1, toState: 'LIVE' }] },
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    expect(res.status).toBe(202);
+    await drain();
+    expect(transport.requests).toHaveLength(0);
+  });
+
+  it('garbage/unknown eventType → 202 ack, no stream, still logged', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('happy-path'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, { eventType: 'something_else', ticketId: TICKET_ID });
+    expect(res.status).toBe(202);
+    await drain();
+    expect(transport.requests).toHaveLength(0);
+
+    const last = readStateLines().at(-1)!;
+    expect(last.path).toBe('/webhooks/ticket-events');
+    expect(last.signatureValid).toBe(true);
+  });
+});
+
+describe('SLYK-0300 — queue_for_agent + pm_reply handling', () => {
+  it('queue_for_agent emits AGENT_RUNNING after the ack (QUEUED already written by slykboard)', async () => {
+    const transport = makeTransport();
+    const sleeps: number[] = [];
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('happy-path'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+
+    const res = await signedTicketEvent(app, { eventType: 'queue_for_agent', ticketId: TICKET_ID });
+    expect(res.status).toBe(202);
+    await drain();
+
+    // Slykboard's queueForAgent already transitioned the job to QUEUED before
+    // the webhook, so re-emitting QUEUED would be a same-state 400 self-loop —
+    // the mock must only follow with AGENT_RUNNING.
+    expect(transport.requests).toHaveLength(1);
+    expect(transport.requests[0]!.url).toBe(
+      `http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/state`,
+    );
+    const body = JSON.parse(transport.requests[0]!.rawBody);
+    expect(body.state).toBe('AGENT_RUNNING');
+    expect(transport.requests[0]!.headers[DISPATCHER_SIGNATURE_HEADER]).toBe(
+      sign(transport.requests[0]!.rawBody, TEST_DISPATCHER_TOKEN),
+    );
+  });
+
+  it('queue_for_agent with no scenario → 202 stub, no callbacks', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, { eventType: 'queue_for_agent', ticketId: TICKET_ID });
+    expect(res.status).toBe(202);
+    await drain();
+    expect(transport.requests).toHaveLength(0);
+  });
+
+  it('pm_reply → 202, logged only (message emission = SLYK-0360, Phase 2)', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('agent-waiting'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, {
+      eventType: 'pm_reply',
+      ticketId: TICKET_ID,
+      agentSessionId: 'mock-cyrus-001',
+      body: 'Yes, add a confirm dialog.',
+    });
+    expect(res.status).toBe(202);
+    await drain();
+    expect(transport.requests).toHaveLength(0); // no state, no messages yet
+
+    const last = readStateLines().at(-1)!;
+    expect(last.body).toMatchObject({ eventType: 'pm_reply', ticketId: TICKET_ID });
+  });
+});
+
+describe('SLYK-0300 — streamStateUpdates direct (agent-waiting sequence)', () => {
+  it('streams AGENT_WAITING → AGENT_RUNNING with scenario details', async () => {
+    const transport = makeTransport();
+    await streamStateUpdates({
+      slykboardUrl: 'http://slyk.test',
+      ticketId: TICKET_ID,
+      steps: [
+        { delayMs: 1, state: 'AGENT_WAITING' },
+        { delayMs: 1, state: 'AGENT_RUNNING' },
+      ],
+      token: TEST_DISPATCHER_TOKEN,
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const bodies = transport.requests.map((r) => JSON.parse(r.rawBody));
+    expect(bodies.map((b) => b.state)).toEqual(['AGENT_WAITING', 'AGENT_RUNNING']);
+    // AGENT_WAITING detail falls back to the fixture template.
+    expect(bodies[0]!.detail).toEqual({
+      question: 'Should the CSV importer validate headers before inserting rows?',
+    });
   });
 });
