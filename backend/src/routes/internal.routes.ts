@@ -1,30 +1,27 @@
 import { Router } from 'express';
-import { AppError } from '../utils/appError';
 import { validateRequest } from '../middleware/validateRequest';
-import { ErrorCode, success } from '../utils/envelope';
+import { success } from '../utils/envelope';
+import { HttpStatus } from '../utils/httpStatus';
 import {
   slugParam,
   onboardingEventBody,
   stateUpdateBody,
+  agentMessageBody,
   ticketIdParam,
   type OnboardingEventBody,
   type StateUpdateBody,
+  type AgentMessageBody,
 } from './internal.schema';
 import * as onboardingEventService from '../services/onboardingEventService';
 import * as pipelineJobService from '../services/pipelineJobService';
+import * as agentMessageService from '../services/agentMessageService';
 
 // SLYK-0150 — dispatcher callbacks, mounted at /api/v1/internal behind
 // requireAgentMode + agentTokenAuth (HMAC). SLYK-0200 implements the two
-// onboarding endpoints; SLYK-0260 implements the job-state write. The
-// remaining stub returns 501 NOT_IMPLEMENTED naming the phase that fills
-// it in:
-//   jobs/:ticketId/messages            → Phase 2
-// Path shapes per docs/agentic-automation/05-backend-routes.md § /api/v1/internal.
+// onboarding endpoints; SLYK-0260 the job-state write; SLYK-0320 the
+// agent-message forward. Path shapes per docs/agentic-automation/
+// 05-backend-routes.md § /api/v1/internal.
 export const internalRouter = Router();
-
-function notImplementedUntil(phase: string): AppError {
-  return new AppError(ErrorCode.NOT_IMPLEMENTED, `Not implemented until ${phase}`);
-}
 
 // Dispatcher updates pipeline state for a ticket (SLYK-0260). Same-state
 // re-writes are illegal self-loops per the transition matrix → 400; inbound
@@ -43,9 +40,21 @@ internalRouter.post(
 );
 
 // Dispatcher forwards an agent utterance into the PM↔agent chat thread.
-internalRouter.post('/jobs/:ticketId/messages', (_req, _res, next) => {
-  next(notImplementedUntil('Phase 2'));
-});
+// Idempotent on idempotencyKey (07-dispatcher-contract.md § Retry semantics):
+// a replay returns 201 with the ORIGINAL row — the service decides, never
+// the route. SSE `message` frame rides the SLYK-0270 per-ticket channel.
+internalRouter.post(
+  '/jobs/:ticketId/messages',
+  validateRequest({ params: ticketIdParam, body: agentMessageBody }),
+  async (req, res) => {
+    const { ticketId } = req.params as { ticketId: string };
+    const message = await agentMessageService.recordAgentMessage({
+      ticketId,
+      body: req.body as AgentMessageBody,
+    });
+    res.status(HttpStatus.CREATED).json(success(message));
+  },
+);
 
 // Dispatcher reads deploy target config for a project.
 internalRouter.get(
