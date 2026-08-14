@@ -1,0 +1,17 @@
+import { z } from 'zod';
+
+// SLYK-0150 — route-shape placeholders for /api/v1/internal (dispatcher
+// callbacks). Full Zod validation lands with the real handlers; the param
+// shapes are final (they match the mounted paths in internal.routes.ts).
+// Shapes per docs/agentic-automation/05-backend-routes.md.
+
+export const ticketIdParam = z.object({
+  ticketId: z.uuid(),
+});
+
+export const slugParam = z.object({
+  slug: z.string().min(1),
+});
+
+export type TicketIdParam = z.infer<typeof ticketIdParam>;
+export type SlugParam = z.infer<typeof slugParam>;

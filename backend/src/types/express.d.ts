@@ -11,6 +11,11 @@ export interface AuthenticatedUser {
 declare module 'express-serve-static-core' {
   interface Request {
     user?: AuthenticatedUser;
+    // SLYK-0150: raw request bytes, captured by the verify-configured json
+    // parser mounted on /api/v1/internal (see index.ts). agentTokenAuth
+    // verifies the dispatcher HMAC over these exact bytes — re-serialized
+    // JSON would break the signature on key-ordering differences.
+    rawBody?: Buffer;
     // SLYK-01 Task I: attached by requireProjectMember / resolveProject
     // middleware. The resolved ProjectRow (authorized for the caller).
     project?: ProjectRow;
