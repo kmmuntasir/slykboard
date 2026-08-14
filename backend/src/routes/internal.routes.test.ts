@@ -62,12 +62,21 @@ const onboardingMock = vi.hoisted(() => ({
   getDeployTarget: vi.fn(),
 }));
 vi.mock('../services/onboardingEventService', () => onboardingMock);
+// SLYK-0260 — same seam for the job-state endpoint. Transition semantics,
+// attempts rule, and side effects live in pipelineJobService.test.ts; here
+// we cover the route matrix (validation, envelope, auth chain, error mapping).
+const pipelineJobMock = vi.hoisted(() => ({
+  updateJobState: vi.fn(),
+}));
+vi.mock('../services/pipelineJobService', () => pipelineJobMock);
 
 import { SignJWT } from 'jose';
 import * as onboardingEventService from '../services/onboardingEventService';
+import * as pipelineJobService from '../services/pipelineJobService';
 
 const mockedRecord = vi.mocked(onboardingEventService.recordOnboardingEvent);
 const mockedGetDeployTarget = vi.mocked(onboardingEventService.getDeployTarget);
+const mockedUpdateJobState = vi.mocked(pipelineJobService.updateJobState);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -129,17 +138,26 @@ describe('agent-mode /api/v1/internal — HMAC auth chain', () => {
     expect(res.body.error.message).toBe('Invalid dispatcher signature');
   });
 
-  it('valid signature → passes auth, hits the stub → 501 naming Phase 1', async () => {
+  it('valid signature + body → 200 updated-job envelope (service called with both)', async () => {
+    const jobRow = { ticketId: '11111111-1111-4111-8111-111111111111', state: 'QUEUED' };
+    mockedUpdateJobState.mockResolvedValue(jobRow as never);
     const app = await bootAgentModeApp();
-    const body = { state: 'QUEUED' };
+    const body = {
+      state: 'QUEUED',
+      detail: { attempt: 1 },
+      traceId: '9b7c6d5e-1111-4222-8333-444455556666',
+    };
     const res = await request(app)
       .post('/api/v1/internal/jobs/11111111-1111-4111-8111-111111111111/state')
       .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
       .send(body);
 
-    expect(res.status).toBe(501);
-    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(res.body.error.message).toBe('Not implemented until Phase 1');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: jobRow });
+    expect(mockedUpdateJobState).toHaveBeenCalledWith({
+      ticketId: '11111111-1111-4111-8111-111111111111',
+      body,
+    });
   });
 
   it('tampered body after signing → 401 (raw-body capture over exact bytes)', async () => {
@@ -419,6 +437,160 @@ describe('agent-mode onboarding endpoints (SLYK-0200)', () => {
 
     expect(res.status).toBe(401);
     expect(mockedGetDeployTarget).not.toHaveBeenCalled();
+  });
+});
+
+describe('agent-mode job-state endpoint (SLYK-0260)', () => {
+  const STATE_PATH = (ticketId: string) => `/api/v1/internal/jobs/${ticketId}/state`;
+  const TICKET_ID = '11111111-1111-4111-8111-111111111111';
+
+  const jobRow = {
+    ticketId: TICKET_ID,
+    projectId: '33333333-3333-4333-8333-333333333333',
+    state: 'DONE',
+    attempts: 0,
+    needsPmAttention: false,
+  };
+
+  beforeEach(() => {
+    mockedUpdateJobState.mockReset();
+    mockedUpdateJobState.mockResolvedValue(jobRow as never);
+  });
+
+  it('legal transition → 200 with the updated job row', async () => {
+    const app = await bootAgentModeApp();
+    const body = { state: 'DONE' };
+    const res = await request(app)
+      .post(STATE_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: jobRow });
+  });
+
+  // Illegal transitions surface as the dedicated wire code (05-backend-routes
+  // § error envelope). Representative cells only — the 15×15 matrix is
+  // exhaustively covered in pipelineStateService.test.ts (SLYK-0250).
+  it.each([
+    { name: 'DONE → MERGING (terminal state)', from: 'DONE', to: 'MERGING' },
+    { name: 'same-state replay QUEUED → QUEUED', from: 'QUEUED', to: 'QUEUED' },
+    { name: 'over-cap FAILED_AGENT → QUEUED', from: 'FAILED_AGENT', to: 'QUEUED' },
+  ])('$name → 400 INVALID_STATE_TRANSITION with {from, to}', async ({ from, to }) => {
+    mockedUpdateJobState.mockRejectedValue(
+      freshAppError.build!(
+        ErrorCode.INVALID_STATE_TRANSITION,
+        `Cannot transition from ${from} to ${to}`,
+        { from, to },
+      ),
+    );
+    const app = await bootAgentModeApp();
+    const body = { state: to };
+    const res = await request(app)
+      .post(STATE_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_STATE_TRANSITION');
+    expect(res.body.error.details).toEqual({ from, to });
+  });
+
+  it('unknown ticketId (service 404) → 404 NOT_FOUND envelope', async () => {
+    mockedUpdateJobState.mockRejectedValue(
+      freshAppError.build!(ErrorCode.NOT_FOUND, `Ticket '${TICKET_ID}' is not in the pipeline`),
+    );
+    const app = await bootAgentModeApp();
+    const body = { state: 'QUEUED' };
+    const res = await request(app)
+      .post(STATE_PATH('22222222-2222-4222-8222-222222222222'))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('bad state string → 400 VALIDATION_FAILED before the service runs', async () => {
+    const app = await bootAgentModeApp();
+    const body = { state: 'NOT_A_STATE' };
+    const res = await request(app)
+      .post(STATE_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateJobState).not.toHaveBeenCalled();
+  });
+
+  it('missing state → 400 VALIDATION_FAILED', async () => {
+    const app = await bootAgentModeApp();
+    const body = { detail: { x: 1 } };
+    const res = await request(app)
+      .post(STATE_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('non-uuid ticketId → 400 VALIDATION_FAILED (params schema)', async () => {
+    const app = await bootAgentModeApp();
+    const body = { state: 'QUEUED' };
+    const res = await request(app)
+      .post(STATE_PATH('not-a-uuid'))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateJobState).not.toHaveBeenCalled();
+  });
+
+  it('malformed traceId → 400 VALIDATION_FAILED', async () => {
+    const app = await bootAgentModeApp();
+    const body = { state: 'QUEUED', traceId: 'nope' };
+    const res = await request(app)
+      .post(STATE_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('unsigned → 401 before the service runs (auth chain first)', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).post(STATE_PATH(TICKET_ID)).send({ state: 'QUEUED' });
+
+    expect(res.status).toBe(401);
+    expect(mockedUpdateJobState).not.toHaveBeenCalled();
+  });
+
+  // 07-dispatcher-contract.md § Retry semantics: slykboard must be idempotent
+  // on inbound calls, but the mechanism is "same state twice = illegal
+  // self-loop → 400" — the dispatcher dedups upstream (it retries only on
+  // lost responses, carrying the same traceId). Documented here so the
+  // behavior is pinned, not accidental.
+  it('same-state replay is a 400 self-loop, not a silent no-op (dispatcher dedups upstream)', async () => {
+    mockedUpdateJobState.mockRejectedValue(
+      freshAppError.build!(
+        ErrorCode.INVALID_STATE_TRANSITION,
+        'Cannot transition from QUEUED to QUEUED',
+        { from: 'QUEUED', to: 'QUEUED' },
+      ),
+    );
+    const app = await bootAgentModeApp();
+    const body = { state: 'QUEUED' };
+    const res = await request(app)
+      .post(STATE_PATH(TICKET_ID))
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_STATE_TRANSITION');
   });
 });
 

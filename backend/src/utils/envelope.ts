@@ -8,6 +8,9 @@ export const ErrorCode = {
   FORBIDDEN: 'FORBIDDEN',
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
+  // SLYK-0260 — dispatcher state-write contract (05-backend-routes.md § error
+  // envelope names this code verbatim; owner sign-off recorded on the ticket).
+  INVALID_STATE_TRANSITION: 'INVALID_STATE_TRANSITION',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
 } as const;
@@ -22,6 +25,7 @@ export const codeToStatus: Readonly<Record<ErrorCodeValue, number>> = Object.fre
   [ErrorCode.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [ErrorCode.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ErrorCode.CONFLICT]: HttpStatus.CONFLICT,
+  [ErrorCode.INVALID_STATE_TRANSITION]: HttpStatus.BAD_REQUEST,
   [ErrorCode.INTERNAL_ERROR]: HttpStatus.INTERNAL_SERVER_ERROR,
   [ErrorCode.NOT_IMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
 });
