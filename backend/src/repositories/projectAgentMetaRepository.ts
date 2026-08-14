@@ -19,6 +19,16 @@ export function insertMeta(tx: Tx, values: ProjectAgentMetaInsert): Promise<Proj
   return tx.insert(projectAgentMeta).values(values).returning();
 }
 
+/** Meta row by core project id (ticket webhook payload source), or null. */
+export async function findMetaByProjectId(projectId: string): Promise<ProjectAgentMetaRow | null> {
+  const [row] = await db
+    .select()
+    .from(projectAgentMeta)
+    .where(eq(projectAgentMeta.projectId, projectId))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Meta row by slug (the admin/dispatcher-facing identifier), or null. */
 export async function findMetaBySlug(slug: string): Promise<ProjectAgentMetaRow | null> {
   const [row] = await db

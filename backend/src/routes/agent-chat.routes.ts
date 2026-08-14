@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
+import { HttpStatus } from '../utils/httpStatus';
+import { ticketIdParam, type TicketIdParam } from './agent-chat.schema';
 import * as ticketService from '../services/ticketService';
 import * as pipelineViewService from '../services/pipelineViewService';
 import * as sseEmitter from '../services/sseEmitter';
+import * as ticketAgentService from '../services/ticketAgentService';
 
 // SLYK-0270/0280 — user-facing agent routes mounted at /api/v1/me behind
 // requireAgentMode + authenticate (index.ts). PM browser JWTs — NOT the
@@ -100,5 +103,26 @@ agentChatRouter.get(
     });
     const view = await pipelineViewService.getPipelineView(ticketId);
     res.json(success(view));
+  },
+);
+
+// SLYK-0290 — PM "Start work" (06-frontend-ui.md PipelinePanel empty state
+// 'Queue for agent' button; 07-dispatcher-contract.md § queue_for_agent).
+// Same access check as the pipeline read, then the SLYK-0260 transition path
+// validates BACKLOG/FAILED_*/BLOCKED_HUMAN → QUEUED against the matrix
+// (illegal source state → 409 CONFLICT, no job → 404) and emits the signed
+// queue_for_agent webhook after the commit.
+agentChatRouter.post(
+  '/tickets/:ticketId/queue',
+  validateRequest({ params: ticketIdParam }),
+  async (req, res) => {
+    const { ticketId } = req.params as TicketIdParam;
+    await ticketService.getTicketForUser({
+      ticketId,
+      userId: req.user!.id,
+      isPlatformAdmin: req.user!.isPlatformAdmin,
+    });
+    const job = await ticketAgentService.queueForAgent(ticketId);
+    res.status(HttpStatus.OK).json(success(job));
   },
 );
