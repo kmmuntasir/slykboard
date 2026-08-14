@@ -10,6 +10,10 @@ export const ErrorCode = {
   CONFLICT: 'CONFLICT',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
+  // SLYK-0190: the dispatcher rejected or could not be reached — slykboard
+  // itself is healthy but onboarding cannot proceed (502 per
+  // 05-backend-routes.md § POST /api/v1/admin/projects behavior 4).
+  UPSTREAM_FAILED: 'UPSTREAM_FAILED',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -24,6 +28,7 @@ export const codeToStatus: Readonly<Record<ErrorCodeValue, number>> = Object.fre
   [ErrorCode.CONFLICT]: HttpStatus.CONFLICT,
   [ErrorCode.INTERNAL_ERROR]: HttpStatus.INTERNAL_SERVER_ERROR,
   [ErrorCode.NOT_IMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
+  [ErrorCode.UPSTREAM_FAILED]: HttpStatus.BAD_GATEWAY,
 });
 
 // Success body: { data }. data may be a resource, array, null, or scalar.

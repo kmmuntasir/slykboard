@@ -64,17 +64,11 @@ export type CreatedMember = {
 
 // 1. Membership existence check. Takes a tx (NOT the db singleton) so middleware
 //    can run it inside the same transactional read as project resolution.
-export async function isProjectMember(
-  tx: Tx,
-  projectId: string,
-  userId: string,
-): Promise<boolean> {
+export async function isProjectMember(tx: Tx, projectId: string, userId: string): Promise<boolean> {
   const rows = await tx
     .select({ projectId: projectMembers.projectId })
     .from(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .limit(1);
   return rows.length > 0;
 }
@@ -89,9 +83,7 @@ export async function getMemberRole(
   const rows = await tx
     .select({ role: projectMembers.role })
     .from(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .limit(1);
   return rows.length > 0 ? rows[0]!.role : null;
 }
@@ -123,24 +115,32 @@ export async function addMember(
   userId: string,
   role: ProjectMemberRole = 'MEMBER',
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    try {
-      await tx.insert(projectMembers).values({ projectId, userId, role });
-    } catch (cause) {
-      // 23505 = unique_violation on the composite PK (projectId, userId) — the
-      // membership already exists. Treat as an idempotent upsert: update the role
-      // on the existing row instead of surfacing the conflict. Any other error is
-      // rethrown (no swallowed exceptions).
-      const code = (cause as { code?: string })?.code;
-      if (code !== PG_UNIQUE_VIOLATION) throw cause;
-      await tx
-        .update(projectMembers)
-        .set({ role })
-        .where(
-          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-        );
-    }
-  });
+  await db.transaction((tx) => addMemberInTx(tx, projectId, userId, role));
+}
+
+// 4b. Same idempotent-upsert semantics on a CALLER's transaction. SLYK-0190
+//     seeds the creating admin's PROJECT_ADMIN row inside the onboarding
+//     create transaction (project + meta + membership commit atomically).
+export async function addMemberInTx(
+  tx: Tx,
+  projectId: string,
+  userId: string,
+  role: ProjectMemberRole = 'MEMBER',
+): Promise<void> {
+  try {
+    await tx.insert(projectMembers).values({ projectId, userId, role });
+  } catch (cause) {
+    // 23505 = unique_violation on the composite PK (projectId, userId) — the
+    // membership already exists. Treat as an idempotent upsert: update the role
+    // on the existing row instead of surfacing the conflict. Any other error is
+    // rethrown (no swallowed exceptions).
+    const code = (cause as { code?: string })?.code;
+    if (code !== PG_UNIQUE_VIOLATION) throw cause;
+    await tx
+      .update(projectMembers)
+      .set({ role })
+      .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
+  }
 }
 
 // 5. Delete a membership. Throws NOT_FOUND when no row exists (zero rows affected).
@@ -156,9 +156,7 @@ export async function removeMember(
   }
   const deleted = await db
     .delete(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .returning();
   if (deleted.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -166,16 +164,11 @@ export async function removeMember(
 }
 
 // 6. Promote an existing member to PROJECT_ADMIN. NOT_FOUND if they aren't a member.
-export async function promoteToProjectAdmin(
-  projectId: string,
-  userId: string,
-): Promise<void> {
+export async function promoteToProjectAdmin(projectId: string, userId: string): Promise<void> {
   const updated = await db
     .update(projectMembers)
     .set({ role: 'PROJECT_ADMIN' })
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .returning();
   if (updated.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -199,9 +192,7 @@ export async function setMemberRole(
   const updated = await db
     .update(projectMembers)
     .set({ role })
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .returning();
   if (updated.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -253,9 +244,7 @@ export async function addExistingMember(
       const [updated] = await tx
         .update(projectMembers)
         .set({ role })
-        .where(
-          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-        )
+        .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
         .returning(columns);
       if (updated) return updated;
     }

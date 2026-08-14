@@ -485,16 +485,19 @@ describe('agent-mode /api/v1/admin — authenticate + platform admin', () => {
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
-  it('valid admin JWT → stub 501 Phase 0.5', async () => {
+  // SLYK-0190 implemented the create-project route — an empty body now runs
+  // the real Zod validation (400) instead of the old 501 stub. Full behavior
+  // coverage (happy path, dispatcher failures, validation table) lives in
+  // admin-agent.routes.test.ts with the service + dispatcher client mocked.
+  it('valid admin JWT + invalid body → 400 VALIDATION_FAILED (real route)', async () => {
     const app = await bootAgentModeApp();
     const res = await request(app)
       .post('/api/v1/admin/projects')
       .set('Authorization', `Bearer ${await sessionToken(true)}`)
       .send({});
 
-    expect(res.status).toBe(501);
-    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(res.body.error.message).toBe('Not implemented until Phase 0.5');
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
   it('admin decommission stub → 501; agent-tokens stub → 501 Phase 5', async () => {
