@@ -10,10 +10,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
+    "db:generate:core": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:generate:agent": "drizzle-kit generate --config=drizzle.config.agent.ts",
+    "db:generate": "npm run db:generate:core && npm run db:generate:agent",
+    "db:push:core": "drizzle-kit push --config=drizzle.config.ts",
+    "db:push:agent": "drizzle-kit push --config=drizzle.config.agent.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:studio:core": "drizzle-kit studio --config=drizzle.config.ts",
+    "db:studio:agent": "drizzle-kit studio --config=drizzle.config.agent.ts",
     "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {

@@ -29,17 +29,17 @@ db-psql: ## Open psql shell inside the Postgres container
 
 # --- Migrations / DB tools ----------------------------------------------------
 
-migrate: ## Apply pending Drizzle migrations to the local DB
+migrate: ## Apply pending Drizzle migrations (core always; agent only when SLYKBOARD_AGENT_MODE=true)
 	cd backend && npx tsx src/db/migrate.ts
 
-migrate-push: ## Push schema directly to DB (dev only — no migration file)
-	npm run -w backend db:push
+migrate-push: ## Push core schema directly to DB (dev only — no migration file)
+	npm run -w backend db:push:core
 
-migrate-generate: ## Generate a new Drizzle migration from schema changes
+migrate-generate: ## Generate new Drizzle migrations from schema changes (core + agent)
 	npm run -w backend db:generate
 
-studio: ## Open Drizzle Studio (DB GUI)
-	npm run -w backend db:studio
+studio: ## Open Drizzle Studio (DB GUI, core schema)
+	npm run -w backend db:studio:core
 
 seed: ## Run the DB seed script
 	npm run -w backend db:seed
