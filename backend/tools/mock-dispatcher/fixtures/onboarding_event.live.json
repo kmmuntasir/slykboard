@@ -1,0 +1,4 @@
+{
+  "toState": "LIVE",
+  "detail": { "deployedAt": "2026-08-13T12:00:00Z", "url": "https://inventory-tracker.example.dev" }
+}

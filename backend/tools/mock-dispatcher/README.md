@@ -1,4 +1,4 @@
-# Mock Dispatcher (skeleton)
+# Mock Dispatcher
 
 Standalone HTTP server pretending to be the dispatcher — contract-test
 harness for slykboard's agent mode per
@@ -6,9 +6,11 @@ harness for slykboard's agent mode per
 **Not part of the runtime backend bundle** (`backend/tsconfig.json` keeps
 `tools/` out of `dist/`).
 
-Current scope: **SLYK-0170 Phase 0 skeleton** — HMAC round-trip + `202`
-stubs. Scenario replay, outbound callbacks, and failure injection arrive
-with SLYK-0220/0300/0360.
+Current scope: **SLYK-0220 Phase 0.5** — HMAC round-trip, `202` stubs, and
+the **scenario engine**: `--scenario=<name>` replays scripted
+onboarding/decommission callbacks to slykboard's `/api/v1/internal` routes.
+Ticket-event `state_update.*` streaming arrives with SLYK-0300 (Phase 1),
+messages with SLYK-0360 (Phase 2), latency/rate-limit profiles with Phase 5.
 
 ## Run
 
@@ -19,7 +21,14 @@ npm run mock:dispatcher
 
 # With a port override:
 npm run mock:dispatcher -- --port=4002
+```
 
+`tools/mock-dispatcher/.token` is generated on first run via
+`crypto.randomBytes(32).toString('hex')` and reused thereafter. Both
+processes must use the same value (mock reads its own file; slykboard
+reads the env var).
+
+```bash
 # Terminal 2: start slykboard backend in agent mode pointing at mock
 cd backend
 SLYKBOARD_AGENT_MODE=true \
@@ -30,24 +39,82 @@ npm run dev
 # Terminal 3: drive UI / curl, watch mock log (state.json)
 ```
 
-`tools/mock-dispatcher/.token` is generated on first run via
-`crypto.randomBytes(32).toString('hex')` and reused thereafter. Both
-processes must use the same value (mock reads its own file; slykboard
-reads the env var).
+## Scenarios (SLYK-0220)
 
-## Endpoints (skeleton — all verify HMAC, log to `state.json`, return `202`)
+`--scenario=<name>` loads `scenarios/<name>.json` and replays its scripted
+callback stream when slykboard calls `/onboard` or `/decommission`. One
+process runs one scenario; unset → `202` stubs only (skeleton behavior).
+`--slykboard-url=<url>` sets the base URL for outbound callbacks
+(default `http://localhost:3000`).
+
+### happy-path — onboard to LIVE
+
+```bash
+cd backend
+npm run mock:dispatcher -- --scenario=happy-path
+```
+
+Then create a project (platform admin): the mock acks `POST /onboard`
+with `202 {orchestratorId}` and immediately streams six signed
+`onboarding_event` callbacks to
+`POST /api/v1/internal/projects/:slug/onboarding/events` at ~1s intervals:
+
+`PENDING → PROVISIONING_LXC → WIRING_GITHUB → WIRING_AGENT → WIRING_ZORAXY → SMOKE_TEST → LIVE`
+
+Slykboard's meta reaches `LIVE` with `onboardedAt` set. The scenario file
+also carries the Phase-1 `ticketCreatedStateSequence` per doc 10 — the
+mock ignores it until SLYK-0300 implements ticket-event emission.
+
+### decommission — teardown to DECOMMISSIONED
+
+```bash
+cd backend
+npm run mock:dispatcher -- --scenario=decommission
+```
+
+Trigger `POST /api/v1/admin/projects/:slug/decommission` (correct
+`confirmSlug`): the mock acks `202`, then streams
+`DECOMMISSIONING → DECOMMISSIONED` so meta reaches the terminal state.
+
+### Failure injection (stub — exercised by SLYK-0410/0450)
+
+```bash
+# Arm: every /onboard call fails 500 until cleared — slykboard retries
+# with backoff, then marks onboarding FAILED
+curl "http://localhost:4001/admin/next-status?path=/onboard&status=500"
+
+# Disarm
+curl "http://localhost:4001/admin/next-status?path=/onboard&status=clear"
+```
+
+The override is **sticky until cleared** (not one-shot) so all of
+slykboard's retry attempts fail — a one-shot would let retry #1 succeed
+and never exercise the FAILED path. The signature gate still runs first
+(an unsigned armed call gets `401`, not the injected status).
+
+## Endpoints
+
+Inbound (slykboard → mock, signed with `X-Slykboard-Signature`):
 
 | Method + path                        | Response                        |
 | ------------------------------------ | ------------------------------- |
-| `POST /onboard`                      | `202 {orchestratorId}`          |
-| `POST /decommission`                 | `202`                           |
+| `POST /onboard`                      | `202 {orchestratorId}` (+ streams onboarding events when a scenario is loaded) |
+| `POST /decommission`                 | `202` (+ streams teardown events when a scenario is loaded) |
 | `POST /webhooks/ticket-events`       | `202 {acceptedAt}`              |
 | `POST /webhooks/pm-action/need-human-help` | `202`                     |
+| `GET /admin/next-status`             | local control — see above       |
 
 Invalid or missing `X-Slykboard-Signature` → `401`.
 
+Outbound (mock → slykboard, signed with `X-Dispatcher-Signature`):
+
+| Method + path | Purpose |
+|---|---|
+| `POST /api/v1/internal/projects/:slug/onboarding/events` | Stream onboarding lifecycle (Phase 0.5) |
+| `POST /api/v1/internal/jobs/:ticketId/state` | Phase 1 (SLYK-0300) |
+
 Every received call (valid or rejected) is appended to `state.json` as one
-JSON line: `{at, method, path, signatureValid, body}`.
+JSON line: `{at, method, path, signatureValid, body, injectedStatus?}`.
 
 ## Signing a manual request
 
@@ -74,16 +141,33 @@ curl -s -X POST http://localhost:4001/webhooks/ticket-events \
 # → 401 {"error":"Signature invalid"}
 ```
 
-Outbound (mock → slykboard) callbacks will use the same HMAC scheme via
-the exported `sign()` helper in [`sign.ts`](./sign.ts) — slykboard's
+Outbound (mock → slykboard) callbacks use the same HMAC scheme via the
+exported `sign()` helper in [`sign.ts`](./sign.ts) — slykboard's
 `agentTokenAuth` middleware accepts them because the scheme is identical.
 
-## Scenarios (stub — SLYK-0220+)
+## Scenario file shape
 
-`npm run mock:dispatcher:scenario -- --scenario=happy-path` currently
-errors with "no scenarios registered yet". Scenario files
-(`scenarios/*.json`) and payload templates (`fixtures/*.json`) arrive with
-Phase 0.5/1/2/5.
+```json
+{
+  "name": "happy-path",
+  "onboardReply": { "status": 202, "body": { "orchestratorId": "mock-orch-001" } },
+  "onboardingEvents": [
+    { "delayMs": 1000, "toState": "PROVISIONING_LXC", "detail": { "ctid": 999 } },
+    { "delayMs": 1000, "toState": "LIVE", "detail": { "deployedAt": "…" } }
+  ],
+  "decommissionEvents": [
+    { "delayMs": 1000, "toState": "DECOMMISSIONING" },
+    { "delayMs": 1000, "toState": "DECOMMISSIONED" }
+  ],
+  "ticketCreatedStateSequence": []
+}
+```
+
+The mock sleeps `delayMs` before each callback. `fromState` is derived
+(seed: `PENDING` for onboard, `DECOMMISSIONING` for decommission, then the
+previous step's `toState`) unless a step sets it explicitly. Steps without
+`detail` fall back to the matching `fixtures/onboarding_event.*.json`
+template.
 
 ## Layout
 
@@ -92,8 +176,10 @@ tools/mock-dispatcher/
   README.md       # this file
   index.ts        # the server itself (Express, single file)
   sign.ts         # shared HMAC sign/verify helpers
-  scenarios/      # canned behavior scripts (SLYK-0220+)
-  fixtures/       # payload templates (SLYK-0220+)
+  scenarios/
+    happy-path.json   # onboard → LIVE (+ Phase-1 ticket sequence, unused until SLYK-0300)
+    decommission.json # DECOMMISSIONING → DECOMMISSIONED
+  fixtures/       # onboarding_event payload templates (detail fallback)
   .token          # generated on first run (gitignored)
   state.json      # runtime: append-only log of received calls (gitignored)
 ```

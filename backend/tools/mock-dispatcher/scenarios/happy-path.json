@@ -1,0 +1,35 @@
+{
+  "name": "happy-path",
+  "description": "Onboard → onboarding event stream to LIVE → (Phase 1) full ticket pipeline to DONE",
+  "onboardReply": { "status": 202, "body": { "orchestratorId": "mock-orch-001" } },
+  "onboardingEvents": [
+    {
+      "delayMs": 1000,
+      "toState": "PROVISIONING_LXC",
+      "detail": { "ctid": 999, "lanIp": "192.168.31.999" }
+    },
+    { "delayMs": 1000, "toState": "WIRING_GITHUB" },
+    { "delayMs": 1000, "toState": "WIRING_AGENT" },
+    { "delayMs": 1000, "toState": "WIRING_ZORAXY" },
+    { "delayMs": 1000, "toState": "SMOKE_TEST" },
+    { "delayMs": 1000, "toState": "LIVE", "detail": { "deployedAt": "2026-08-13T12:00:00Z" } }
+  ],
+  "ticketCreatedStateSequence": [
+    { "delayMs": 500, "state": "QUEUED" },
+    { "delayMs": 1500, "state": "AGENT_RUNNING", "detail": { "agentSessionId": "mock-cyrus-001" } },
+    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "abc1234" } },
+    { "delayMs": 1500, "state": "CI_RUNNING" },
+    {
+      "delayMs": 3000,
+      "state": "MERGING",
+      "detail": {
+        "checksPassed": ["lint", "test", "build"],
+        "checksFailed": [],
+        "coverageDelta": { "files": 2, "lines": 24 },
+        "diffSize": { "filesChanged": 3, "insertions": 120, "deletions": 15 },
+        "touchedSensitivePaths": { "infra": false, "migrations": false, "deployConfig": false }
+      }
+    },
+    { "delayMs": 1500, "state": "DONE", "detail": { "deployedAt": "2026-08-13T12:30:00Z" } }
+  ]
+}

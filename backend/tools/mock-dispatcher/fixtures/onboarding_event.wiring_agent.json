@@ -1,0 +1,4 @@
+{
+  "toState": "WIRING_AGENT",
+  "detail": { "agentSessionId": "mock-cyrus-001" }
+}
