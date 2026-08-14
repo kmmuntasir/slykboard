@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
-import { projectAgentMeta } from '../db/schema';
+import { onboardingEvents, projectAgentMeta } from '../db/schema';
 
 // SLYK-0190 — ALL ProjectAgentMeta access for the onboarding flow lives here
 // (mirrors membershipService's ownership rule for project_members). The
@@ -50,4 +50,32 @@ export async function markOnboardingFailed(projectId: string, errorText: string)
     .update(projectAgentMeta)
     .set({ onboardingState: 'FAILED', onboardingError: errorText })
     .where(eq(projectAgentMeta.projectId, projectId));
+}
+
+/**
+ * SLYK-0210 — decommission start, inside the caller's transaction: flip
+ * onboardingState to DECOMMISSIONING and append the audit event (03-security
+ * § Decommission safety layer 5). The initiating admin's id rides the event
+ * detail (OnboardingEvents has no user column); createdAt is the timestamp.
+ * fromState is the meta's previous state so the timeline stays truthful,
+ * including manual retries from DECOMMISSIONING (layer 4).
+ */
+export async function markDecommissioningInTx(
+  tx: Tx,
+  args: {
+    projectId: string;
+    fromState: ProjectAgentMetaRow['onboardingState'];
+    initiatedBy: string;
+  },
+): Promise<void> {
+  await tx
+    .update(projectAgentMeta)
+    .set({ onboardingState: 'DECOMMISSIONING' })
+    .where(eq(projectAgentMeta.projectId, args.projectId));
+  await tx.insert(onboardingEvents).values({
+    projectId: args.projectId,
+    fromState: args.fromState,
+    toState: 'DECOMMISSIONING',
+    detail: { initiatedBy: args.initiatedBy },
+  });
 }

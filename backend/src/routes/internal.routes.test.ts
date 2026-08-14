@@ -672,16 +672,20 @@ describe('agent-mode /api/v1/admin — authenticate + platform admin', () => {
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
-  it('admin decommission stub → 501; agent-tokens stub → 501 Phase 5', async () => {
+  it('admin decommission (SLYK-0210 real route) → 400 on invalid body; agent-tokens stub → 501 Phase 5', async () => {
     const app = await bootAgentModeApp();
     const token = await sessionToken(true);
 
+    // SLYK-0210 implemented decommission — a missing confirmSlug now runs the
+    // real Zod validation (400) instead of the old 501 stub. Full behavior
+    // coverage (happy path, gates, dispatcher failures) lives in
+    // admin-agent.routes.test.ts with the service mocked.
     const decommission = await request(app)
       .post('/api/v1/admin/projects/inventory-tracker/decommission')
       .set('Authorization', `Bearer ${token}`)
-      .send({ confirmSlug: 'inventory-tracker' });
-    expect(decommission.status).toBe(501);
-    expect(decommission.body.error.message).toBe('Not implemented until Phase 0.5');
+      .send({});
+    expect(decommission.status).toBe(400);
+    expect(decommission.body.error.code).toBe('VALIDATION_FAILED');
 
     const tokens = await request(app)
       .post('/api/v1/admin/agent-tokens')

@@ -29,8 +29,8 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Scripted listener: pops one status per request; 204 has no body. */
-function makeListener(script: number[]) {
+/** Scripted listener: pops one status per request; 204/202-empty have no body. */
+function makeListener(script: number[], options: { emptyBody?: boolean } = {}) {
   const requests: RecordedRequest[] = [];
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -52,8 +52,8 @@ function makeListener(script: number[]) {
         parsed,
       });
       const status = script[Math.min(requests.length - 1, script.length - 1)]!;
-      if (status === 204) {
-        res.writeHead(204).end();
+      if (status === 204 || options.emptyBody) {
+        res.writeHead(status).end();
       } else {
         res.writeHead(status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: `scripted ${status}` }));
@@ -69,8 +69,11 @@ interface ListenerHandle {
   baseUrl: string;
 }
 
-async function startListener(script: number[]): Promise<ListenerHandle> {
-  const { server, requests } = makeListener(script);
+async function startListener(
+  script: number[],
+  options: { emptyBody?: boolean } = {},
+): Promise<ListenerHandle> {
+  const { server, requests } = makeListener(script, options);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return { server, requests, baseUrl: `http://127.0.0.1:${port}` };
@@ -268,6 +271,24 @@ describe('postToDispatcher', () => {
         baseUrl: l.baseUrl,
         token: TOKEN,
       },
+    );
+
+    expect(l.requests.length).toBe(1);
+    expectSigned(l.requests[0]!);
+    expect(result).toBeUndefined();
+  });
+
+  // SLYK-0210 — /decommission's documented reply is 202 with NO body
+  // (07-dispatcher-contract.md; mock dispatcher: res.status(202).end()). A
+  // successful response must resolve undefined, not throw on JSON.parse('').
+  it('resolves undefined on a bodyless 202 (the /decommission reply)', async () => {
+    const l = await startListener([202], { emptyBody: true });
+    listeners.push(l.server);
+
+    const result = await postToDispatcher<void>(
+      '/decommission',
+      { projectId: 'p-1' },
+      { baseUrl: l.baseUrl, token: TOKEN },
     );
 
     expect(l.requests.length).toBe(1);

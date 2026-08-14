@@ -29,6 +29,7 @@ vi.mock('../services/tokenVersion', () => ({
 // The service's DB seams — everything below the route is stubbed here.
 const serviceMock = vi.hoisted(() => ({
   createAgentProject: vi.fn(),
+  decommissionAgentProject: vi.fn(),
 }));
 vi.mock('../services/projectOnboardingService', () => serviceMock);
 
@@ -36,6 +37,7 @@ import { SignJWT } from 'jose';
 import * as projectOnboardingService from '../services/projectOnboardingService';
 
 const mockedCreate = vi.mocked(projectOnboardingService.createAgentProject);
+const mockedDecommission = vi.mocked(projectOnboardingService.decommissionAgentProject);
 
 // Must match backend/vitest.config.ts JWT_SECRET — the real config reads it.
 const JWT_SECRET = 'test-secret-at-least-32-characters-long-aaaa';
@@ -88,6 +90,7 @@ interface Recorded {
 function startDispatcher(
   status: number,
   body: unknown,
+  options: { emptyBody?: boolean } = {},
 ): Promise<{
   server: Server;
   requests: Recorded[];
@@ -104,6 +107,12 @@ function startDispatcher(
         parsed: JSON.parse(rawBody),
         signature: req.headers['x-slykboard-signature'] as string | undefined,
       });
+      // emptyBody mirrors the mock dispatcher's /decommission reply:
+      // res.status(202).end() — status + headers, zero body bytes.
+      if (options.emptyBody) {
+        res.writeHead(status).end();
+        return;
+      }
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(body));
     });
@@ -467,6 +476,183 @@ describe('POST /api/v1/admin/projects — live dispatcher wire (real dispatcherC
 
       expect(res.status).toBe(201);
       expect(res.body).toEqual({ data: PROJECT_ROW });
+    } finally {
+      await new Promise<void>((resolve) => dispatcher.server.close(() => resolve()));
+    }
+  });
+});
+
+// ── SLYK-0210 — POST /api/v1/admin/projects/:slug/decommission ─────────────
+// Route matrix: validation, gates, envelope mapping, and the live-wire 202.
+// Service SQL behavior lives in projectOnboardingService.test.ts.
+
+const DECOMMISSIONING_META = {
+  projectId: '22222222-2222-4222-8222-222222222222',
+  slug: 'inventory-tracker',
+  onboardingState: 'DECOMMISSIONING',
+};
+
+describe('POST /api/v1/admin/projects/:slug/decommission — route matrix', () => {
+  beforeEach(() => {
+    mockedDecommission.mockReset();
+    mockedDecommission.mockResolvedValue(DECOMMISSIONING_META as never);
+  });
+
+  it('happy path → 202 envelope with DECOMMISSIONING meta; initiatedBy from req.user', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({ confirmSlug: 'inventory-tracker' });
+
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ data: DECOMMISSIONING_META });
+    expect(mockedDecommission).toHaveBeenCalledWith({
+      slug: 'inventory-tracker',
+      body: { confirmSlug: 'inventory-tracker' },
+      initiatedBy: 'u1',
+    });
+  });
+
+  // AC: wrong confirmSlug → 400; missing field → 400. Both hit Zod (missing)
+  // or the service gate (mismatch) — the route maps either to the envelope.
+  it('missing confirmSlug → 400 VALIDATION_FAILED, service never called', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedDecommission).not.toHaveBeenCalled();
+  });
+
+  it('wrong confirmSlug (service gate) → 400 with details.expected naming the slug', async () => {
+    mockedDecommission.mockRejectedValue(
+      freshAppError.build!(
+        ErrorCode.VALIDATION_FAILED,
+        'confirmSlug does not match the project slug',
+        { expected: 'inventory-tracker' },
+      ),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({ confirmSlug: 'wrong-slug' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(res.body.error.details).toEqual({ expected: 'inventory-tracker' });
+  });
+
+  it('empty confirmSlug → 400 (Zod min(1))', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({ confirmSlug: '' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedDecommission).not.toHaveBeenCalled();
+  });
+
+  it('unknown slug (service 404) → 404 envelope', async () => {
+    mockedDecommission.mockRejectedValue(
+      freshAppError.build!(ErrorCode.NOT_FOUND, "Project 'ghost' not found", {
+        slug: 'ghost',
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/ghost/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({ confirmSlug: 'ghost' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('dispatcher failure (service 502) → 502 envelope with details', async () => {
+    mockedDecommission.mockRejectedValue(
+      freshAppError.build!(
+        ErrorCode.UPSTREAM_FAILED,
+        'Dispatcher decommission failed: ECONNREFUSED',
+        { slug: 'inventory-tracker', dispatcherStatus: 0 },
+      ),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({ confirmSlug: 'inventory-tracker' });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe('UPSTREAM_FAILED');
+    expect(res.body.error.details).toEqual({
+      slug: 'inventory-tracker',
+      dispatcherStatus: 0,
+    });
+  });
+
+  // AC: non-admin → 403; plain mode → 501.
+  it('non-admin JWT → 403 FORBIDDEN, service never called', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(false)}`)
+      .send({ confirmSlug: 'inventory-tracker' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedDecommission).not.toHaveBeenCalled();
+  });
+
+  it('no JWT → 401 UNAUTHENTICATED', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .send({ confirmSlug: 'inventory-tracker' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('plain mode → 501 NOT_IMPLEMENTED from requireAgentMode', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app)
+      .post('/api/v1/admin/projects/inventory-tracker/decommission')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send({ confirmSlug: 'inventory-tracker' });
+
+    expect(res.status).toBe(501);
+    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(res.body.error.message).toBe('Agent mode is not enabled on this server');
+    expect(mockedDecommission).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/admin/projects/:slug/decommission — live dispatcher wire (real dispatcherClient)', () => {
+  beforeEach(() => {
+    mockedDecommission.mockReset();
+    mockedDecommission.mockResolvedValue(DECOMMISSIONING_META as never);
+  });
+
+  // Contract: /decommission replies 202 with NO body (mock dispatcher:
+  // res.status(202).end()). Verifies the dispatcherClient empty-202 fix.
+  it('dispatcher 202 with EMPTY body → 202 through the real client', async () => {
+    const dispatcher = await startDispatcher(202, undefined, { emptyBody: true });
+    try {
+      const app = await bootAgentModeApp(dispatcher.url);
+      const res = await request(app)
+        .post('/api/v1/admin/projects/inventory-tracker/decommission')
+        .set('Authorization', `Bearer ${await sessionToken(true)}`)
+        .send({ confirmSlug: 'inventory-tracker' });
+
+      expect(res.status).toBe(202);
+      expect(res.body).toEqual({ data: DECOMMISSIONING_META });
     } finally {
       await new Promise<void>((resolve) => dispatcher.server.close(() => resolve()));
     }

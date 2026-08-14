@@ -3,7 +3,8 @@ import { z } from 'zod';
 // SLYK-0190 — request validation for POST /api/v1/admin/projects
 // (docs/agentic-automation/05-backend-routes.md § admin routes).
 // SLYK-0150 left the param shapes here; SLYK-0190 adds the create-project
-// body. Decommission + agent-token bodies stay with their phases.
+// body. SLYK-0210 adds the decommission confirmation body; the agent-token
+// body stays with Phase 5.
 
 export const slugParam = z.object({
   slug: z.string().min(1),
@@ -88,5 +89,15 @@ export const createAgentProjectBody = z
     }
   });
 
+// SLYK-0210 — decommission is the system's most destructive action
+// (03-security.md § Decommission safety layer 2): the admin must retype the
+// project slug. Shape-only check here; the service compares it against the
+// loaded meta row (slug is public in URLs, so the mismatch response may name
+// it — nothing beyond it).
+export const decommissionProjectBody = z.object({
+  confirmSlug: z.string().min(1, 'confirmSlug is required'),
+});
+
 export type SlugParam = z.infer<typeof slugParam>;
 export type CreateAgentProjectBody = z.infer<typeof createAgentProjectBody>;
+export type DecommissionProjectBody = z.infer<typeof decommissionProjectBody>;
