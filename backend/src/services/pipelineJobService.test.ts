@@ -78,6 +78,17 @@ vi.mock('../db/client', () => {
 import { pipelineJobs, pipelineEvents, projects, tickets } from '../db/schema';
 import { updateJobState } from './pipelineJobService';
 import { setStateSink, type SseStateEvent } from './sseEmitter';
+import { notifyAgentWaitingEmail } from './agentWaitingNotifyService';
+
+// SLYK-0350 — the AGENT_WAITING email trigger is a post-commit hook inside
+// updateJobState. Mock the notify service (its own delivery/gating matrix
+// lives in agentWaitingNotifyService.test.ts); here we assert reachability,
+// call shape, and failure isolation.
+vi.mock('./agentWaitingNotifyService', () => ({
+  notifyAgentWaitingEmail: vi.fn(async () => {}),
+}));
+
+const notify = vi.mocked(notifyAgentWaitingEmail);
 
 const TICKET_ID = '11111111-1111-4111-8111-111111111111';
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
@@ -125,6 +136,7 @@ beforeEach(() => {
   bag.ticketWhere.mockResolvedValue(undefined);
   sseEvents.length = 0;
   setStateSink((e) => sseEvents.push(e));
+  notify.mockClear();
 });
 
 describe('updateJobState — legal transitions', () => {
@@ -310,6 +322,61 @@ describe('updateJobState — SSE emit', () => {
     await expect(
       updateJobState({ ticketId: TICKET_ID, body: { state: 'QUEUED' } }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('updateJobState — AGENT_WAITING email trigger (SLYK-0350)', () => {
+  it('transition to AGENT_WAITING fires the notify hook exactly once with the ticketId', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_RUNNING' })]);
+
+    await updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_WAITING' } });
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(TICKET_ID);
+  });
+
+  // WAITING→RUNNING→WAITING re-entry must notify again (two emails total —
+  // correct per the ticket); the reverse-direction exit must NOT notify.
+  it('non-AGENT_WAITING transitions never fire the notify hook', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_WAITING', needsPmAttention: true })]);
+
+    await updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_RUNNING' } });
+
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  // AC "one email per transition": the ticket's WAITING→RUNNING→WAITING
+  // sequence = 2 entries = 2 emails. The mock job load returns the CURRENT
+  // state each round, so each await below pins the `from` side correctly.
+  it('WAITING→RUNNING→WAITING fires once per AGENT_WAITING entry (2 total)', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_RUNNING' })]);
+    await updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_WAITING' } });
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_WAITING', needsPmAttention: true })]);
+    await updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_RUNNING' } });
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_RUNNING' })]);
+    await updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_WAITING' } });
+
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejected transition (illegal self-loop) never reaches the notify hook', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_WAITING' })]);
+
+    await expect(
+      updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_WAITING' } }),
+    ).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
+
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('a rejecting notify hook never fails the state write (email is fire-and-forget)', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'AGENT_RUNNING' })]);
+    bag.jobReturning.mockResolvedValue([baseJob({ state: 'AGENT_WAITING' })]);
+    notify.mockRejectedValue(new Error('SMTP down') as never);
+
+    await expect(
+      updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_WAITING' } }),
+    ).resolves.toMatchObject({ state: 'AGENT_WAITING' });
   });
 });
 
