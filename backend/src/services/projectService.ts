@@ -36,6 +36,42 @@ export interface CreateProjectInput {
   creatorId: string;
 }
 
+// Drizzle tx client alias — shared with projectOnboardingService (SLYK-0190),
+// which composes this insert into its own wider create-project transaction.
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Insert a projects row + seed its projectSequences counter on the CALLER's
+ * transaction (F12 D1: the pair must commit atomically so
+ * allocateTicketNumber never observes a missing sequences row). Columns
+ * default to To Do/In Progress/Done with stable ids. SLYK-0190 extracts this
+ * from createProject so agent-mode onboarding creates the identical core
+ * rows in one tx alongside ProjectAgentMeta + membership.
+ */
+export async function insertProjectInTx(tx: Tx, input: CreateProjectInput): Promise<ProjectRow> {
+  const columns: Column[] =
+    input.columns && input.columns.length > 0
+      ? input.columns.map((column) => ({ id: column.id ?? randomUUID(), name: column.name }))
+      : withIds(DEFAULT_COLUMNS);
+
+  const [project] = await tx
+    .insert(projects)
+    .values({
+      name: input.name,
+      slug: input.slug,
+      columns,
+      creatorId: input.creatorId,
+    })
+    .returning();
+
+  await tx.insert(projectSequences).values({
+    projectId: project!.id,
+    nextNumber: START_TICKET_NUMBER,
+  });
+
+  return project!;
+}
+
 export async function createProject(input: CreateProjectInput): Promise<ProjectRow> {
   // F08 D-Slug-Format: normalize then validate.
   const slug = normalizeSlug(input.slug);
@@ -59,36 +95,10 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectR
     });
   }
 
-  // F08 D-Default-Columns + D-Column-Identity: ensure every column has an id.
-  const columns: Column[] =
-    input.columns && input.columns.length > 0
-      ? input.columns.map((column) => ({ id: column.id ?? randomUUID(), name: column.name }))
-      : withIds(DEFAULT_COLUMNS);
-
-  // F12 D1: insert the project AND seed its ticket_number counter in one
-  // transaction so allocateTicketNumber never observes a missing
-  // project_sequences row. A fresh project has no tickets, so the counter
-  // starts at START_TICKET_NUMBER (= 1, SLYK-001).
-  const row = await db.transaction(async (tx) => {
-    const [project] = await tx
-      .insert(projects)
-      .values({
-        name: input.name,
-        slug,
-        columns,
-        creatorId: input.creatorId,
-      })
-      .returning();
-
-    // F12: seed the per-project counter so allocateTicketNumber never sees a missing row.
-    await tx.insert(projectSequences).values({
-      projectId: project!.id,
-      nextNumber: START_TICKET_NUMBER,
-    });
-
-    return project!;
-  });
-  return row;
+  // F08 D-Default-Columns + F12 D1: the insert + counter seeding (including
+  // default columns with ids) live in insertProjectInTx.
+  // F12 D1 note: the project AND its ticket_number counter commit atomically.
+  return db.transaction((tx) => insertProjectInTx(tx, { ...input, slug }));
 }
 
 // SLYK-01 Task J — visibility is membership-scoped with a Platform-Admin bypass.
@@ -187,7 +197,7 @@ export async function updateProject(args: {
     }
 
     // DEL-04: deactivating a project stops every running timer on its tickets.
- // Runs inside this tx BEFORE the projects UPDATE so a failure rolls back both.
+    // Runs inside this tx BEFORE the projects UPDATE so a failure rolls back both.
     // Reactivation (isActive===true) must NOT touch timers.
     if (args.isActive === false) {
       await stopTimersForProject(tx, project.id);
