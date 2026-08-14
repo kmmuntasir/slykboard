@@ -42,6 +42,10 @@ function view(state: OnboardingState, error: string | null = null): OnboardingTi
             slug: 'inventory-tracker',
             onboardingState: state,
             onboardingError: error,
+            // SLYK-0240 — fields <DecommissionDialog>'s bullets quote.
+            lxcCtid: 142,
+            subdomain: 'inventory-tracker',
+            githubRepoCreated: true,
         },
         events: [
             {

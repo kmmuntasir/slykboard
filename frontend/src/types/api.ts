@@ -10,8 +10,9 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
-  // SLYK-0260/0290: agent-era backend codes (backend/src/utils/envelope.ts has
-  // shipped these since the pipeline state machine landed).
+  // Agent-era backend codes (backend/src/utils/envelope.ts has shipped these
+  // since the pipeline state machine landed). The decommission flow surfaces
+  // UPSTREAM_FAILED as 502 (SLYK-0240).
   INVALID_STATE_TRANSITION: 'INVALID_STATE_TRANSITION',
   NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
   UPSTREAM_FAILED: 'UPSTREAM_FAILED',

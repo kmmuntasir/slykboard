@@ -330,6 +330,10 @@ describe('agent-mode GET /api/v1/me/projects/:slug/onboarding/events (SLYK-0230)
       slug: SLUG,
       onboardingState: 'PROVISIONING_LXC',
       onboardingError: null,
+      // SLYK-0240 — fields <DecommissionDialog>'s bullets quote.
+      lxcCtid: 142,
+      subdomain: 'inventory-tracker',
+      githubRepoCreated: true,
     },
     events: [
       {

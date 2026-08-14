@@ -68,12 +68,17 @@ export interface OnboardingEvent {
 }
 
 // GET /api/v1/me/projects/:slug/onboarding/events response (SLYK-0230).
+// SLYK-0240 widened project with the three fields <DecommissionDialog>'s
+// consequence bullets quote (ctid, subdomain, githubRepoCreated).
 export interface OnboardingTimelineView {
   project: {
     name: string;
     slug: string;
     onboardingState: OnboardingState;
     onboardingError: string | null;
+    lxcCtid: number | null;
+    subdomain: string;
+    githubRepoCreated: boolean;
   };
   events: OnboardingEvent[];
 }

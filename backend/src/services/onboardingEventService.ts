@@ -138,13 +138,18 @@ export async function getDeployTarget(slug: string): Promise<DeployTarget> {
 // ─────────────────────────────────────────────────────────────────────────
 
 // The exact fields the timeline page renders (06 layout: header status line +
-// rows). The full meta row stays internal — subdomain/repo/etc. are admin-form
-// data, not timeline data.
+// rows). The full meta row stays internal — SLYK-0240 widens this by exactly
+// the three fields <DecommissionDialog>'s consequence bullets quote (ctid,
+// subdomain, githubRepoCreated); repo URLs/agent context stay admin-form data,
+// not timeline data.
 export interface OnboardingTimelineProject {
   name: string;
   slug: string;
   onboardingState: ProjectAgentMetaRow['onboardingState'];
   onboardingError: string | null;
+  lxcCtid: ProjectAgentMetaRow['lxcCtid'];
+  subdomain: ProjectAgentMetaRow['subdomain'];
+  githubRepoCreated: ProjectAgentMetaRow['githubRepoCreated'];
 }
 
 export interface OnboardingTimelineView {
@@ -181,6 +186,9 @@ export async function getOnboardingTimeline(slug: string): Promise<OnboardingTim
         slug: meta.slug,
         onboardingState: meta.onboardingState,
         onboardingError: meta.onboardingError,
+        lxcCtid: meta.lxcCtid,
+        subdomain: meta.subdomain,
+        githubRepoCreated: meta.githubRepoCreated,
       },
       events,
     };
