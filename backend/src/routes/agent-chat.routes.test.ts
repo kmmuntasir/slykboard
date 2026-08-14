@@ -69,6 +69,14 @@ const onboardingEventServiceMock = vi.hoisted(() => ({
   getOnboardingTimeline: vi.fn(),
 }));
 vi.mock('../services/onboardingEventService', () => onboardingEventServiceMock);
+// SLYK-0330 — the chat-thread read/reply seams. Service-transaction behavior
+// (state gating, needsPmAttention clear, dispatcher payload, retry queue)
+// lives in agentMessageService.test.ts / pmReplyDeliveryQueue.test.ts.
+const agentMessageServiceMock = vi.hoisted(() => ({
+  getChatThread: vi.fn(),
+  postPmReply: vi.fn(),
+}));
+vi.mock('../services/agentMessageService', () => agentMessageServiceMock);
 
 // AppError identity across vi.resetModules: errorMiddleware (re-imported per
 // boot) checks `err instanceof AppError`, so a rejection built from THIS
@@ -84,6 +92,7 @@ import * as ticketService from '../services/ticketService';
 import * as pipelineViewService from '../services/pipelineViewService';
 import * as ticketAgentService from '../services/ticketAgentService';
 import * as onboardingEventService from '../services/onboardingEventService';
+import * as agentMessageService from '../services/agentMessageService';
 
 afterEach(async () => {
   const mod = await import('../utils/appError');
@@ -95,6 +104,8 @@ const mockedGetTicketForUser = vi.mocked(ticketService.getTicketForUser);
 const mockedGetPipelineView = vi.mocked(pipelineViewService.getPipelineView);
 const mockedQueueForAgent = vi.mocked(ticketAgentService.queueForAgent);
 const mockedGetOnboardingTimeline = vi.mocked(onboardingEventService.getOnboardingTimeline);
+const mockedGetChatThread = vi.mocked(agentMessageService.getChatThread);
+const mockedPostPmReply = vi.mocked(agentMessageService.postPmReply);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -841,5 +852,216 @@ describe('agent-mode POST /api/v1/me/tickets/:ticketId/queue (SLYK-0290)', () =>
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
     expect(mockedGetTicketForUser).not.toHaveBeenCalled();
     expect(mockedQueueForAgent).not.toHaveBeenCalled();
+  });
+});
+
+// ── SLYK-0330: PM chat thread read + reply (supertest) ─────────────────────
+
+describe('agent-mode GET /api/v1/me/tickets/:ticketId/messages (SLYK-0330)', () => {
+  const MESSAGES_PATH = `/api/v1/me/tickets/${TICKET_ID}/messages`;
+
+  const thread = {
+    messages: [
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        ticketId: TICKET_ID,
+        authorRole: 'AGENT',
+        authorUserId: null,
+        body: 'Should I add a confirm dialog?',
+        agentSessionId: 'cyrus-session-abc',
+        idempotencyKey: TRACE_ID,
+        readAt: null,
+        createdAt: '2026-08-13T00:00:00.000Z',
+      },
+    ],
+    ticketState: 'AGENT_WAITING',
+  };
+
+  beforeEach(() => {
+    mockedGetTicketForUser.mockReset();
+    mockedGetChatThread.mockReset();
+    mockedGetTicketForUser.mockResolvedValue({ id: TICKET_ID } as never);
+    mockedGetChatThread.mockResolvedValue(thread as never);
+  });
+
+  it('member → 200 { data: { messages, ticketState } }, readAt stamped by the service', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: thread });
+    expect(mockedGetTicketForUser).toHaveBeenCalledWith({
+      ticketId: TICKET_ID,
+      userId: PM.id,
+      isPlatformAdmin: false,
+    });
+    // Only after the member access check does the readAt write run.
+    expect(mockedGetChatThread).toHaveBeenCalledWith(TICKET_ID);
+  });
+
+  it('non-member (outsider) → 404 NOT_FOUND before the thread read (no readAt write)', async () => {
+    mockedGetTicketForUser.mockRejectedValue(freshAppError.build!('NOT_FOUND', 'Ticket not found'));
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(OUTSIDER)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedGetChatThread).not.toHaveBeenCalled();
+  });
+
+  it('non-uuid ticketId → 400 VALIDATION_FAILED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get('/api/v1/me/tickets/not-a-uuid/messages')
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetTicketForUser).not.toHaveBeenCalled();
+    expect(mockedGetChatThread).not.toHaveBeenCalled();
+  });
+
+  it('plain mode → 501 NOT_IMPLEMENTED (requireAgentMode gate)', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app)
+      .get(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(501);
+    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(mockedGetChatThread).not.toHaveBeenCalled();
+  });
+});
+
+describe('agent-mode POST /api/v1/me/tickets/:ticketId/messages (SLYK-0330)', () => {
+  const MESSAGES_PATH = `/api/v1/me/tickets/${TICKET_ID}/messages`;
+
+  const pmRow = {
+    id: '66666666-6666-4666-8666-666666666666',
+    ticketId: TICKET_ID,
+    authorRole: 'PM',
+    authorUserId: PM.id,
+    body: 'Yes, add a confirm dialog with Cancel as default.',
+    agentSessionId: 'cyrus-session-abc',
+    idempotencyKey: null,
+    readAt: null,
+    createdAt: '2026-08-13T00:00:02.000Z',
+  };
+
+  beforeEach(() => {
+    mockedGetTicketForUser.mockReset();
+    mockedPostPmReply.mockReset();
+    mockedGetTicketForUser.mockResolvedValue({ id: TICKET_ID } as never);
+    mockedPostPmReply.mockResolvedValue({ row: pmRow, delivered: true } as never);
+  });
+
+  it('member → 201 { data: { ...row, delivered: true } }, service gets user id + body', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ body: 'Yes, add a confirm dialog with Cancel as default.' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ data: { ...pmRow, delivered: true } });
+    expect(mockedPostPmReply).toHaveBeenCalledWith({
+      ticketId: TICKET_ID,
+      userId: PM.id,
+      body: 'Yes, add a confirm dialog with Cancel as default.',
+    });
+  });
+
+  it('dispatcher down → still 201, response carries delivered: false', async () => {
+    mockedPostPmReply.mockResolvedValue({ row: pmRow, delivered: false } as never);
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ body: 'ping' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.delivered).toBe(false);
+    expect(res.body.data.id).toBe(pmRow.id);
+  });
+
+  it('agent not listening (DONE etc.) → 409 CONFLICT, no insert upstream of the route', async () => {
+    mockedPostPmReply.mockRejectedValue(
+      freshAppError.build!('CONFLICT', 'Agent is not listening on this ticket', {
+        ticketId: TICKET_ID,
+        state: 'DONE',
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ body: 'too late' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+    expect(res.body.error.details).toEqual({ ticketId: TICKET_ID, state: 'DONE' });
+  });
+
+  it('empty body → 400 VALIDATION_FAILED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ body: '' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetTicketForUser).not.toHaveBeenCalled();
+    expect(mockedPostPmReply).not.toHaveBeenCalled();
+  });
+
+  it('body over 4000 chars → 400 VALIDATION_FAILED', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ body: 'x'.repeat(4001) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedPostPmReply).not.toHaveBeenCalled();
+  });
+
+  it('non-member (outsider) → 404 NOT_FOUND before the reply service runs', async () => {
+    mockedGetTicketForUser.mockRejectedValue(freshAppError.build!('NOT_FOUND', 'Ticket not found'));
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(OUTSIDER)}`)
+      .send({ body: 'let me in' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedPostPmReply).not.toHaveBeenCalled();
+  });
+
+  it('no JWT → 401 UNAUTHENTICATED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).post(MESSAGES_PATH).send({ body: 'hi' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedPostPmReply).not.toHaveBeenCalled();
+  });
+
+  it('plain mode → 501 NOT_IMPLEMENTED (requireAgentMode gate)', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app)
+      .post(MESSAGES_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ body: 'hi' });
+
+    expect(res.status).toBe(501);
+    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(mockedPostPmReply).not.toHaveBeenCalled();
   });
 });

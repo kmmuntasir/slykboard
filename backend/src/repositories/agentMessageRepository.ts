@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
 import { agentMessages } from '../db/schema';
 
@@ -44,4 +44,40 @@ export async function listByTicketId(tx: Tx, ticketId: string): Promise<AgentMes
     .from(agentMessages)
     .where(eq(agentMessages.ticketId, ticketId))
     .orderBy(asc(agentMessages.createdAt));
+}
+
+/**
+ * Stamp readAt = now() on the ticket's unread AGENT messages — the PM fetch of
+ * the thread is the "saw them" event (SLYK-0330 GET behavior step 3). PM and
+ * SYSTEM rows are left untouched; a second GET is a no-op (isNull guard).
+ * Returns the number of rows stamped.
+ */
+export async function markAgentMessagesRead(tx: Tx, ticketId: string): Promise<number> {
+  const rows = await tx
+    .update(agentMessages)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(agentMessages.ticketId, ticketId),
+        eq(agentMessages.authorRole, 'AGENT'),
+        isNull(agentMessages.readAt),
+      ),
+    )
+    .returning({ id: agentMessages.id });
+  return rows.length;
+}
+
+/**
+ * The ticket's most recent AGENT message's agentSessionId, or null — PM replies
+ * route to the session that asked the question (SLYK-0330 POST step 5: the
+ * pm_reply payload's agentSessionId comes from the latest AGENT message).
+ */
+export async function findLatestAgentSessionId(tx: Tx, ticketId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ agentSessionId: agentMessages.agentSessionId })
+    .from(agentMessages)
+    .where(and(eq(agentMessages.ticketId, ticketId), eq(agentMessages.authorRole, 'AGENT')))
+    .orderBy(desc(agentMessages.createdAt))
+    .limit(1);
+  return row?.agentSessionId ?? null;
 }

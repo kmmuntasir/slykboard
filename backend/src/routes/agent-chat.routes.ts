@@ -5,8 +5,10 @@ import { success } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
 import {
   onboardingSlugParam,
+  pmReplyBody,
   ticketIdParam,
   type OnboardingSlugParam,
+  type PmReplyBody,
   type TicketIdParam,
 } from './agent-chat.schema';
 import * as ticketService from '../services/ticketService';
@@ -14,12 +16,13 @@ import * as pipelineViewService from '../services/pipelineViewService';
 import * as sseEmitter from '../services/sseEmitter';
 import * as ticketAgentService from '../services/ticketAgentService';
 import * as onboardingEventService from '../services/onboardingEventService';
+import * as agentMessageService from '../services/agentMessageService';
 
 // SLYK-0270/0280 — user-facing agent routes mounted at /api/v1/me behind
 // requireAgentMode + authenticate (index.ts). PM browser JWTs — NOT the
-// HMAC-gated internalRouter. Later phases append:
-//   GET  /tickets/:id/messages          → Phase 2
-//   POST /tickets/:id/messages          → Phase 2
+// HMAC-gated internalRouter. Phase 2 appends:
+//   GET  /tickets/:id/messages          → SLYK-0330
+//   POST /tickets/:id/messages          → SLYK-0330
 
 export const agentChatRouter = Router();
 
@@ -146,5 +149,52 @@ agentChatRouter.get(
     const { slug } = req.params as OnboardingSlugParam;
     const view = await onboardingEventService.getOnboardingTimeline(slug);
     res.json(success(view));
+  },
+);
+
+// SLYK-0330 — PM chat thread read (05-backend-routes.md § me messages routes).
+// Access check first: unknown ticket and non-member get the same
+// non-revealing 404 (getTicketForUser semantics — the route's license for the
+// readAt write: only a project member's GET marks AGENT messages read).
+// Response: { messages: [asc], ticketState } — ticketState lets the UI gate
+// the input box when the agent has finished.
+agentChatRouter.get(
+  '/tickets/:ticketId/messages',
+  validateRequest({ params: ticketIdParam }),
+  async (req, res) => {
+    const { ticketId } = req.params as TicketIdParam;
+    await ticketService.getTicketForUser({
+      ticketId,
+      userId: req.user!.id,
+      isPlatformAdmin: req.user!.isPlatformAdmin,
+    });
+    const view = await agentMessageService.getChatThread(ticketId);
+    res.json(success(view));
+  },
+);
+
+// SLYK-0330 — PM reply. Same access check, then the service transaction:
+// listening-state check (AGENT_RUNNING|AGENT_WAITING else 409 "agent not
+// listening") → PM row insert → needsPmAttention cleared → signed pm_reply
+// webhook after commit. Dispatcher-down is NOT an error: 201 with
+// { ...row, delivered: false } and a background retry every 30s up to 10 min
+// (07-dispatcher-contract.md § failure table).
+agentChatRouter.post(
+  '/tickets/:ticketId/messages',
+  validateRequest({ params: ticketIdParam, body: pmReplyBody }),
+  async (req, res) => {
+    const { ticketId } = req.params as TicketIdParam;
+    const { body } = req.body as PmReplyBody;
+    await ticketService.getTicketForUser({
+      ticketId,
+      userId: req.user!.id,
+      isPlatformAdmin: req.user!.isPlatformAdmin,
+    });
+    const { row, delivered } = await agentMessageService.postPmReply({
+      ticketId,
+      userId: req.user!.id,
+      body,
+    });
+    res.status(HttpStatus.CREATED).json(success({ ...row, delivered }));
   },
 );

@@ -13,6 +13,15 @@ export const ticketIdParam = z.object({
 
 export type TicketIdParam = z.infer<typeof ticketIdParam>;
 
+// SLYK-0330 — PM chat-reply body (05-backend-routes.md § me/tickets/:id/messages
+// POST: "body — non-empty, ≤4000 chars"). Same 1..4000 span as the dispatcher's
+// agentMessageBody in internal.schema.ts so both chat directions agree.
+export const pmReplyBody = z.object({
+  body: z.string().min(1).max(4000),
+});
+
+export type PmReplyBody = z.infer<typeof pmReplyBody>;
+
 // SLYK-0230 — onboarding-timeline read (06-frontend-ui.md § Onboarding
 // Timeline). Same kebab-slug shape as admin-agent.schema.ts slugParam.
 export const onboardingSlugParam = z.object({
