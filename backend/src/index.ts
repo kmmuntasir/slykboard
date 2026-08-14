@@ -82,6 +82,19 @@ app.use('/api/users', usersRouter);
 app.use('/api/labels', labelsRouter);
 app.use('/api/comments', commentsRouter);
 
+// --- Agent-mode routes (mounted only when SLYKBOARD_AGENT_MODE=true) ---
+// See docs/agentic-automation/02-dual-mode.md Layer 2.
+if (process.env.SLYKBOARD_AGENT_MODE === 'true') {
+  // Dynamic import keeps these modules out of the plain-mode bundle.
+  // Phase 0 fills in internalRouter / adminRouter / agentChatRouter.
+  // For now, they don't exist — this block stays commented until Phase 0.
+  //
+  // const { internalRouter } = await import('./routes/internal.routes');
+  // const { adminAgentRouter } = await import('./routes/admin-agent.routes');
+  // app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRouter);
+  // app.use('/api/v1/admin', requireAgentMode, requirePlatformAdmin(), adminAgentRouter);
+}
+
 // --- Error sink (MUST be last) ---
 app.use(notFound);
 app.use(errorHandler);

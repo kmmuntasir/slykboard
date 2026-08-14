@@ -9,6 +9,7 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -22,6 +23,7 @@ export const codeToStatus: Readonly<Record<ErrorCodeValue, number>> = Object.fre
   [ErrorCode.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ErrorCode.CONFLICT]: HttpStatus.CONFLICT,
   [ErrorCode.INTERNAL_ERROR]: HttpStatus.INTERNAL_SERVER_ERROR,
+  [ErrorCode.NOT_IMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
 });
 
 // Success body: { data }. data may be a resource, array, null, or scalar.
