@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { pipelineEvents, pipelineJobs, projects, tickets } from '../db/schema';
 import type { Column } from '../db/schema';
@@ -25,6 +25,26 @@ export async function findJobByTicketId(tx: Tx, ticketId: string): Promise<Pipel
     .where(eq(pipelineJobs.ticketId, ticketId))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Most recent `limit` events for a ticket, ascending by createdAt (timeline
+ * render order — SLYK-0280 picks asc per the ticket). Internally orders desc
+ * + limits, then reverses: a plain asc + limit would return the OLDEST rows,
+ * not the newest.
+ */
+export async function listEventsByTicketId(
+  tx: Tx,
+  ticketId: string,
+  limit: number,
+): Promise<PipelineEventRow[]> {
+  const rows = await tx
+    .select()
+    .from(pipelineEvents)
+    .where(eq(pipelineEvents.ticketId, ticketId))
+    .orderBy(desc(pipelineEvents.createdAt))
+    .limit(limit);
+  return rows.reverse();
 }
 
 export interface UpdateJobPatch {
