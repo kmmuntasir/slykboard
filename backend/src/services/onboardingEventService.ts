@@ -4,6 +4,11 @@ import { onboardingEvents, projectAgentMeta, projects } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import type { OnboardingEventBody } from '../routes/internal.schema';
+import {
+  listEventsByProjectId,
+  type OnboardingEventRow,
+  type ProjectAgentMetaRow,
+} from '../repositories/projectAgentMetaRepository';
 
 // SLYK-0200 — dispatcher callbacks for the onboarding lifecycle
 // (docs/agentic-automation/05-backend-routes.md § internal routes).
@@ -13,7 +18,7 @@ import type { OnboardingEventBody } from '../routes/internal.schema';
 // Local alias mirroring timerService.ts — the drizzle tx client type.
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-export type OnboardingEventRow = typeof onboardingEvents.$inferSelect;
+export type { OnboardingEventRow };
 
 // Deploy-target response shape (five fields, snake→camel per doc example).
 export interface DeployTarget {
@@ -24,10 +29,12 @@ export interface DeployTarget {
   stack: string;
 }
 
-// Shared meta lookup: ProjectAgentMeta by slug, or null when absent.
-async function findMetaBySlug(tx: Tx, slug: string) {
+// Shared meta lookup: ProjectAgentMeta by slug, or null when absent. The
+// timeline read (SLYK-0230) needs the full row; the event write only uses
+// projectId.
+async function findMetaBySlug(tx: Tx, slug: string): Promise<ProjectAgentMetaRow | null> {
   const [row] = await tx
-    .select({ projectId: projectAgentMeta.projectId })
+    .select()
     .from(projectAgentMeta)
     .where(eq(projectAgentMeta.slug, slug))
     .limit(1);
@@ -121,4 +128,61 @@ export async function getDeployTarget(slug: string): Promise<DeployTarget> {
     subdomain: row.subdomain,
     stack: row.stack,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SLYK-0230 — GET /api/v1/me/projects/:slug/onboarding/events
+// (06-frontend-ui.md § Onboarding Timeline — the doc-gap read endpoint named
+// in the ticket). One transaction reads meta + events so the timeline and the
+// status line can never disagree mid-poll.
+// ─────────────────────────────────────────────────────────────────────────
+
+// The exact fields the timeline page renders (06 layout: header status line +
+// rows). The full meta row stays internal — subdomain/repo/etc. are admin-form
+// data, not timeline data.
+export interface OnboardingTimelineProject {
+  name: string;
+  slug: string;
+  onboardingState: ProjectAgentMetaRow['onboardingState'];
+  onboardingError: string | null;
+}
+
+export interface OnboardingTimelineView {
+  project: OnboardingTimelineProject;
+  events: OnboardingEventRow[];
+}
+
+export async function getOnboardingTimeline(slug: string): Promise<OnboardingTimelineView> {
+  return db.transaction(async (tx) => {
+    const meta = await findMetaBySlug(tx, slug);
+    if (!meta) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`, {
+        details: { slug },
+      });
+    }
+
+    const [project] = await tx
+      .select({ name: projects.name })
+      .from(projects)
+      .where(eq(projects.id, meta.projectId))
+      .limit(1);
+    if (!project) {
+      // Orphaned meta (project row deleted without cascade cleanup) — surface
+      // as 404, same as an unknown slug.
+      throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`, {
+        details: { slug },
+      });
+    }
+
+    const events = await listEventsByProjectId(tx, meta.projectId);
+    return {
+      project: {
+        name: project.name,
+        slug: meta.slug,
+        onboardingState: meta.onboardingState,
+        onboardingError: meta.onboardingError,
+      },
+      events,
+    };
+  });
 }

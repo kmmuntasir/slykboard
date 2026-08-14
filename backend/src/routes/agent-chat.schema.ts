@@ -12,3 +12,15 @@ export const ticketIdParam = z.object({
 });
 
 export type TicketIdParam = z.infer<typeof ticketIdParam>;
+
+// SLYK-0230 — onboarding-timeline read (06-frontend-ui.md § Onboarding
+// Timeline). Same kebab-slug shape as admin-agent.schema.ts slugParam.
+export const onboardingSlugParam = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(63)
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+});
+
+export type OnboardingSlugParam = z.infer<typeof onboardingSlugParam>;

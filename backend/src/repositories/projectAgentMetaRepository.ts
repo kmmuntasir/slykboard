@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { onboardingEvents, projectAgentMeta } from '../db/schema';
 
@@ -88,4 +88,24 @@ export async function markDecommissioningInTx(
     toState: 'DECOMMISSIONING',
     detail: { initiatedBy: args.initiatedBy },
   });
+}
+
+// SLYK-0230 — read side for the admin onboarding timeline. Full OnboardingEvents
+// rows in ascending createdAt order (timeline render order). The timeline page
+// caps polling client-side (React Query refetchInterval) and the log is bounded
+// by the lifecycle itself (≤ ~12 states + decommission audit), so unlike the
+// pipeline view there is no server-side limit to apply.
+
+export type OnboardingEventRow = typeof onboardingEvents.$inferSelect;
+
+/** All onboarding events for a project, asc by createdAt. */
+export async function listEventsByProjectId(
+  tx: Tx,
+  projectId: string,
+): Promise<OnboardingEventRow[]> {
+  return tx
+    .select()
+    .from(onboardingEvents)
+    .where(eq(onboardingEvents.projectId, projectId))
+    .orderBy(asc(onboardingEvents.createdAt));
 }

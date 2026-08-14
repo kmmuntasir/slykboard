@@ -24,13 +24,32 @@ const bag = vi.hoisted(() => ({
   insertCallCount: 0,
   // deploy-target join .limit(1) terminal — resolves to rows array
   deployLimit: vi.fn(),
+  // SLYK-0230 timeline: project-name .limit(1) terminal (tx select)
+  projectLimit: vi.fn(),
+  // SLYK-0230 timeline: events .orderBy() terminal (tx select)
+  eventsOrderBy: vi.fn(),
 }));
 
 vi.mock('../db/client', () => {
+  // The tx select chain is shared by three call sites with different
+  // terminals: meta lookup + project-name lookup end in .limit(1), the
+  // events list ends in .orderBy(). The chain factories below key on a
+  // call counter — meta is the first select, project the second, events
+  // the third (getOnboardingTimeline call order).
+  let selectCall = 0;
   const tx = {
-    select: () => ({
-      from: () => ({ where: () => ({ limit: () => bag.metaLimit() }) }),
-    }),
+    select: () => {
+      selectCall += 1;
+      const call = selectCall;
+      return {
+        from: () => ({
+          where: () => ({
+            limit: () => (call === 1 ? bag.metaLimit() : bag.projectLimit()),
+            orderBy: () => bag.eventsOrderBy(),
+          }),
+        }),
+      };
+    },
     update: () => ({
       set: (s: Record<string, unknown>) => {
         bag.txUpdateSetArg = s;
@@ -47,7 +66,10 @@ vi.mock('../db/client', () => {
     }),
   };
   const db = {
-    transaction: vi.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+    transaction: vi.fn(async (cb: (t: unknown) => Promise<unknown>) => {
+      selectCall = 0;
+      return cb(tx);
+    }),
     select: () => ({
       from: () => ({ innerJoin: () => ({ where: () => ({ limit: () => bag.deployLimit() }) }) }),
     }),
@@ -56,7 +78,11 @@ vi.mock('../db/client', () => {
 });
 
 import { onboardingEvents, projectAgentMeta } from '../db/schema';
-import { recordOnboardingEvent, getDeployTarget } from './onboardingEventService';
+import {
+  recordOnboardingEvent,
+  getDeployTarget,
+  getOnboardingTimeline,
+} from './onboardingEventService';
 
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
 
@@ -258,5 +284,85 @@ describe('recordOnboardingEvent — decommission lifecycle (SLYK-0210)', () => {
       toState: 'DECOMMISSIONED',
       detail: { ctid: 142 },
     });
+  });
+});
+
+// ── SLYK-0230 — GET /api/v1/me/projects/:slug/onboarding/events read side.
+describe('getOnboardingTimeline', () => {
+  const META_ROW = {
+    projectId: PROJECT_ID,
+    slug: 'inventory-tracker',
+    onboardingState: 'PROVISIONING_LXC' as const,
+    onboardingError: null as string | null,
+  };
+
+  const EVENT_ROWS = [
+    {
+      id: '44444444-4444-4444-8444-444444444444',
+      projectId: PROJECT_ID,
+      fromState: null,
+      toState: 'PENDING',
+      detail: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    },
+    {
+      id: '45454545-4545-4545-8555-454545454545',
+      projectId: PROJECT_ID,
+      fromState: 'PENDING',
+      toState: 'PROVISIONING_LXC',
+      detail: { ctid: 142, lanIp: '192.168.31.142' },
+      createdAt: new Date('2026-01-01T00:00:01Z'),
+    },
+  ];
+
+  beforeEach(() => {
+    bag.metaLimit.mockResolvedValue([META_ROW]);
+    bag.projectLimit.mockResolvedValue([{ name: 'Inventory Tracker' }]);
+    bag.eventsOrderBy.mockResolvedValue(EVENT_ROWS);
+  });
+
+  it('returns { project: {name, slug, onboardingState, onboardingError}, events asc }', async () => {
+    const view = await getOnboardingTimeline('inventory-tracker');
+
+    expect(view).toEqual({
+      project: {
+        name: 'Inventory Tracker',
+        slug: 'inventory-tracker',
+        onboardingState: 'PROVISIONING_LXC',
+        onboardingError: null,
+      },
+      events: EVENT_ROWS,
+    });
+  });
+
+  it('FAILED project carries onboardingError through to the timeline', async () => {
+    bag.metaLimit.mockResolvedValue([
+      { ...META_ROW, onboardingState: 'FAILED', onboardingError: 'ctid exhausted' },
+    ]);
+
+    const view = await getOnboardingTimeline('inventory-tracker');
+    expect(view.project.onboardingError).toBe('ctid exhausted');
+    expect(view.project.onboardingState).toBe('FAILED');
+  });
+
+  it('unknown slug → NOT_FOUND before the project/events reads', async () => {
+    bag.metaLimit.mockResolvedValue([]);
+
+    await expect(getOnboardingTimeline('ghost')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      status: 404,
+    });
+    expect(bag.projectLimit).not.toHaveBeenCalled();
+    expect(bag.eventsOrderBy).not.toHaveBeenCalled();
+  });
+
+  it('orphaned meta (project row gone) → NOT_FOUND, events never read', async () => {
+    bag.projectLimit.mockResolvedValue([]);
+
+    await expect(getOnboardingTimeline('inventory-tracker')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      status: 404,
+    });
+    expect(bag.eventsOrderBy).not.toHaveBeenCalled();
   });
 });

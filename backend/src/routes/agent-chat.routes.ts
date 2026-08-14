@@ -3,11 +3,17 @@ import { z } from 'zod';
 import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
-import { ticketIdParam, type TicketIdParam } from './agent-chat.schema';
+import {
+  onboardingSlugParam,
+  ticketIdParam,
+  type OnboardingSlugParam,
+  type TicketIdParam,
+} from './agent-chat.schema';
 import * as ticketService from '../services/ticketService';
 import * as pipelineViewService from '../services/pipelineViewService';
 import * as sseEmitter from '../services/sseEmitter';
 import * as ticketAgentService from '../services/ticketAgentService';
+import * as onboardingEventService from '../services/onboardingEventService';
 
 // SLYK-0270/0280 — user-facing agent routes mounted at /api/v1/me behind
 // requireAgentMode + authenticate (index.ts). PM browser JWTs — NOT the
@@ -124,5 +130,21 @@ agentChatRouter.post(
     });
     const job = await ticketAgentService.queueForAgent(ticketId);
     res.status(HttpStatus.OK).json(success(job));
+  },
+);
+
+// SLYK-0230 — onboarding timeline for the admin project page
+// (06-frontend-ui.md § Onboarding Timeline — the read endpoint the doc polls
+// but 05-backend-routes.md never defined). Mounted on the /api/v1/me router
+// per the ticket's layering note; in practice admin-only (the UI gates to
+// platform admins, and requireAgentMode + authenticate run at the mount).
+// Unknown slug → non-revealing 404 from the service.
+agentChatRouter.get(
+  '/projects/:slug/onboarding/events',
+  validateRequest({ params: onboardingSlugParam }),
+  async (req, res) => {
+    const { slug } = req.params as OnboardingSlugParam;
+    const view = await onboardingEventService.getOnboardingTimeline(slug);
+    res.json(success(view));
   },
 );

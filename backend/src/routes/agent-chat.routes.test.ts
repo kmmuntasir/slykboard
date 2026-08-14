@@ -56,17 +56,24 @@ const pipelineViewMock = vi.hoisted(() => ({
   getPipelineView: vi.fn(),
 }));
 vi.mock('../services/pipelineViewService', () => pipelineViewMock);
+vi.mock('../services/pipelineViewService', () => pipelineViewMock);
 // SLYK-0290 — the queue endpoint's service seam. SQL/state-machine behavior
 // lives in ticketAgentService.test.ts; here we assert the route wiring only.
 const ticketAgentMock = vi.hoisted(() => ({
   queueForAgent: vi.fn(),
 }));
 vi.mock('../services/ticketAgentService', () => ticketAgentMock);
+// SLYK-0230 — the timeline read seam (SQL coverage lives in
+// onboardingEventService.test.ts).
+const onboardingEventServiceMock = vi.hoisted(() => ({
+  getOnboardingTimeline: vi.fn(),
+}));
+vi.mock('../services/onboardingEventService', () => onboardingEventServiceMock);
 
 // AppError identity across vi.resetModules: errorMiddleware (re-imported per
 // boot) checks `err instanceof AppError`, so a rejection built from THIS
 // module's class instance would fail the check (dual class identity →
-// INTERNAL_ERROR 500). Construct rejections through a fresh-module factory —
+// INTERNAL_ERROR 500). Constructing rejections through a fresh-module factory —
 // same pattern as internal.routes.test.ts.
 const freshAppError = vi.hoisted(() => ({
   build: null as null | ((code: string, message: string, details?: unknown) => Error),
@@ -76,6 +83,7 @@ import { SignJWT } from 'jose';
 import * as ticketService from '../services/ticketService';
 import * as pipelineViewService from '../services/pipelineViewService';
 import * as ticketAgentService from '../services/ticketAgentService';
+import * as onboardingEventService from '../services/onboardingEventService';
 
 afterEach(async () => {
   const mod = await import('../utils/appError');
@@ -86,6 +94,7 @@ afterEach(async () => {
 const mockedGetTicketForUser = vi.mocked(ticketService.getTicketForUser);
 const mockedGetPipelineView = vi.mocked(pipelineViewService.getPipelineView);
 const mockedQueueForAgent = vi.mocked(ticketAgentService.queueForAgent);
+const mockedGetOnboardingTimeline = vi.mocked(onboardingEventService.getOnboardingTimeline);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -296,6 +305,109 @@ describe('plain mode — /api/v1/me requireAgentMode gate', () => {
 
     expect(res.status).toBe(501);
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+  });
+
+  it('onboarding-events path → 501 before any service runs (SLYK-0230)', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app).get('/api/v1/me/projects/inventory-tracker/onboarding/events');
+
+    expect(res.status).toBe(501);
+    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(mockedGetOnboardingTimeline).not.toHaveBeenCalled();
+  });
+});
+
+// SLYK-0230 — the doc-gap timeline read (06-frontend-ui.md polls it; this is
+// the endpoint 05-backend-routes.md never defined). Same mount/auth chain as
+// the pipeline GET above.
+describe('agent-mode GET /api/v1/me/projects/:slug/onboarding/events (SLYK-0230)', () => {
+  const SLUG = 'inventory-tracker';
+  const PATH = `/api/v1/me/projects/${SLUG}/onboarding/events`;
+
+  const view = {
+    project: {
+      name: 'Inventory Tracker',
+      slug: SLUG,
+      onboardingState: 'PROVISIONING_LXC',
+      onboardingError: null,
+    },
+    events: [
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        projectId: '33333333-3333-4333-8333-333333333333',
+        fromState: null,
+        toState: 'PENDING',
+        detail: null,
+        createdAt: '2026-08-13T00:00:00.000Z',
+      },
+      {
+        id: '45454545-4545-4545-8555-454545454545',
+        projectId: '33333333-3333-4333-8333-333333333333',
+        fromState: 'PENDING',
+        toState: 'PROVISIONING_LXC',
+        detail: { ctid: 142, lanIp: '192.168.31.142' },
+        createdAt: '2026-08-13T00:00:01.000Z',
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockedGetOnboardingTimeline.mockReset();
+    mockedGetOnboardingTimeline.mockResolvedValue(view as never);
+  });
+
+  it('member → 200 { data: { project, events } } envelope, service called with the slug', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: view });
+    expect(mockedGetOnboardingTimeline).toHaveBeenCalledWith(SLUG);
+  });
+
+  it('platform admin → 200 (same read; UI gates to admins but the route is member-scoped)', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(PATH)
+      .set('Authorization', `Bearer ${await sessionToken({ ...PM, isPlatformAdmin: true })}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.project.slug).toBe(SLUG);
+  });
+
+  it('unknown slug → 404 NOT_FOUND envelope from the service', async () => {
+    mockedGetOnboardingTimeline.mockRejectedValue(
+      freshAppError.build!('NOT_FOUND', `Project 'ghost' not found`, { slug: 'ghost' }),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get('/api/v1/me/projects/ghost/onboarding/events')
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('uppercase slug fails the kebab pattern → 400 VALIDATION_FAILED before the service', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get('/api/v1/me/projects/InventoryTracker/onboarding/events')
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetOnboardingTimeline).not.toHaveBeenCalled();
+  });
+
+  it('no JWT → 401 UNAUTHENTICATED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).get(PATH);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedGetOnboardingTimeline).not.toHaveBeenCalled();
   });
 });
 
