@@ -13,19 +13,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const bag = vi.hoisted(() => ({
   dbSelectOrderBy: vi.fn(),
+  dbSelectPipelineWhere: vi.fn(),
   getProjectBySlug: vi.fn(),
   loggerWarn: vi.fn(),
+  agentMode: '',
   // F14: hydrateLabelsForTickets mock (from ./labelService)
   hydrateLabels: new Map<string, Array<{ id: string; name: string; color: string }>>(),
 }));
 
 vi.mock('../db/client', () => {
   const db = {
-    select: vi.fn(() => {
+    // SLYK-0310: route by selection shape — the pipeline hydration select
+    // passes { ticketId, state } (and terminates at where()); the ticket
+    // board select passes the ticket-column selection and continues to
+    // orderBy.
+    select: vi.fn((selection?: Record<string, unknown>) => {
+      const isPipeline = !!selection && 'ticketId' in selection && 'state' in selection;
       const chain = {
         from: () => chain,
         leftJoin: () => chain,
-        where: () => chain,
+        where: () => (isPipeline ? bag.dbSelectPipelineWhere() : chain),
         orderBy: () => bag.dbSelectOrderBy(),
       };
       return chain;
@@ -33,6 +40,12 @@ vi.mock('../db/client', () => {
   };
   return { db };
 });
+
+// SLYK-0310: agent-mode gate reads SLYKBOARD_AGENT_MODE lazily — pin it per
+// test via the hoisted bag.
+vi.mock('./ticketAgentService', () => ({
+  agentModeEnabled: () => bag.agentMode === 'true',
+}));
 
 vi.mock('./projectService', () => ({
   getProjectBySlug: bag.getProjectBySlug,
@@ -58,8 +71,10 @@ import type { ChecklistItem } from '../db/schema';
 
 function resetBag() {
   bag.dbSelectOrderBy.mockReset();
+  bag.dbSelectPipelineWhere.mockReset();
   bag.getProjectBySlug.mockReset();
   bag.loggerWarn.mockReset();
+  bag.agentMode = '';
   bag.hydrateLabels = new Map();
 }
 
@@ -313,6 +328,48 @@ describe('boardService getBoard', () => {
     expect(bag.loggerWarn).toHaveBeenCalled();
     const logObj = bag.loggerWarn.mock.calls[0]![0] as Record<string, unknown>;
     expect(logObj.columnCount).toBe(overCap);
+  });
+
+
+  // SLYK-0310 — additive pipelineState field on board tickets
+  // (<FailedPipelineBadge> gating). Agent mode batch-hydrates job states;
+  // plain mode skips the query entirely and every ticket reads null.
+  describe('SLYK-0310 pipelineState hydration', () => {
+    const project = makeProject([{ id: 'c1', name: 'To Do' }]);
+    const rows = [
+      makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      makeTicket({ id: 't2', ticketNumber: 2, statusColumn: 'c1', position: 20 }),
+    ];
+
+    it('agent mode: hydrates job state per ticket; missing job rows read null', async () => {
+      bag.agentMode = 'true';
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+      // Only t1 has a pipeline job.
+      bag.dbSelectPipelineWhere.mockResolvedValue([
+        { ticketId: 't1', state: 'FAILED_CI' },
+      ]);
+
+      const result = await getBoard('SLYK');
+
+      const tickets = result.columns[0]!.tickets;
+      expect(tickets.find((t) => t.id === 't1')?.pipelineState).toBe('FAILED_CI');
+      expect(tickets.find((t) => t.id === 't2')?.pipelineState).toBeNull();
+    });
+
+    it('plain mode: skips the pipeline query; every ticket reads null', async () => {
+      bag.agentMode = 'false';
+      bag.getProjectBySlug.mockResolvedValue(project);
+      bag.dbSelectOrderBy.mockResolvedValue(rows);
+
+      const result = await getBoard('SLYK');
+
+      expect(bag.dbSelectPipelineWhere).not.toHaveBeenCalled();
+      const tickets = result.columns[0]!.tickets;
+      for (const t of tickets) {
+        expect(t.pipelineState).toBeNull();
+      }
+    });
   });
 
   describe('buildAssignee FK-dangle guard', () => {

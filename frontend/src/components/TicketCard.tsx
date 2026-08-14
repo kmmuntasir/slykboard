@@ -1,7 +1,9 @@
 import { type CSSProperties } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import type { Ticket } from '@/types/ticket';
+import { isFailedPipelineState } from '@/constants/pipelineStates';
 import { AssigneeAvatar } from './AssigneeAvatar';
+import { FailedPipelineBadge } from './FailedPipelineBadge';
 import { LabelChip } from './LabelChip';
 import { PriorityBadge } from './PriorityBadge';
 import { formatTicketId } from '@/utils/formatTicketId';
@@ -37,6 +39,13 @@ export function TicketCard({ ticket, projectSlug, index, onEdit }: TicketCardPro
                         <PriorityBadge priority={ticket.priority} />
                     </header>
                     <h4 className="font-medium leading-snug">{ticket.title}</h4>
+                    {/* SLYK-0310: kanban failure badge — board payload's additive
+                        agent-mode pipelineState field; absent in plain mode and
+                        for non-failed states. attempts unknown on the card —
+                        pass 0 so the remaining-retries line reads from the cap. */}
+                    {ticket.pipelineState != null && isFailedPipelineState(ticket.pipelineState) && (
+                        <FailedPipelineBadge state={ticket.pipelineState} attempts={0} />
+                    )}
                     <footer className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                             <AssigneeAvatar assignee={ticket.assignee} />

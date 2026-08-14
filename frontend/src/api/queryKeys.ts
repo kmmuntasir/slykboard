@@ -59,3 +59,11 @@ export const reportKeys = {
   tickets: (period: 'weekly' | 'monthly', offset: number, slug: string) =>
     [...reportKeys.all, 'tickets', period, offset, slug] as const,
 };
+
+// SLYK-0310: per-ticket agent-pipeline cache key (job + timeline events).
+// Own root so SSE state invalidation is surgical — the board query stays on
+// boardKeys and is invalidated separately when a job reaches DONE.
+export const pipelineKeys = {
+  all: ['pipeline'] as const,
+  detail: (ticketId: string) => [...pipelineKeys.all, 'detail', ticketId] as const,
+};

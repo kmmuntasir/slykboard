@@ -15,9 +15,10 @@ vi.mock('../services/tokenVersion', () => ({
 
 const secretKey = new TextEncoder().encode(env.jwtSecret);
 
-function makeReq(authorization?: string): Request {
+function makeReq(authorization?: string, query?: Record<string, string>): Request {
   return {
     headers: authorization ? { authorization } : {},
+    ...(query ? { query } : {}),
   } as unknown as Request;
 }
 
@@ -108,6 +109,35 @@ describe('authenticate middleware', () => {
     await expect(authenticate(req, res, next)).rejects.toMatchObject({
       code: ErrorCode.UNAUTHENTICATED,
     });
+  });
+
+  // SLYK-0310: EventSource cannot set headers — the JWT may ride the
+  // `access_token` query param (header still wins when both are present).
+  it('attaches req.user when the JWT arrives as ?access_token= (no header)', async () => {
+    tokenVersionMock.findUserTokenVersion.mockResolvedValueOnce(0);
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
+    const req = makeReq(undefined, { access_token: token });
+    const res = {} as Response;
+    const next = vi.fn() as unknown as NextFunction;
+
+    await authenticate(req, res, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.user).toEqual({ id: 'user-123', email: 'a@b.com', isPlatformAdmin: false });
+  });
+
+  it('prefers the Authorization header over the access_token query param', async () => {
+    tokenVersionMock.findUserTokenVersion.mockResolvedValueOnce(0);
+    const token = await signJwt({ sub: 'user-123', email: 'a@b.com', pa: false, ver: 0 });
+    const garbage = 'not-a-jwt';
+    const req = makeReq(`Bearer ${token}`, { access_token: garbage });
+    const res = {} as Response;
+    const next = vi.fn() as unknown as NextFunction;
+
+    await authenticate(req, res, next);
+
+    // The header token authenticated (sub user-123), not the query garbage.
+    expect(req.user).toEqual({ id: 'user-123', email: 'a@b.com', isPlatformAdmin: false });
   });
 
   it('throws UNAUTHENTICATED on missing header', async () => {

@@ -1,4 +1,5 @@
 import type { Label } from './label';
+import type { PipelineState } from '@/constants/pipelineStates';
 
 // F09 D-Priority-Enum: SCREAMING_SNAKE storage; Title-Case display via map.
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
@@ -54,6 +55,10 @@ export interface Ticket {
   createdAt: string; // ISO
   updatedAt: string;
   deletedAt?: string | null; // F17: soft-delete tombstone (absent on board payload; set on detail for soft-deleted)
+  // SLYK-0310: additive agent-mode board field — the ticket's pipeline job
+  // state (drives <FailedPipelineBadge>). Absent in plain mode and on the
+  // detail payload; treat missing as "no pipeline signal".
+  pipelineState?: PipelineState | null;
 }
 
 export interface UpdateTicketDto {
