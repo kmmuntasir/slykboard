@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { loginWithGoogle } from '@/api/auth';
 import type { AuthResponse } from '@/api/auth';
 import { ApiClientError } from '@/api/client';
@@ -19,7 +20,13 @@ export function LoginPage() {
         flow: 'auth-code',
         onSuccess: async ({ code }) => {
             try {
-                const { token, user }: AuthResponse = await loginWithGoogle(code);
+                const { token, user, config }: AuthResponse = await loginWithGoogle(code);
+                // SLYK-0160: seed the runtime-config store at login when the
+                // backend reports it (agent mode); plain-mode omission keeps
+                // the {false, null} defaults.
+                if (config) {
+                    useRuntimeConfigStore.getState().set(config);
+                }
                 setUser({
                     token,
                     id: user.id,

@@ -6,6 +6,7 @@ import type { AuthResponse } from '@/api/auth';
 import { fetchMe, logout as logoutApi } from '@/api/auth';
 import { registerLogoutHandlers, registerForbiddenHandler } from '@/api/client';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { broadcastLogout } from '@/hooks/useCrossTabLogout';
 import { toast } from '@/hooks/useToast';
 import type { AuthUser } from '@/stores/useAuthStore';
@@ -29,6 +30,15 @@ function toAuthUser(fresh: AuthResponse): AuthUser {
   };
 }
 
+// SLYK-0160: populate the runtime-config store from the /me response's
+// `config` key (02-dual-mode.md Layer 3). Omitted key (older/plain backend)
+// leaves the plain-mode defaults {false, null} untouched.
+function applyRuntimeConfig(fresh: AuthResponse): void {
+  if (fresh.config) {
+    useRuntimeConfigStore.getState().set(fresh.config);
+  }
+}
+
 // F07 D2: session sync. (a) near-expiry — interval checks decodeJwt(token).exp; if
 // within threshold, call fetchMe. Runs the check once on mount and on each poll, so
 // a token far from expiry triggers no /me on reload (M6). Also registers the logout
@@ -47,6 +57,7 @@ export function useAuthSync(): void {
       refresh: async () => {
         try {
           const fresh = await fetchMe();
+          applyRuntimeConfig(fresh);
           setUser(toAuthUser(fresh));
           return true;
         } catch {
@@ -109,7 +120,10 @@ export function useAuthSync(): void {
         const msToExpiry = payload.exp * 1000 - Date.now();
         if (msToExpiry <= REFRESH_THRESHOLD_MS) {
           void fetchMe()
-            .then((fresh) => setUser(toAuthUser(fresh)))
+            .then((fresh) => {
+              applyRuntimeConfig(fresh);
+              setUser(toAuthUser(fresh));
+            })
             .catch(() => {
               clear();
               navigate('/login', { replace: true });

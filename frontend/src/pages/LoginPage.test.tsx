@@ -6,6 +6,7 @@ import { LoginPage } from './LoginPage';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { ApiClientError } from '@/api/client';
 import type { AuthResponse } from '@/api/auth';
 
@@ -70,6 +71,8 @@ function renderLogin(initialEntries: Parameters<typeof MemoryRouter>[0]['initial
 describe('LoginPage', () => {
     beforeEach(() => {
         useAuthStore.getState().clear();
+        // SLYK-0160: reset runtime config to plain-mode defaults between tests.
+        useRuntimeConfigStore.setState({ agentMode: false, dispatcherUrl: null });
         navigateMock.mockClear();
         loginWithGoogleMock.mockReset();
         loginWithGoogleMock.mockResolvedValue(defaultAuthResponse);
@@ -111,6 +114,32 @@ describe('LoginPage', () => {
         expect(user?.isPlatformAdmin).toBe(false);
         expect(user?.avatarUrl).toBeNull();
         expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    it('populates useRuntimeConfigStore when login response carries config (SLYK-0160)', async () => {
+        loginWithGoogleMock.mockResolvedValueOnce({
+            ...defaultAuthResponse,
+            config: { agentMode: true, dispatcherUrl: 'http://dispatcher.local:4001' },
+        });
+        renderLogin(['/login']);
+        const opts = readGoogleLoginOpts();
+        await act(async () => {
+            await opts.onSuccess?.({ code: 'test-code' });
+        });
+        const cfg = useRuntimeConfigStore.getState();
+        expect(cfg.agentMode).toBe(true);
+        expect(cfg.dispatcherUrl).toBe('http://dispatcher.local:4001');
+    });
+
+    it('leaves useRuntimeConfigStore at plain-mode defaults when config is absent', async () => {
+        renderLogin(['/login']);
+        const opts = readGoogleLoginOpts();
+        await act(async () => {
+            await opts.onSuccess?.({ code: 'test-code' });
+        });
+        const cfg = useRuntimeConfigStore.getState();
+        expect(cfg.agentMode).toBe(false);
+        expect(cfg.dispatcherUrl).toBeNull();
     });
 
     it('shows error on ApiClientError', async () => {
