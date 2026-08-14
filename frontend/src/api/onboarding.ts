@@ -29,6 +29,16 @@ export const onboardingApi = {
   // useOnboardingTimeline); returns 404 for an unknown slug.
   getTimeline: (slug: string): Promise<OnboardingTimelineView> =>
     apiFetch<OnboardingTimelineView>(`/v1/me/projects/${slug}/onboarding/events`),
+
+  // POST /api/v1/admin/projects/:slug/decommission (SLYK-0210 endpoint,
+  // called by SLYK-0240's <DecommissionDialog>). 202 with the meta row in
+  // DECOMMISSIONING; 400 VALIDATION_FAILED on a confirmSlug mismatch;
+  // 502 UPSTREAM_FAILED when the dispatcher rejects the teardown.
+  decommissionProject: (slug: string, body: { confirmSlug: string }): Promise<ProjectAgentMeta> =>
+    apiFetch<ProjectAgentMeta>(`/v1/admin/projects/${slug}/decommission`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // Query key factory additions per 11-existing-patterns.md — colocated here

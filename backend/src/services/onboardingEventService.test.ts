@@ -294,6 +294,10 @@ describe('getOnboardingTimeline', () => {
     slug: 'inventory-tracker',
     onboardingState: 'PROVISIONING_LXC' as const,
     onboardingError: null as string | null,
+    // SLYK-0240 — the three fields <DecommissionDialog>'s bullets quote.
+    lxcCtid: 142,
+    subdomain: 'inventory-tracker',
+    githubRepoCreated: true,
   };
 
   const EVENT_ROWS = [
@@ -321,7 +325,7 @@ describe('getOnboardingTimeline', () => {
     bag.eventsOrderBy.mockResolvedValue(EVENT_ROWS);
   });
 
-  it('returns { project: {name, slug, onboardingState, onboardingError}, events asc }', async () => {
+  it('returns { project: {name, slug, onboardingState, onboardingError, lxcCtid, subdomain, githubRepoCreated}, events asc }', async () => {
     const view = await getOnboardingTimeline('inventory-tracker');
 
     expect(view).toEqual({
@@ -330,9 +334,19 @@ describe('getOnboardingTimeline', () => {
         slug: 'inventory-tracker',
         onboardingState: 'PROVISIONING_LXC',
         onboardingError: null,
+        lxcCtid: 142,
+        subdomain: 'inventory-tracker',
+        githubRepoCreated: true,
       },
       events: EVENT_ROWS,
     });
+  });
+
+  it('carries githubRepoCreated=false through for the existing-repo decommission bullet (SLYK-0240)', async () => {
+    bag.metaLimit.mockResolvedValue([{ ...META_ROW, githubRepoCreated: false }]);
+
+    const view = await getOnboardingTimeline('inventory-tracker');
+    expect(view.project.githubRepoCreated).toBe(false);
   });
 
   it('FAILED project carries onboardingError through to the timeline', async () => {
