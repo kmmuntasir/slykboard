@@ -87,6 +87,59 @@ describe('loadConfig', () => {
       field: 'jwtSecret',
       value: 'x'.repeat(32),
     },
+    // SLYK-0130: agent-mode env validation
+    {
+      name: 'SLYK-0130: plain mode boots with none of the four agent vars set',
+      input: {
+        ...validBase,
+        SLYKBOARD_AGENT_MODE: undefined,
+        SLYKBOARD_DISPATCHER_URL: undefined,
+        SLYKBOARD_DISPATCHER_TOKEN: undefined,
+        SLYKBOARD_SLACK_ESCALATION_WEBHOOK: undefined,
+      },
+      field: 'agentMode',
+      value: false,
+    },
+    {
+      name: 'SLYK-0130: agent mode without dispatcher URL names the missing var',
+      input: { ...validBase, SLYKBOARD_AGENT_MODE: 'true' },
+      expectThrow: 'SLYKBOARD_DISPATCHER_URL required when SLYKBOARD_AGENT_MODE=true',
+    },
+    {
+      name: 'SLYK-0130: agent mode without dispatcher token names the missing var',
+      input: {
+        ...validBase,
+        SLYKBOARD_AGENT_MODE: 'true',
+        SLYKBOARD_DISPATCHER_URL: 'http://localhost:4001',
+      },
+      expectThrow: 'SLYKBOARD_DISPATCHER_TOKEN required when SLYKBOARD_AGENT_MODE=true',
+    },
+    {
+      name: 'SLYK-0130: agent mode with short dispatcher token throws',
+      input: {
+        ...validBase,
+        SLYKBOARD_AGENT_MODE: 'true',
+        SLYKBOARD_DISPATCHER_URL: 'http://localhost:4001',
+        SLYKBOARD_DISPATCHER_TOKEN: 'a'.repeat(63),
+      },
+      expectThrow: 'Invalid agent-mode env vars',
+    },
+    {
+      name: 'SLYK-0130: agent mode with valid URL + 64-char token parses',
+      input: {
+        ...validBase,
+        SLYKBOARD_AGENT_MODE: 'true',
+        SLYKBOARD_DISPATCHER_URL: 'http://localhost:4001',
+        SLYKBOARD_DISPATCHER_TOKEN: 'a'.repeat(64),
+      },
+      field: 'agentMode',
+      value: true,
+    },
+    {
+      name: 'SLYK-0130: bad SLYKBOARD_AGENT_MODE enum value is a Zod error',
+      input: { ...validBase, SLYKBOARD_AGENT_MODE: 'yes' },
+      expectThrow: 'Invalid agent-mode env vars',
+    },
   ];
 
   cases.forEach(({ name, input, expectThrow, field, value }) => {
