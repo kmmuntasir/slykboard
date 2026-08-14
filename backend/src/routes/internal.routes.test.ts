@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { createHmac } from 'node:crypto';
+import { ErrorCode } from '../utils/envelope';
 import { dispatcherHeaders, signPayload, TEST_DISPATCHER_TOKEN } from '../test/hmac';
 
 // SLYK-0150 — end-to-end supertest coverage for the /api/v1 mount: raw-body
@@ -36,12 +37,37 @@ vi.mock('../config/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../config/logger')>();
   return { ...actual, isProd: false };
 });
+// AppError identity across vi.resetModules: errorMiddleware (re-imported per
+// boot) checks `err instanceof AppError`. An AppError built from THIS
+// module's class instance fails that check after a reset (dual class
+// identity → INTERNAL_ERROR 500). Constructing rejections through a
+// fresh-module factory keeps both sides on the same class object.
+const freshAppError = vi.hoisted(() => ({
+  build: null as null | ((code: string, message: string, details?: unknown) => Error),
+}));
+afterEach(async () => {
+  const mod = await import('../utils/appError');
+  freshAppError.build = (code, message, details) =>
+    new mod.AppError(code as never, message, details !== undefined ? { details } : undefined);
+});
 vi.mock('../services/tokenVersion', () => ({
   findUserTokenVersion: vi.fn(async () => 0),
   bumpTokenVersion: vi.fn(),
 }));
+// SLYK-0200 — the onboarding endpoints' service seam. Unit coverage of the
+// SQL lives in onboardingEventService.test.ts; here we stub it so the route
+// matrix (validation, envelope, auth chain) runs without a live DB.
+const onboardingMock = vi.hoisted(() => ({
+  recordOnboardingEvent: vi.fn(),
+  getDeployTarget: vi.fn(),
+}));
+vi.mock('../services/onboardingEventService', () => onboardingMock);
 
 import { SignJWT } from 'jose';
+import * as onboardingEventService from '../services/onboardingEventService';
+
+const mockedRecord = vi.mocked(onboardingEventService.recordOnboardingEvent);
+const mockedGetDeployTarget = vi.mocked(onboardingEventService.getDeployTarget);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -157,7 +183,14 @@ describe('agent-mode /api/v1/internal — HMAC auth chain', () => {
     expect(res.status).toBe(401);
   });
 
-  it('GET deploy-target with valid HMAC over empty body → 501 Phase 0.5', async () => {
+  it('GET deploy-target with valid HMAC over empty body → 200 five-field envelope (SLYK-0200)', async () => {
+    mockedGetDeployTarget.mockResolvedValue({
+      lxcCtid: 142,
+      lanIp: '192.168.31.142',
+      systemdService: 'inventory-tracker-backend',
+      subdomain: 'inventory-tracker',
+      stack: 'node-express',
+    });
     const app = await bootAgentModeApp();
     const emptySig = createHmac('sha256', TEST_DISPATCHER_TOKEN)
       .update(Buffer.alloc(0))
@@ -166,8 +199,17 @@ describe('agent-mode /api/v1/internal — HMAC auth chain', () => {
       .get('/api/v1/internal/projects/inventory-tracker/deploy-target')
       .set('X-Dispatcher-Signature', emptySig);
 
-    expect(res.status).toBe(501);
-    expect(res.body.error.message).toBe('Not implemented until Phase 0.5');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      data: {
+        lxcCtid: 142,
+        lanIp: '192.168.31.142',
+        systemdService: 'inventory-tracker-backend',
+        subdomain: 'inventory-tracker',
+        stack: 'node-express',
+      },
+    });
+    expect(mockedGetDeployTarget).toHaveBeenCalledWith('inventory-tracker');
   });
 
   it('unknown internal sub-path still 404s through the auth chain', async () => {
@@ -181,6 +223,202 @@ describe('agent-mode /api/v1/internal — HMAC auth chain', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('agent-mode onboarding endpoints (SLYK-0200)', () => {
+  const EVENT_PATH = '/api/v1/internal/projects/inventory-tracker/onboarding/events';
+  const DEPLOY_PATH = '/api/v1/internal/projects/inventory-tracker/deploy-target';
+
+  const eventRow = {
+    id: '44444444-4444-4444-8444-444444444444',
+    projectId: '33333333-3333-4333-8333-333333333333',
+    fromState: 'SMOKE_TEST',
+    toState: 'LIVE',
+    detail: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    mockedRecord.mockReset();
+    mockedGetDeployTarget.mockReset();
+    mockedRecord.mockResolvedValue(eventRow as never);
+    mockedGetDeployTarget.mockResolvedValue({
+      lxcCtid: 142,
+      lanIp: '192.168.31.142',
+      systemdService: 'inventory-tracker-backend',
+      subdomain: 'inventory-tracker',
+      stack: 'node-express',
+    });
+  });
+
+  // ── POST /projects/:slug/onboarding/events ──────────────────────────────
+
+  it('signed event POST → 200, service called with validated body', async () => {
+    const app = await bootAgentModeApp();
+    const body = { fromState: 'SMOKE_TEST', toState: 'LIVE', detail: { ok: true } };
+    const res = await request(app)
+      .post(EVENT_PATH)
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual(eventRow);
+    expect(mockedRecord).toHaveBeenCalledWith({
+      slug: 'inventory-tracker',
+      body: { fromState: 'SMOKE_TEST', toState: 'LIVE', detail: { ok: true } },
+    });
+  });
+
+  it('fromState: null accepted (first lifecycle event)', async () => {
+    const app = await bootAgentModeApp();
+    const body = { fromState: null, toState: 'PROVISIONING_LXC' };
+    const res = await request(app)
+      .post(EVENT_PATH)
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(mockedRecord).toHaveBeenCalledWith({ slug: 'inventory-tracker', body });
+  });
+
+  it('unknown slug (service 404) → 404 NOT_FOUND envelope', async () => {
+    mockedRecord.mockRejectedValue(
+      freshAppError.build!(ErrorCode.NOT_FOUND, "Project 'ghost' not found", { slug: 'ghost' }),
+    );
+    const app = await bootAgentModeApp();
+    const body = { fromState: null, toState: 'LIVE' };
+    const res = await request(app)
+      .post('/api/v1/internal/projects/ghost/onboarding/events')
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('invalid toState → 400 VALIDATION_FAILED before the service runs', async () => {
+    const app = await bootAgentModeApp();
+    const body = { fromState: null, toState: 'NOT_A_STATE' };
+    const res = await request(app)
+      .post(EVENT_PATH)
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedRecord).not.toHaveBeenCalled();
+  });
+
+  it('missing toState → 400 VALIDATION_FAILED', async () => {
+    const app = await bootAgentModeApp();
+    const body = { fromState: null };
+    const res = await request(app)
+      .post(EVENT_PATH)
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('unsigned event POST → 401 (auth chain still first)', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).post(EVENT_PATH).send({ fromState: null, toState: 'LIVE' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedRecord).not.toHaveBeenCalled();
+  });
+
+  // Duplicate same-state POSTs are NOT deduped here — the service appends
+  // rows by design (append-only log; idempotency is the dispatcher's job).
+  it('duplicate same-state POST calls the service again (append-only log)', async () => {
+    const app = await bootAgentModeApp();
+    const body = { fromState: 'LIVE', toState: 'LIVE' };
+    const first = await request(app)
+      .post(EVENT_PATH)
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+    const second = await request(app)
+      .post(EVENT_PATH)
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(mockedRecord).toHaveBeenCalledTimes(2);
+  });
+
+  // ── GET /projects/:slug/deploy-target ───────────────────────────────────
+
+  it('LIVE project → 200 with the five deploy fields', async () => {
+    mockedGetDeployTarget.mockResolvedValue({
+      lxcCtid: 142,
+      lanIp: '192.168.31.142',
+      systemdService: 'inventory-tracker-backend',
+      subdomain: 'inventory-tracker',
+      stack: 'node-express',
+    });
+    const app = await bootAgentModeApp();
+    const emptySig = createHmac('sha256', TEST_DISPATCHER_TOKEN)
+      .update(Buffer.alloc(0))
+      .digest('hex');
+    const res = await request(app).get(DEPLOY_PATH).set('X-Dispatcher-Signature', emptySig);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      lxcCtid: 142,
+      lanIp: '192.168.31.142',
+      systemdService: 'inventory-tracker-backend',
+      subdomain: 'inventory-tracker',
+      stack: 'node-express',
+    });
+  });
+
+  it('non-LIVE project (service 409) → 409 CONFLICT envelope', async () => {
+    mockedGetDeployTarget.mockRejectedValue(
+      freshAppError.build!(ErrorCode.CONFLICT, 'Project is not ready for deploys', {
+        slug: 'inventory-tracker',
+        onboardingState: 'PROVISIONING_LXC',
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const emptySig = createHmac('sha256', TEST_DISPATCHER_TOKEN)
+      .update(Buffer.alloc(0))
+      .digest('hex');
+    const res = await request(app).get(DEPLOY_PATH).set('X-Dispatcher-Signature', emptySig);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+    expect(res.body.error.details).toEqual({
+      slug: 'inventory-tracker',
+      onboardingState: 'PROVISIONING_LXC',
+    });
+  });
+
+  it('unknown slug (service 404) → 404 NOT_FOUND envelope', async () => {
+    mockedGetDeployTarget.mockRejectedValue(
+      freshAppError.build!(ErrorCode.NOT_FOUND, "Project 'ghost' not found"),
+    );
+    const app = await bootAgentModeApp();
+    const emptySig = createHmac('sha256', TEST_DISPATCHER_TOKEN)
+      .update(Buffer.alloc(0))
+      .digest('hex');
+    const res = await request(app)
+      .get('/api/v1/internal/projects/ghost/deploy-target')
+      .set('X-Dispatcher-Signature', emptySig);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('unsigned deploy-target GET → 401', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).get(DEPLOY_PATH);
+
+    expect(res.status).toBe(401);
+    expect(mockedGetDeployTarget).not.toHaveBeenCalled();
   });
 });
 
@@ -202,6 +440,28 @@ describe('plain mode — requireAgentMode gate', () => {
 
     expect(res.status).toBe(501);
     expect(res.body.error.message).toBe('Agent mode is not enabled on this server');
+  });
+
+  it('onboarding endpoints → 501 in plain mode even when signed', async () => {
+    const app = await bootPlainModeApp();
+    const body = { fromState: null, toState: 'LIVE' };
+    const eventRes = await request(app)
+      .post('/api/v1/internal/projects/inventory-tracker/onboarding/events')
+      .set(dispatcherHeaders(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+    const emptySig = createHmac('sha256', TEST_DISPATCHER_TOKEN)
+      .update(Buffer.alloc(0))
+      .digest('hex');
+    const deployRes = await request(app)
+      .get('/api/v1/internal/projects/inventory-tracker/deploy-target')
+      .set('X-Dispatcher-Signature', emptySig);
+
+    expect(eventRes.status).toBe(501);
+    expect(eventRes.body.error.message).toBe('Agent mode is not enabled on this server');
+    expect(deployRes.status).toBe(501);
+    expect(deployRes.body.error.message).toBe('Agent mode is not enabled on this server');
+    expect(mockedRecord).not.toHaveBeenCalled();
+    expect(mockedGetDeployTarget).not.toHaveBeenCalled();
   });
 });
 
