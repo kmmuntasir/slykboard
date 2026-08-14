@@ -118,8 +118,8 @@ const { adminAgentRouter } = await import('./routes/admin-agent.routes');
 const { agentChatRouter } = await import('./routes/agent-chat.routes');
 app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRouter);
 app.use('/api/v1/admin', requireAgentMode, authenticate, requirePlatformAdmin(), adminAgentRouter);
-// SLYK-0280 — user-facing agent routes (Pipeline tab read). Plain mode 501s
-// from requireAgentMode before authenticate or any agent code runs.
+// SLYK-0270/0280 — user-facing SSE + Pipeline read routes (PM browser JWTs,
+// not HMAC). Plain mode 501s from requireAgentMode before any agent code runs.
 app.use('/api/v1/me', requireAgentMode, authenticate, agentChatRouter);
 
 // --- Error sink (MUST be last) ---

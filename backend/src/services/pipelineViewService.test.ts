@@ -228,23 +228,47 @@ describe('SLYK0280 getTicketForUser access check', () => {
     await pool.end();
   });
 
+  // SLYK-0270's args-object signature; deny branches are non-revealing 404s
+  // (anti-oracle) rather than the old FORBIDDEN literal.
   it('member → returns the ticket', async () => {
-    const ticket = await getTicketForUser(f.member, f.ticketId);
+    const ticket = await getTicketForUser({
+      ticketId: f.ticketId,
+      userId: f.member.id,
+      isPlatformAdmin: f.member.isPlatformAdmin,
+    });
     expect(ticket.id).toBe(f.ticketId);
   });
 
-  it('non-member → FORBIDDEN with the non-revealing literal', async () => {
-    await expect(getTicketForUser(f.outsider, f.ticketId)).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-      status: 403,
-      message: 'You do not have access to this project',
+  it('non-member → non-revealing 404 (indistinguishable from unknown ticket)', async () => {
+    await expect(
+      getTicketForUser({
+        ticketId: f.ticketId,
+        userId: f.outsider.id,
+        isPlatformAdmin: f.outsider.isPlatformAdmin,
+      }),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      status: 404,
+      message: 'Ticket not found',
     });
   });
 
   it('unknown ticket → NOT_FOUND', async () => {
     const ghost = '00000000-0000-4000-8000-000000000000';
-    await expect(getTicketForUser(f.member, ghost)).rejects.toBeInstanceOf(AppError);
-    await expect(getTicketForUser(f.member, ghost)).rejects.toMatchObject({
+    await expect(
+      getTicketForUser({
+        ticketId: ghost,
+        userId: f.member.id,
+        isPlatformAdmin: f.member.isPlatformAdmin,
+      }),
+    ).rejects.toBeInstanceOf(AppError);
+    await expect(
+      getTicketForUser({
+        ticketId: ghost,
+        userId: f.member.id,
+        isPlatformAdmin: f.member.isPlatformAdmin,
+      }),
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
       status: 404,
     });
