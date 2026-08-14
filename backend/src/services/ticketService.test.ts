@@ -32,6 +32,9 @@ const bag = vi.hoisted(() => ({
   hydrateLabelsForTickets: vi.fn(),
   // SLYK-0270: getTicketForUser membership probe rows (empty = non-member)
   memberRows: [] as Array<Record<string, unknown>>,
+  // SLYK-0290: agent-mode auto-queue hook seam (from ./ticketAgentService)
+  agentModeEnabled: vi.fn(),
+  autoQueueOnCreate: vi.fn(),
 }));
 
 vi.mock('../db/client', async () => {
@@ -162,6 +165,15 @@ vi.mock('./labelService', () => ({
   hydrateLabelsForTickets: (ids: string[]) => bag.hydrateLabelsForTickets(ids),
 }));
 
+// SLYK-0290 — the auto-queue hook is mocked so these tests exercise only the
+// createTicket call-site (gate + ordering). Hook behavior lives in
+// ticketAgentService.test.ts. Test env defaults to plain mode (no
+// SLYKBOARD_AGENT_MODE), and the mock defaults the gate to false to match.
+vi.mock('./ticketAgentService', () => ({
+  agentModeEnabled: () => bag.agentModeEnabled(),
+  autoQueueOnCreate: (ticket: unknown) => bag.autoQueueOnCreate(ticket),
+}));
+
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import {
@@ -199,6 +211,10 @@ function resetBag() {
   bag.replaceTicketLabels.mockReset();
   bag.hydrateLabelsForTickets.mockReset();
   bag.memberRows = [];
+  // SLYK-0290: plain mode by default — existing tests must not fire the hook.
+  bag.agentModeEnabled.mockReset();
+  bag.agentModeEnabled.mockReturnValue(false);
+  bag.autoQueueOnCreate.mockReset();
   // getTicket hydrates labels; default to an empty map (no labels) unless a test
   // overrides it.
   bag.hydrateLabelsForTickets.mockResolvedValue(new Map<string, unknown[]>());
@@ -1486,5 +1502,71 @@ describe('ticketService activity capture same-txn participation (F18)', () => {
     expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
     expect(bag.activityInserts.length).toBeGreaterThan(0);
     expect(bag.activityInserts[0]!.actionType).toBe('PRIORITY_CHANGED');
+  });
+});
+
+// SLYK-0290 — the agent-mode gate at the createTicket call-site. Plain mode
+// must stay untouched (no job row, no webhook — the hook never runs); agent
+// mode awaits the hook AFTER the create txn and label linking commit.
+describe('ticketService createTicket auto-queue gate (SLYK-0290)', () => {
+  beforeEach(resetBag);
+
+  function primeCreate() {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    bag.seqRow = [{ nextNumber: 1 }];
+    bag.maxRow = [{ maxPos: null }];
+    bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
+  }
+
+  it('plain mode (gate false) does NOT invoke the auto-queue hook', async () => {
+    primeCreate();
+    bag.agentModeEnabled.mockReturnValue(false);
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+
+    expect(bag.autoQueueOnCreate).not.toHaveBeenCalled();
+  });
+
+  it('agent mode (gate true) awaits autoQueueOnCreate with the inserted ticket row', async () => {
+    primeCreate();
+    bag.agentModeEnabled.mockReturnValue(true);
+
+    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+
+    expect(bag.autoQueueOnCreate).toHaveBeenCalledTimes(1);
+    expect(bag.autoQueueOnCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't-new', projectId: PROJECT_ID, ticketNumber: 1 }),
+    );
+  });
+
+  it('agent mode: hook runs AFTER label linking (webhook payload needs label names)', async () => {
+    primeCreate();
+    bag.agentModeEnabled.mockReturnValue(true);
+    const order: string[] = [];
+    bag.replaceTicketLabels.mockImplementation(async () => {
+      order.push('labels');
+    });
+    bag.autoQueueOnCreate.mockImplementation(async () => {
+      order.push('autoQueue');
+    });
+
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      labelIds: ['l1'],
+    });
+
+    expect(order).toEqual(['labels', 'autoQueue']);
+  });
+
+  it('agent mode: hook failure propagates (caller sees a 500, ticket row is committed)', async () => {
+    primeCreate();
+    bag.agentModeEnabled.mockReturnValue(true);
+    bag.autoQueueOnCreate.mockRejectedValue(new Error('job insert failed'));
+
+    await expect(createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New' })).rejects.toThrow(
+      'job insert failed',
+    );
   });
 });

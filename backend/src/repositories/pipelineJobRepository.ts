@@ -70,6 +70,34 @@ export async function updateJob(
   return row!;
 }
 
+export interface InsertJobArgs {
+  ticketId: string;
+  projectId: string;
+  agentBackend: string | null;
+  traceId: string;
+}
+
+/**
+ * Insert the initial BACKLOG job for a freshly-created ticket
+ * (SLYK-0290 auto-queue hook; state defaults to 'BACKLOG' in the schema).
+ * Runs AFTER the ticket-create transaction commits — a standalone write on
+ * `db`, never inside that txn (it must not hold the connection across the
+ * outbound webhook).
+ */
+export async function insertJob(tx: Tx | typeof db, args: InsertJobArgs): Promise<PipelineJobRow> {
+  const [row] = await tx
+    .insert(pipelineJobs)
+    .values({
+      ticketId: args.ticketId,
+      projectId: args.projectId,
+      state: 'BACKLOG',
+      agentBackend: args.agentBackend,
+      traceId: args.traceId,
+    })
+    .returning();
+  return row!;
+}
+
 export interface InsertEventArgs {
   ticketId: string;
   fromState: PipelineState;

@@ -11,6 +11,7 @@ import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
 import { diffTicketChanges, recordActivity } from './activityLogService';
 import { stopTimerForTicket } from './timerService';
 import { isProjectMember } from './membershipService';
+import { agentModeEnabled, autoQueueOnCreate } from './ticketAgentService';
 import type { HydratedLabel } from './labelService';
 import type { LabelDiff } from './activityLogService';
 import type { ChecklistItem } from '../db/schema';
@@ -260,6 +261,14 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
   // Skip the no-op when labelIds is empty (a new ticket has no labels to clear).
   if (input.labelIds !== undefined && input.labelIds.length > 0) {
     await replaceTicketLabels({ ticketId: insertedTicket.id, labelIds: input.labelIds });
+  }
+
+  // SLYK-0290: agent mode auto-queues the ticket (BACKLOG job row + signed
+  // ticket_created webhook). AFTER the create txn commits and labels are
+  // linked — the webhook payload wants label names, and HTTP never runs
+  // inside the transaction (11-existing-patterns.md). Plain mode: no-op.
+  if (agentModeEnabled()) {
+    await autoQueueOnCreate(insertedTicket);
   }
   return insertedTicket;
 }

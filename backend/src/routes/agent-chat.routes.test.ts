@@ -56,6 +56,12 @@ const pipelineViewMock = vi.hoisted(() => ({
   getPipelineView: vi.fn(),
 }));
 vi.mock('../services/pipelineViewService', () => pipelineViewMock);
+// SLYK-0290 — the queue endpoint's service seam. SQL/state-machine behavior
+// lives in ticketAgentService.test.ts; here we assert the route wiring only.
+const ticketAgentMock = vi.hoisted(() => ({
+  queueForAgent: vi.fn(),
+}));
+vi.mock('../services/ticketAgentService', () => ticketAgentMock);
 
 // AppError identity across vi.resetModules: errorMiddleware (re-imported per
 // boot) checks `err instanceof AppError`, so a rejection built from THIS
@@ -69,6 +75,7 @@ const freshAppError = vi.hoisted(() => ({
 import { SignJWT } from 'jose';
 import * as ticketService from '../services/ticketService';
 import * as pipelineViewService from '../services/pipelineViewService';
+import * as ticketAgentService from '../services/ticketAgentService';
 
 afterEach(async () => {
   const mod = await import('../utils/appError');
@@ -78,6 +85,7 @@ afterEach(async () => {
 
 const mockedGetTicketForUser = vi.mocked(ticketService.getTicketForUser);
 const mockedGetPipelineView = vi.mocked(pipelineViewService.getPipelineView);
+const mockedQueueForAgent = vi.mocked(ticketAgentService.queueForAgent);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -586,5 +594,136 @@ describe('GET /api/v1/me/tickets/:id/events — streaming (real socket)', () => 
       vi.useRealTimers();
       server?.close();
     }
+  });
+});
+
+// ── SLYK-0290: queue endpoint (supertest) ──────────────────────────────────
+
+describe('agent-mode POST /api/v1/me/tickets/:ticketId/queue (SLYK-0290)', () => {
+  const QUEUE_PATH = `/api/v1/me/tickets/${TICKET_ID}/queue`;
+
+  const queuedJob = {
+    ticketId: TICKET_ID,
+    projectId: '33333333-3333-4333-8333-333333333333',
+    state: 'QUEUED',
+    attempts: 0,
+    traceId: '9b7c6d5e-1111-4222-8333-444455556666',
+  };
+
+  beforeEach(() => {
+    mockedGetTicketForUser.mockReset();
+    mockedQueueForAgent.mockReset();
+    mockedGetTicketForUser.mockResolvedValue({ id: TICKET_ID } as never);
+    mockedQueueForAgent.mockResolvedValue(queuedJob as never);
+  });
+
+  it('member → 200 { data: job } with state QUEUED, both services called with the ticketId', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(QUEUE_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: queuedJob });
+    expect(mockedGetTicketForUser).toHaveBeenCalledWith({
+      ticketId: TICKET_ID,
+      userId: PM.id,
+      isPlatformAdmin: false,
+    });
+    expect(mockedQueueForAgent).toHaveBeenCalledWith(TICKET_ID);
+  });
+
+  it('unknown ticket (access check 404) → 404 NOT_FOUND before the queue service runs', async () => {
+    mockedGetTicketForUser.mockRejectedValue(
+      freshAppError.build!('NOT_FOUND', `Ticket '${TICKET_ID}' not found`, {
+        ticketId: TICKET_ID,
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(QUEUE_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedQueueForAgent).not.toHaveBeenCalled();
+  });
+
+  it('non-member (outsider) → 404 NOT_FOUND, indistinguishable from unknown ticket', async () => {
+    mockedGetTicketForUser.mockRejectedValue(freshAppError.build!('NOT_FOUND', 'Ticket not found'));
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(QUEUE_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(OUTSIDER)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(mockedQueueForAgent).not.toHaveBeenCalled();
+  });
+
+  it('no job row → 404 NOT_FOUND ("is not in the pipeline")', async () => {
+    mockedQueueForAgent.mockRejectedValue(
+      freshAppError.build!('NOT_FOUND', `Ticket '${TICKET_ID}' is not in the pipeline`, {
+        ticketId: TICKET_ID,
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(QUEUE_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(res.body.error.message).toBe(`Ticket '${TICKET_ID}' is not in the pipeline`);
+  });
+
+  it('illegal source state (e.g. QUEUED ticket) → 409 CONFLICT with {from, to} details', async () => {
+    mockedQueueForAgent.mockRejectedValue(
+      freshAppError.build!('CONFLICT', 'Cannot transition from QUEUED to QUEUED', {
+        from: 'QUEUED',
+        to: 'QUEUED',
+      }),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post(QUEUE_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+    expect(res.body.error.details).toEqual({ from: 'QUEUED', to: 'QUEUED' });
+  });
+
+  it('non-uuid ticketId → 400 VALIDATION_FAILED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .post('/api/v1/me/tickets/not-a-uuid/queue')
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetTicketForUser).not.toHaveBeenCalled();
+    expect(mockedQueueForAgent).not.toHaveBeenCalled();
+  });
+
+  it('no JWT → 401 UNAUTHENTICATED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).post(QUEUE_PATH);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedQueueForAgent).not.toHaveBeenCalled();
+  });
+
+  it('plain mode → 501 NOT_IMPLEMENTED from requireAgentMode (no services run)', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app)
+      .post(QUEUE_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(501);
+    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(mockedGetTicketForUser).not.toHaveBeenCalled();
+    expect(mockedQueueForAgent).not.toHaveBeenCalled();
   });
 });
