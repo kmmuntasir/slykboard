@@ -10,6 +10,7 @@ import { UNSORTED_BUCKET_ID } from './boardService';
 import { replaceTicketLabels, hydrateLabelsForTickets } from './labelService';
 import { diffTicketChanges, recordActivity } from './activityLogService';
 import { stopTimerForTicket } from './timerService';
+import { isProjectMember } from './membershipService';
 import type { HydratedLabel } from './labelService';
 import type { LabelDiff } from './activityLogService';
 import type { ChecklistItem } from '../db/schema';
@@ -343,6 +344,48 @@ export async function getTicket(ticketId: string): Promise<HydratedTicket | null
   const row = rows[0];
   if (!row) return null;
   return hydrateTicketRow(row);
+}
+
+// SLYK-0280 — access-checked ticket read for /api/v1/me/tickets/:id/* agent
+// routes (11-existing-patterns.md § "Existing ticket access check"). Returns
+// the ticket row or throws: NOT_FOUND when no ticket row exists, otherwise
+// the same non-revealing FORBIDDEN as resolveTicketProject (project missing
+// or inactive, non-member, non-PA). Semantics mirror resolveProject.ts so
+// this stays the service-layer twin of that middleware.
+export async function getTicketForUser(
+  ctx: { id: string; isPlatformAdmin: boolean },
+  ticketId: string,
+): Promise<HydratedTicket> {
+  const ticket = await getTicket(ticketId);
+  if (!ticket) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
+      details: { ticketId },
+    });
+  }
+
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, ticket.projectId))
+    .limit(1);
+  // Missing project row (FK should prevent it) or inactive project → the same
+  // non-revealing FORBIDDEN literal as resolveProject.ts.
+  const PROJECT_ACCESS_DENIED = 'You do not have access to this project';
+  if (!project) {
+    throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+  }
+
+  if (!ctx.isPlatformAdmin) {
+    if (project.isActive === false) {
+      throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+    }
+    const member = await db.transaction((tx) => isProjectMember(tx, project.id, ctx.id));
+    if (!member) {
+      throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+    }
+  }
+
+  return ticket;
 }
 
 // F30 D-Display-Id-Lookup: fetch a ticket by its human-readable ref

@@ -115,8 +115,12 @@ app.use('/api/comments', commentsRouter);
 // requireAgentMode gate short-circuits before any agent code runs.
 const { internalRouter } = await import('./routes/internal.routes');
 const { adminAgentRouter } = await import('./routes/admin-agent.routes');
+const { agentChatRouter } = await import('./routes/agent-chat.routes');
 app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRouter);
 app.use('/api/v1/admin', requireAgentMode, authenticate, requirePlatformAdmin(), adminAgentRouter);
+// SLYK-0280 — user-facing agent routes (Pipeline tab read). Plain mode 501s
+// from requireAgentMode before authenticate or any agent code runs.
+app.use('/api/v1/me', requireAgentMode, authenticate, agentChatRouter);
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);
