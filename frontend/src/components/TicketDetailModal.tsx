@@ -15,6 +15,9 @@ import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { useTicketForm, type TicketFormValues } from '@/hooks/useTicketForm';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
+import { isFailedPipelineState } from '@/constants/pipelineStates';
+import { usePipeline } from '@/hooks/usePipeline';
 import type { UpdateTicketDto } from '@/types/ticket';
 import { Avatar } from './ui/Avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/Tabs';
@@ -24,6 +27,8 @@ import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
 import { DeleteTicketConfirm } from './DeleteTicketConfirm';
 import { ActivityFeed } from './ActivityFeed';
 import { CommentsSection } from './CommentsSection';
+import { FailedPipelineBadge } from './FailedPipelineBadge';
+import { PipelinePanel } from './PipelinePanel';
 import { TimerHeroCard } from './TimerHeroCard';
 import { TimeLog } from './TimeLog';
 import { ManualEntryForm } from './ManualEntryForm';
@@ -67,7 +72,7 @@ interface TicketDetailModalProps {
     onSubmit: (dto: UpdateTicketDto) => Promise<void>;
 }
 
-type DetailTab = 'metadata' | 'time-tracking' | 'activity';
+type DetailTab = 'metadata' | 'time-tracking' | 'activity' | 'pipeline';
 
 export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketDetailModalProps) {
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -224,6 +229,13 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     // branch below wires it into StatusField.onMove with the ticket's id/position.
     const statusMoveMutate = useStatusMove(slug);
 
+    // SLYK-0310: Pipeline tab + header failure badge exist only in agent mode
+    // (06-frontend-ui.md — components gate on useRuntimeConfigStore selector).
+    // usePipeline is called unconditionally for hook-order stability; its query
+    // is skipped (enabled: false via the gate below) in plain mode.
+    const agentMode = useRuntimeConfigStore((s) => s.agentMode);
+    const { data: pipelineView } = usePipeline(agentMode ? ticketId : '');
+
     // The modal shell is always rendered while open; only the body branches on
     // the query state (loading / error / absent / resolved).
     const modalTitle = ticket ? formatTicketId(slug, ticket.ticketNumber) : 'Loading ticket…';
@@ -275,6 +287,18 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                             </span>
                         </div>
                     )}
+
+                    {/* SLYK-0310: header failure badge (agent mode, FAILED_ or BLOCKED_HUMAN). */}
+                    {agentMode &&
+                        pipelineView &&
+                        isFailedPipelineState(pipelineView.job.state) && (
+                            <div className="mb-4">
+                                <FailedPipelineBadge
+                                    state={pipelineView.job.state}
+                                    attempts={pipelineView.job.attempts}
+                                />
+                            </div>
+                        )}
 
                     {/*
                       DEL-01 T7: 2-column grid — static LEFT (title/description/
@@ -360,6 +384,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                         Time Tracking
                                     </TabsTrigger>
                                     <TabsTrigger value="activity">Activity</TabsTrigger>
+                                    {agentMode && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}
                                 </TabsList>
 
                                 {/* --- Metadata --------------------------------------- */}
@@ -428,6 +453,18 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                         </div>
                                     )}
                                 </TabsContent>
+
+                                {/* --- Pipeline (agent mode only) --------------------- */}
+                                {agentMode && (
+                                    <TabsContent
+                                        value="pipeline"
+                                        forceMount
+                                        hidden={activeTab !== 'pipeline'}
+                                        className="mt-4"
+                                    >
+                                        <PipelinePanel ticketId={ticket.id} slug={slug} />
+                                    </TabsContent>
+                                )}
                             </Tabs>
                         </div>
 

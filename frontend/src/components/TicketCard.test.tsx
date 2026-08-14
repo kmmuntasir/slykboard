@@ -106,4 +106,32 @@ describe('TicketCard', () => {
         expect(card.className).toContain('ring-');
         expect(card.className).toContain('bg-card');
     });
+
+    // SLYK-0310 — kanban <FailedPipelineBadge> gating: renders for the board
+    // payload's additive pipelineState field when FAILED_*/BLOCKED_HUMAN,
+    // absent for healthy states and when the field is missing (plain mode).
+    it('renders the failure badge when pipelineState is a FAILED_* state', () => {
+        const failed = { ...baseTicket, pipelineState: 'FAILED_CI' as const };
+        renderInDnd(<TicketCard ticket={failed} projectSlug="SLYK" index={0} />);
+        expect(
+            screen.getByLabelText('Pipeline failed: Automated tests failed'),
+        ).toBeInTheDocument();
+    });
+
+    it('renders the BLOCKED_HUMAN badge variant', () => {
+        const blocked = { ...baseTicket, pipelineState: 'BLOCKED_HUMAN' as const };
+        renderInDnd(<TicketCard ticket={blocked} projectSlug="SLYK" index={0} />);
+        expect(screen.getByLabelText('Pipeline blocked: needs human help')).toBeInTheDocument();
+    });
+
+    it('renders no badge for a healthy pipeline state', () => {
+        const healthy = { ...baseTicket, pipelineState: 'AGENT_RUNNING' as const };
+        renderInDnd(<TicketCard ticket={healthy} projectSlug="SLYK" index={0} />);
+        expect(screen.queryByLabelText(/^Pipeline (failed|blocked)/)).not.toBeInTheDocument();
+    });
+
+    it('renders no badge when pipelineState is absent (plain mode)', () => {
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
+        expect(screen.queryByLabelText(/^Pipeline (failed|blocked)/)).not.toBeInTheDocument();
+    });
 });

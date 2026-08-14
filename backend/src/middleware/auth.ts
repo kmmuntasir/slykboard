@@ -5,22 +5,22 @@ import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
 
 // D12: reads Authorization: Bearer <jwt> (case-insensitive scheme).
-// On success, attaches req.user = { id, email, isPlatformAdmin }.
+// SLYK-0310: the EventSource API cannot set headers, so the same JWT may also
+// ride the `access_token` query param (checked only when the header is absent;
+// the header stays the primary path everywhere else). On success, attaches
+// req.user = { id, email, isPlatformAdmin }.
 export async function authenticate(
   req: Request,
   _res: Response,
   next: NextFunction,
 ): Promise<void> {
   const header = req.headers.authorization;
-  if (!header) {
+  const match = header ? /^Bearer\s+(.+)$/i.exec(header) : null;
+  const queryToken = req.query?.access_token;
+  const token = match?.[1] ?? (typeof queryToken === 'string' && queryToken ? queryToken : null);
+  if (!token) {
     throw new AppError(ErrorCode.UNAUTHENTICATED, 'Missing or invalid token');
   }
-
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  if (!match) {
-    throw new AppError(ErrorCode.UNAUTHENTICATED, 'Missing or invalid token');
-  }
-  const token = match[1]!;
 
   let payload;
   try {

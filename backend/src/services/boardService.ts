@@ -1,11 +1,13 @@
 import { and, asc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
-import { tickets, users, ticketLabels } from '../db/schema';
+import { tickets, users, ticketLabels, pipelineJobs } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { logger } from '../config/logger';
 import { getProjectBySlug } from './projectService';
 import { hydrateLabelsForTickets } from './labelService';
+import { agentModeEnabled } from './ticketAgentService';
+import type { PipelineState } from './pipelineStateService';
 import type { HydratedLabel } from './labelService';
 import type { ChecklistItem } from '../db/schema';
 
@@ -35,6 +37,10 @@ export interface BoardTicket {
   creatorId: string;
   createdAt: Date;
   updatedAt: Date;
+  // SLYK-0310: additive agent-mode field — the ticket's pipeline job state
+  // (FAILED_*/BLOCKED_HUMAN drive <FailedPipelineBadge>). Always null in
+  // plain mode; null in agent mode when the ticket has no job row.
+  pipelineState: PipelineState | null;
 }
 
 export interface BoardColumn {
@@ -135,6 +141,13 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
   // Tickets with no label rows default to [] at the read site.
   const labelMap = await hydrateLabelsForTickets(rows.map((r) => r.id));
 
+  // SLYK-0310: batch-hydrate pipeline job states in agent mode (same shape as
+  // the label hydration — one inArray query, Map by ticketId). Plain mode
+  // skips the query entirely; tickets with no job row hydrate as null.
+  const pipelineStateMap = agentModeEnabled()
+    ? await hydratePipelineStates(rows.map((r) => r.id))
+    : new Map<string, PipelineState>();
+
   const allTickets: BoardTicket[] = rows.map((r) => ({
     id: r.id,
     ticketNumber: r.ticketNumber,
@@ -157,6 +170,7 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
     creatorId: r.creatorId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    pipelineState: pipelineStateMap.get(r.id) ?? null,
   }));
 
   // F09 D-Soft-Cap: warn (not truncate).
@@ -209,4 +223,23 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
     project: { id: project.id, name: project.name, slug: project.slug },
     columns,
   };
+}
+
+// SLYK-0310 — batch pipeline-state hydration for the board payload
+// (<FailedPipelineBadge> gating). Mirrors hydrateLabelsForTickets: one
+// inArray select over the board's ticket ids, Map<ticketId, state>. Called
+// only in agent mode; an empty id list short-circuits to an empty Map.
+export async function hydratePipelineStates(
+  ticketIds: string[],
+): Promise<Map<string, PipelineState>> {
+  const map = new Map<string, PipelineState>();
+  if (ticketIds.length === 0) return map;
+  const rows = await db
+    .select({ ticketId: pipelineJobs.ticketId, state: pipelineJobs.state })
+    .from(pipelineJobs)
+    .where(inArray(pipelineJobs.ticketId, ticketIds));
+  for (const r of rows) {
+    map.set(r.ticketId, r.state);
+  }
+  return map;
 }

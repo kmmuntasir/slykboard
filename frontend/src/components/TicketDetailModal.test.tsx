@@ -114,6 +114,14 @@ vi.mock('@/hooks/useProjectMembers', () => ({
     // Default: not a project admin (the platform-admin mock alone gates delete).
     useCurrentProjectMembership: vi.fn(() => ({ membership: undefined, isProjectAdmin: false })),
 }));
+
+// SLYK-0310: Pipeline tab gating — agent mode flips the runtime-config store.
+// Default plain mode (agentMode: false) for every pre-existing test.
+vi.mock('@/stores/useRuntimeConfigStore', () => ({
+    useRuntimeConfigStore: (selector: (s: { agentMode: boolean }) => boolean) =>
+        selector({ agentMode: globalThis.__agentMode ?? false }),
+}));
+
 vi.mock('@/hooks/useDeleteTicket', () => ({
     useDeleteTicket: vi.fn(() => ({
         mutate: vi.fn(),
@@ -130,8 +138,13 @@ import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket, fetchTicketActivity } from '@/api/tickets';
 import { fetchTicketComments } from '@/api/comments';
-import { ticketKeys } from '@/api/queryKeys';
+import { ticketKeys, pipelineKeys } from '@/api/queryKeys';
 import type { Ticket } from '@/types/ticket';
+
+// SLYK-0310: pipeline-tab test flag (set by the agent-mode describe below).
+declare global {
+    var __agentMode: boolean | undefined;
+}
 
 // --- Fixtures ---------------------------------------------------------------
 
@@ -178,11 +191,7 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
     return createElement(
         QueryClientProvider,
         { client },
-        createElement(
-            TooltipProvider,
-            null,
-            createElement(RouterProvider, { router }),
-        ),
+        createElement(TooltipProvider, null, createElement(RouterProvider, { router })),
     );
 }
 
@@ -826,12 +835,8 @@ describe('TicketDetailModal', () => {
             'active',
         );
         // The companion (non-soft-deleted) triggers are NOT disabled.
-        expect(screen.getByRole('tab', { name: /metadata/i })).not.toHaveAttribute(
-            'data-disabled',
-        );
-        expect(screen.getByRole('tab', { name: /activity/i })).not.toHaveAttribute(
-            'data-disabled',
-        );
+        expect(screen.getByRole('tab', { name: /metadata/i })).not.toHaveAttribute('data-disabled');
+        expect(screen.getByRole('tab', { name: /activity/i })).not.toHaveAttribute('data-disabled');
 
         // Time Tracking panel content: the timer/log/manual controls are all
         // gated behind !ticket.deletedAt, so they simply don't render anywhere
@@ -977,5 +982,88 @@ describe('TicketDetailModal', () => {
             ),
         );
         expect(screen.getByRole('button', { name: 'Delete ticket' })).toBeInTheDocument();
+    });
+});
+
+// SLYK-0310 — Pipeline tab + header failure badge gating. The tab exists only
+// when useRuntimeConfigStore reports agent mode; plain mode renders neither
+// the tab nor the header badge. The pipeline fetch + panel internals are
+// covered by PipelinePanel.test.tsx.
+describe('TicketDetailModal Pipeline tab (SLYK-0310)', () => {
+    let appRoot: HTMLElement;
+
+    function makePipelineCache(state: string, attempts: number) {
+        return {
+            job: {
+                ticketId: TICKET_ID,
+                projectId: 'p1',
+                state,
+                priority: 0,
+                attempts,
+                leaseOwnerId: null,
+                leaseExpiresAt: null,
+                agentIssueId: null,
+                agentBackend: 'cyrus',
+                githubPrNumber: null,
+                githubPrSha: null,
+                needsPmAttention: false,
+                traceId: null,
+                createdAt: '2026-08-14T20:00:00.000Z',
+                updatedAt: '2026-08-14T20:10:00.000Z',
+            },
+            events: [],
+        };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        globalThis.__agentMode = false;
+        vi.mocked(fetchTicketActivity).mockResolvedValue({ entries: [] });
+        vi.mocked(fetchTicketComments).mockResolvedValue([]);
+        appRoot = document.createElement('main');
+        appRoot.id = 'app-root';
+        document.body.appendChild(appRoot);
+    });
+
+    afterEach(() => {
+        globalThis.__agentMode = undefined;
+        appRoot.remove();
+        cleanup();
+    });
+
+    it('plain mode: no Pipeline tab trigger', async () => {
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.queryByRole('tab', { name: /pipeline/i })).not.toBeInTheDocument();
+    });
+
+    it('agent mode: Pipeline tab appears and activates', async () => {
+        globalThis.__agentMode = true;
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /pipeline/i }));
+        const panel = await screen.findByRole('tabpanel', { name: /pipeline/i });
+        expect(panel).toBeInTheDocument();
+    });
+
+    it('agent mode + FAILED_CI job: header shows the failure badge', async () => {
+        globalThis.__agentMode = true;
+        const { client } = renderModal();
+        client.setQueryData(pipelineKeys.detail(TICKET_ID), makePipelineCache('FAILED_CI', 1));
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        expect(
+            await screen.findByLabelText('Pipeline failed: Automated tests failed'),
+        ).toBeInTheDocument();
+    });
+
+    it('agent mode + healthy job: no header badge', async () => {
+        globalThis.__agentMode = true;
+        const { client } = renderModal();
+        client.setQueryData(pipelineKeys.detail(TICKET_ID), makePipelineCache('QUEUED', 0));
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        expect(screen.queryByLabelText(/^Pipeline (failed|blocked)/)).not.toBeInTheDocument();
     });
 });
