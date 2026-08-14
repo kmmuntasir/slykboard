@@ -276,6 +276,27 @@ emitter interface.
 `03-security.md` risk table already documents the 15s heartbeat +
 5min idle close + client auto-reconnect.
 
+**Status (SLYK-0270, shipped):** implemented as sketched above in
+`backend/src/routes/agent-chat.routes.ts`, with the emitter in
+`backend/src/services/sseEmitter.ts`. Deltas from the sketch, all
+deliberate:
+
+- Mounted as `app.use('/api/v1/me', requireAgentMode, authenticate,
+  agentChatRouter)` in `index.ts` — the gate + auth ride the mount,
+  not each route, matching the internal/admin agent mounts.
+- Access check via `ticketService.getTicketForUser` (this file §
+  "Existing ticket access check") BEFORE `writeHead`, mapping every
+  deny branch (unknown ticket / non-member / deactivated project) to
+  a non-revealing `404` — outsiders never learn the ticket exists.
+- Idle close: `setTimeout(res.end, 5 min)` added per the
+  `09-implementation-phases.md` risk table; both timers are cleared
+  on `req.close` alongside the unsubscribe.
+- Emitter surface: `emit/on/off/listenerCount` keyed by ticketId —
+  keep these signatures stable; Phase 6.5's Redis pub/sub swap
+  reimplements exactly this interface.
+- State frames come from the SLYK-0260 seam: `sseEmit` fans out
+  `event: state` with `{"state": <to>, "traceId": <traceId|null>}`.
+
 ## OpenAPI generation (Phase 5)
 
 **Library choice:** `@asteasolutions/zod-to-openapi`. Mature, supports

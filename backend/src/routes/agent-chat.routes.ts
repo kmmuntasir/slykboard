@@ -1,28 +1,103 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
-import { ticketIdParam, type TicketIdParam } from './agent-chat.schema';
 import * as ticketService from '../services/ticketService';
 import * as pipelineViewService from '../services/pipelineViewService';
+import * as sseEmitter from '../services/sseEmitter';
 
-// SLYK-0280 — user-facing agent routes mounted at /api/v1/me behind
-// requireAgentMode + authenticate (index.ts). Sibling /tickets/:id/messages
-// and /tickets/:id/events routes land in later phases; unknown /api/v1/me/*
-// sub-paths 404 through the auth chain like the internal mount.
+// SLYK-0270/0280 — user-facing agent routes mounted at /api/v1/me behind
+// requireAgentMode + authenticate (index.ts). PM browser JWTs — NOT the
+// HMAC-gated internalRouter. Later phases append:
+//   GET  /tickets/:id/messages          → Phase 2
+//   POST /tickets/:id/messages          → Phase 2
 
 export const agentChatRouter = Router();
 
-// Pipeline tab payload: the ticket's job row + the last 50 events in
-// timeline (asc) order. Access check via getTicketForUser (11-existing-
-// patterns.md § "Existing ticket access check") — NOT_FOUND for an unknown
-// ticket, non-revealing FORBIDDEN for a non-member — then 404 when the
-// ticket has no pipeline row (plain-mode ticket / not queued).
+// Heartbeat cadence — 03-security.md risk table ("flushes proxies, keeps
+// connection alive") and 09-implementation-phases.md § risk table (leak
+// mitigation). Exported for the route tests' fake-timer assertions.
+export const SSE_HEARTBEAT_MS = 15_000;
+
+// Idle-connection ceiling — 09-implementation-phases.md § risk table: "server
+// closes idle connections after 5 min; client auto-reconnects" via the retry
+// hint, so this bounds how long an abandoned tab can pin a socket + listener.
+export const SSE_IDLE_TIMEOUT_MS = 5 * 60_000;
+
+// Path params for this router. 05-backend-routes.md spells the path param
+// `:id`, but the pipeline route (SLYK-0280) uses `:ticketId` per
+// agent-chat.schema.ts; validate whichever key the route declares.
+const idPathParam = z.object({ id: z.uuid() });
+const ticketIdPathParam = z.object({ ticketId: z.uuid() });
+
+// GET /api/v1/me/tickets/:id/events — Server-Sent Events stream of pipeline
+// activity for one ticket. Access check runs BEFORE the stream opens so
+// outsiders get a plain 404 envelope, never a live channel.
+agentChatRouter.get(
+  '/tickets/:id/events',
+  validateRequest({ params: idPathParam }),
+  async (req, res) => {
+    const { id } = req.params as { id: string };
+
+    // Non-revealing 404 before headers are written: unknown ticket and
+    // non-member are indistinguishable (getTicketForUser semantics).
+    await ticketService.getTicketForUser({
+      ticketId: id,
+      userId: req.user!.id,
+      isPlatformAdmin: req.user!.isPlatformAdmin,
+    });
+
+    // 11-existing-patterns.md § SSE — headers verbatim from the sketch.
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no', // disable Nginx buffering if behind proxy
+    });
+    // Client reconnects after 5s if dropped.
+    res.write('retry: 5000\n\n');
+
+    // Heartbeat every 15s — flushes proxies, keeps connection alive.
+    const heartbeat = setInterval(() => {
+      res.write(': ping\n\n');
+    }, SSE_HEARTBEAT_MS);
+
+    const onEvent = (event: sseEmitter.SseEvent) => {
+      res.write(`event: ${event.type}\n`);
+      res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+    };
+    sseEmitter.on(id, onEvent);
+
+    // Idle close: 5 min without a client message or event ends the response;
+    // EventSource reconnects via the retry hint (risk-table mitigation).
+    const idleTimeout = setTimeout(() => {
+      res.end();
+    }, SSE_IDLE_TIMEOUT_MS);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      clearTimeout(idleTimeout);
+      sseEmitter.off(id, onEvent);
+    });
+  },
+);
+
+// GET /api/v1/me/tickets/:ticketId/pipeline (SLYK-0280) — Pipeline tab
+// payload: the ticket's job row + the last 50 events in timeline (asc)
+// order. Access check via getTicketForUser (11-existing-patterns.md §
+// "Existing ticket access check") — NOT_FOUND for an unknown ticket,
+// non-revealing FORBIDDEN for a non-member — then 404 when the ticket has
+// no pipeline row (plain-mode ticket / not queued).
 agentChatRouter.get(
   '/tickets/:ticketId/pipeline',
-  validateRequest({ params: ticketIdParam }),
+  validateRequest({ params: ticketIdPathParam }),
   async (req, res) => {
-    const { ticketId } = req.params as TicketIdParam;
-    await ticketService.getTicketForUser(req.user!, ticketId);
+    const { ticketId } = req.params as { ticketId: string };
+    await ticketService.getTicketForUser({
+      ticketId,
+      userId: req.user!.id,
+      isPlatformAdmin: req.user!.isPlatformAdmin,
+    });
     const view = await pipelineViewService.getPipelineView(ticketId);
     res.json(success(view));
   },

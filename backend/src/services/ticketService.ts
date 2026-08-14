@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, max, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
-import { labels, projectSequences, projects, tickets, users } from '../db/schema';
+import { labels, projectMembers, projectSequences, projects, tickets, users } from '../db/schema';
 import { sanitizeDescription } from '../utils/sanitizeHtml';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
@@ -346,46 +346,49 @@ export async function getTicket(ticketId: string): Promise<HydratedTicket | null
   return hydrateTicketRow(row);
 }
 
-// SLYK-0280 — access-checked ticket read for /api/v1/me/tickets/:id/* agent
-// routes (11-existing-patterns.md § "Existing ticket access check"). Returns
-// the ticket row or throws: NOT_FOUND when no ticket row exists, otherwise
-// the same non-revealing FORBIDDEN as resolveTicketProject (project missing
-// or inactive, non-member, non-PA). Semantics mirror resolveProject.ts so
-// this stays the service-layer twin of that middleware.
-export async function getTicketForUser(
-  ctx: { id: string; isPlatformAdmin: boolean },
-  ticketId: string,
-): Promise<HydratedTicket> {
-  const ticket = await getTicket(ticketId);
-  if (!ticket) {
-    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
-      details: { ticketId },
-    });
+// SLYK-0270/0280 — user-scoped ticket load for GET /api/v1/me/tickets/:id/*
+// (docs/agentic-automation/11-existing-patterns.md § "Existing ticket access
+// check": every /me ticket route reuses this, no bespoke auth checks). Mirrors
+// resolveTicketProject's decision tree but maps both deny branches to a
+// non-revealing 404 per the SLYK-0270 ticket ("404 for outsiders") — an
+// unauthenticated party must not distinguish "no such ticket" from "someone
+// else's ticket". Membership semantics are requireProjectMember's:
+// Platform-Admin bypass OR a real project_members row; deactivated projects
+// deny non-PAs. Returns the raw ticket row (projectId is what callers need).
+export async function getTicketForUser(args: {
+  ticketId: string;
+  userId: string;
+  isPlatformAdmin: boolean;
+}): Promise<TicketRow> {
+  const { ticketId, userId, isPlatformAdmin } = args;
+
+  const [row] = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!row) {
+    throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
   }
 
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, ticket.projectId))
-    .limit(1);
-  // Missing project row (FK should prevent it) or inactive project → the same
-  // non-revealing FORBIDDEN literal as resolveProject.ts.
-  const PROJECT_ACCESS_DENIED = 'You do not have access to this project';
-  if (!project) {
-    throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
-  }
-
-  if (!ctx.isPlatformAdmin) {
-    if (project.isActive === false) {
-      throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+  if (!isPlatformAdmin) {
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, row.projectId))
+      .limit(1);
+    // Missing project (FK-dangle) or deactivated → same 404 as a non-member:
+    // all three deny indistinguishably.
+    if (!project || project.isActive === false) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
     }
-    const member = await db.transaction((tx) => isProjectMember(tx, project.id, ctx.id));
-    if (!member) {
-      throw new AppError(ErrorCode.FORBIDDEN, PROJECT_ACCESS_DENIED);
+    const [membership] = await db
+      .select({ projectId: projectMembers.projectId })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, userId)))
+      .limit(1);
+    if (!membership) {
+      throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
     }
   }
 
-  return ticket;
+  return row;
 }
 
 // F30 D-Display-Id-Lookup: fetch a ticket by its human-readable ref
