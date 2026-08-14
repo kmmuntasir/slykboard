@@ -1,4 +1,5 @@
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import type { Request } from 'express';
 import cors from 'cors';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -13,6 +14,10 @@ import { requestLogger } from './middleware/requestLogger';
 import { notFound } from './middleware/notFound';
 import { errorHandler } from './middleware/errorMiddleware';
 import { pingRouter } from './middleware/pingRoute';
+import { authenticate } from './middleware/auth';
+import { requireAgentMode } from './middleware/requireAgentMode';
+import { agentTokenAuth } from './middleware/agentTokenAuth';
+import { requirePlatformAdmin } from './middleware/requirePlatformAdmin';
 import { authRouter } from './routes/auth.routes';
 import { projectsRouter } from './routes/projects.routes';
 import { ticketsRouter } from './routes/tickets.routes';
@@ -39,7 +44,23 @@ app.use(
 );
 // 3. Request logging (pino-http) — hangs req.log before routes use it.
 app.use(requestLogger);
-// 4. Body parsing.
+// 4a. Raw-body capture for dispatcher HMAC verification (SLYK-0150).
+// Mounted BEFORE the global json parser and scoped to /api/v1/internal —
+// the ONLY path whose auth signs over raw bytes. body-parser's
+// `req.complete` guard makes the later global parse a no-op for these
+// requests, so bodies are buffered exactly once.
+app.use(
+  '/api/v1/internal',
+  express.json({
+    // body-parser's verify types req as IncomingMessage; narrow to the
+    // augmented Express Request that declares rawBody (types/express.d.ts).
+    verify: (req: Request, _res, buf) => {
+      req.rawBody = buf;
+    },
+    type: 'application/json',
+  }),
+);
+// 4b. Body parsing (everything else).
 app.use(express.json());
 
 // --- Routes ---
@@ -82,18 +103,16 @@ app.use('/api/users', usersRouter);
 app.use('/api/labels', labelsRouter);
 app.use('/api/comments', commentsRouter);
 
-// --- Agent-mode routes (mounted only when SLYKBOARD_AGENT_MODE=true) ---
-// See docs/agentic-automation/02-dual-mode.md Layer 2.
-if (process.env.SLYKBOARD_AGENT_MODE === 'true') {
-  // Dynamic import keeps these modules out of the plain-mode bundle.
-  // Phase 0 fills in internalRouter / adminRouter / agentChatRouter.
-  // For now, they don't exist — this block stays commented until Phase 0.
-  //
-  // const { internalRouter } = await import('./routes/internal.routes');
-  // const { adminAgentRouter } = await import('./routes/admin-agent.routes');
-  // app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRouter);
-  // app.use('/api/v1/admin', requireAgentMode, requirePlatformAdmin(), adminAgentRouter);
-}
+// --- Agent-mode routes (SLYK-0150) ---
+// Mounted unconditionally per docs/agentic-automation/02-dual-mode.md Layer 2:
+// plain mode must answer every /api/v1/* call with 501 from requireAgentMode
+// (not 404), so the OSS contract "reject with 501" holds. The dynamic imports
+// at boot still keep agent modules out of the plain-mode request path; the
+// requireAgentMode gate short-circuits before any agent code runs.
+const { internalRouter } = await import('./routes/internal.routes');
+const { adminAgentRouter } = await import('./routes/admin-agent.routes');
+app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRouter);
+app.use('/api/v1/admin', requireAgentMode, authenticate, requirePlatformAdmin(), adminAgentRouter);
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);
