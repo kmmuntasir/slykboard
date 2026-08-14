@@ -43,7 +43,9 @@ describe('agent-mode boot (/api/v1 mount block)', () => {
 
   it('agent mode: /api/health 200, /api/v1/internal/* 401 without signature (routes mounted)', async () => {
     vi.stubEnv('SLYKBOARD_AGENT_MODE', 'true');
-    vi.stubEnv('SLYKBOARD_DISPATCHER_URL', 'http://localhost:4001');
+    // SLYK-0130 cross-field rule: agent mode requires the dispatcher pair, so
+    // the boot must stub them (env validation throws otherwise).
+    vi.stubEnv('SLYKBOARD_DISPATCHER_URL', 'http://dispatcher.local:4001');
     vi.stubEnv('SLYKBOARD_DISPATCHER_TOKEN', 'a'.repeat(64));
     const app = await bootApp();
 

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { runtimeConfig } from '../config';
 import { success, ErrorCode } from '../utils/envelope';
 import { AppError } from '../utils/appError';
 import { signJwt } from '../utils/jwt';
@@ -68,6 +69,10 @@ authRouter.post(
 // changes) and re-sign a fresh 8h JWT. Returns the FULL user row to preserve
 // the AuthResponseUser contract {id, email, fullName, displayName, avatarUrl,
 // isPlatformAdmin}.
+// SLYK-0160: also returns `config: runtimeConfig` so the frontend can decide
+// agent mode at runtime (02-dual-mode.md Layer 3) — the __AGENT_MODE__ build
+// switch is the build-time counterpart. Only reachable when authenticated
+// (middleware above), so config never leaks to anonymous callers.
 authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
   const user = await findUserById(req.user!.id);
   if (!user) {
@@ -90,6 +95,7 @@ authRouter.get('/me', authenticate, async (req, res): Promise<void> => {
         avatarUrl: user.avatarUrl,
         isPlatformAdmin: user.isPlatformAdmin,
       },
+      config: runtimeConfig,
     }),
   );
 });

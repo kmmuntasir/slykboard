@@ -18,12 +18,29 @@ const { TEST_ENV } = vi.hoisted(() => ({
     googleClientSecret: 'test-client-secret',
     googleCallbackUrl: 'http://localhost:3000/api/auth/google/callback',
     allowedDomain: undefined as string | undefined,
+    agentMode: false,
+    dispatcherUrl: undefined as string | undefined,
   },
 }));
 
-vi.mock('../config', () => ({
-  env: TEST_ENV,
-}));
+// The barrel mock also supplies the SLYK-0160 runtimeConfig (frozen at module
+// load from TEST_ENV) and SCHEMA_VERSION, so /me tests can flip agent mode
+// per-test by mutating TEST_ENV before the dynamic re-import below.
+vi.mock('../config', async () => {
+  const actual = await vi.importActual<typeof import('../config')>('../config');
+  return {
+    ...actual,
+    env: TEST_ENV,
+    runtimeConfig: Object.freeze({
+      get agentMode() {
+        return TEST_ENV.agentMode;
+      },
+      get dispatcherUrl() {
+        return TEST_ENV.dispatcherUrl ?? null;
+      },
+    }),
+  };
+});
 vi.mock('../services/googleOAuth', () => ({
   exchangeCodeForUser: vi.fn(),
 }));
@@ -79,6 +96,9 @@ beforeEach(() => {
 
 afterEach(() => {
   TEST_ENV.allowedDomain = undefined;
+  // SLYK-0160: reset the runtime-config fixtures between tests.
+  TEST_ENV.agentMode = false;
+  TEST_ENV.dispatcherUrl = undefined;
 });
 
 describe('auth routes — POST /google login gate (SLYK-01 Task H)', () => {
@@ -204,7 +224,12 @@ describe('auth routes — POST /google login gate (SLYK-01 Task H)', () => {
       fullName: 'Admin One',
       avatarUrl: null,
     });
-    const admin = { ...linkedUser, id: 'admin1', email: 'admin@example.com', isPlatformAdmin: true };
+    const admin = {
+      ...linkedUser,
+      id: 'admin1',
+      email: 'admin@example.com',
+      isPlatformAdmin: true,
+    };
     mockedFindByEmail.mockResolvedValue(admin as never);
     mockedLinkGoogleId.mockResolvedValue(admin as never);
     mockedSign.mockResolvedValue('jwt-admin');
@@ -213,9 +238,7 @@ describe('auth routes — POST /google login gate (SLYK-01 Task H)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.user.isPlatformAdmin).toBe(true);
-    expect(mockedSign).toHaveBeenCalledWith(
-      expect.objectContaining({ sub: 'admin1', pa: true }),
-    );
+    expect(mockedSign).toHaveBeenCalledWith(expect.objectContaining({ sub: 'admin1', pa: true }));
   });
 
   it('does NOT consult ALLOWED_DOMAIN on the login path for existing users', async () => {
@@ -339,6 +362,52 @@ describe('auth routes — GET /me', () => {
       displayName: 'Uno',
       avatarUrl: 'https://img/u.png',
       isPlatformAdmin: false,
+    });
+  });
+
+  // SLYK-0160: /me carries the runtime config (02-dual-mode.md Layer 3) so the
+  // frontend can populate useRuntimeConfigStore. Plain mode maps the absent
+  // dispatcherUrl to null (never undefined) per the store contract.
+  it('includes config {agentMode: false, dispatcherUrl: null} in plain mode', async () => {
+    const { signJwt: realSignJwt } =
+      await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
+    const realToken = await realSignJwt({
+      sub: 'u1',
+      email: 'user@example.com',
+      pa: false,
+      ver: 0,
+    });
+    mockedFindVersion.mockResolvedValue(0);
+    mockedFindById.mockResolvedValue(linkedUser as never);
+    mockedSign.mockResolvedValue('fresh-token');
+
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.config).toEqual({ agentMode: false, dispatcherUrl: null });
+  });
+
+  it('includes config with agentMode true + dispatcherUrl in agent mode', async () => {
+    TEST_ENV.agentMode = true;
+    TEST_ENV.dispatcherUrl = 'http://dispatcher.local:4001';
+    const { signJwt: realSignJwt } =
+      await vi.importActual<typeof import('../utils/jwt')>('../utils/jwt');
+    const realToken = await realSignJwt({
+      sub: 'u1',
+      email: 'user@example.com',
+      pa: false,
+      ver: 0,
+    });
+    mockedFindVersion.mockResolvedValue(0);
+    mockedFindById.mockResolvedValue(linkedUser as never);
+    mockedSign.mockResolvedValue('fresh-token');
+
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${realToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.config).toEqual({
+      agentMode: true,
+      dispatcherUrl: 'http://dispatcher.local:4001',
     });
   });
 

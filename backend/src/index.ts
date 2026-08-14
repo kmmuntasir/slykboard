@@ -6,7 +6,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 import { Pool } from 'pg';
-import { env } from './config';
+import { env, runtimeConfig, SCHEMA_VERSION } from './config';
 import { logger } from './config/logger';
 import { pool } from './db/client';
 import { connectWithRetry } from './db/connect';
@@ -65,10 +65,14 @@ app.use(express.json());
 
 // --- Routes ---
 // Health is the documented non-enveloped exception (F03 D10) — consumed by ops probes.
+// SLYK-0160: agentMode + schemaVersion extend the probe per
+// 07-dispatcher-contract.md § Versioning (dispatcher checks schemaVersion on boot).
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'slykboard-backend',
+    agentMode: runtimeConfig.agentMode,
+    schemaVersion: SCHEMA_VERSION,
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });

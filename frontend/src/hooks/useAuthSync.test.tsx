@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import type { ReactNode } from 'react';
 import type { AuthResponse } from '@/api/auth';
 import type { AuthUser } from '@/stores/useAuthStore';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { useAuthSync } from '@/hooks/useAuthSync';
 
 const {
@@ -61,7 +62,10 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
 
 vi.mock('@/api/auth', () => ({ fetchMe: fetchMeMock, logout: logoutApiMock }));
 
-vi.mock('@/api/client', () => ({ registerLogoutHandlers: registerMock, registerForbiddenHandler: registerForbiddenMock }));
+vi.mock('@/api/client', () => ({
+    registerLogoutHandlers: registerMock,
+    registerForbiddenHandler: registerForbiddenMock,
+}));
 
 vi.mock('@/stores/useAuthStore', () => ({
     useAuthStore: Object.assign(
@@ -103,6 +107,12 @@ const fullUser: AuthUser = {
     blocked: false,
 };
 
+// SLYK-0160: agent-mode /me payload — exercises the runtime-config store path.
+const agentModeResponse: AuthResponse = {
+    ...freshResponse,
+    config: { agentMode: true, dispatcherUrl: 'http://dispatcher.local:4001' },
+};
+
 function wrapper({ children }: { children: ReactNode }) {
     return <MemoryRouter>{children}</MemoryRouter>;
 }
@@ -119,6 +129,8 @@ describe('useAuthSync', () => {
         currentUser = null;
         snapshot = null; // force snapshot rebuild
         lastUser = undefined;
+        // SLYK-0160: reset runtime config to plain-mode defaults between tests.
+        useRuntimeConfigStore.setState({ agentMode: false, dispatcherUrl: null });
         navigateMock.mockReset();
         fetchMeMock.mockReset();
         registerMock.mockReset();
@@ -295,5 +307,47 @@ describe('useAuthSync', () => {
         await flushMicrotasks();
 
         expect(fetchMeMock).toHaveBeenCalled();
+    });
+
+    // SLYK-0160: /me config → useRuntimeConfigStore population.
+    it('boot populates useRuntimeConfigStore from an agent-mode /me config', async () => {
+        currentUser = fullUser;
+        fetchMeMock.mockResolvedValue(agentModeResponse);
+
+        renderHook(() => useAuthSync(), { wrapper });
+        await flushMicrotasks();
+
+        const cfg = useRuntimeConfigStore.getState();
+        expect(cfg.agentMode).toBe(true);
+        expect(cfg.dispatcherUrl).toBe('http://dispatcher.local:4001');
+    });
+
+    it('boot leaves the runtime config store at plain-mode defaults when /me omits config', async () => {
+        currentUser = fullUser;
+        fetchMeMock.mockResolvedValue(freshResponse);
+
+        renderHook(() => useAuthSync(), { wrapper });
+        await flushMicrotasks();
+
+        const cfg = useRuntimeConfigStore.getState();
+        expect(cfg.agentMode).toBe(false);
+        expect(cfg.dispatcherUrl).toBeNull();
+    });
+
+    it('401-refresh handler populates the runtime config store too', async () => {
+        currentUser = null; // no token → no boot /me; isolate the handler path
+        fetchMeMock.mockResolvedValue(agentModeResponse);
+
+        renderHook(() => useAuthSync(), { wrapper });
+        await flushMicrotasks();
+
+        const handlers = registerMock.mock.calls[0]?.[0] as {
+            refresh: () => Promise<boolean>;
+        };
+        await act(async () => {
+            await handlers.refresh();
+        });
+
+        expect(useRuntimeConfigStore.getState().agentMode).toBe(true);
     });
 });

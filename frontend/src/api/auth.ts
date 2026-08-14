@@ -9,9 +9,17 @@ export interface AuthResponseUser {
   displayName: string | null;
 }
 
+// SLYK-0160: dual-mode runtime config served by /api/auth/me (02-dual-mode.md
+// Layer 3). Defaults to plain mode — older/plain backends may omit the key.
+export interface RuntimeConfig {
+  agentMode: boolean;
+  dispatcherUrl: string | null;
+}
+
 export interface AuthResponse {
   token: string;
   user: AuthResponseUser;
+  config?: RuntimeConfig;
 }
 
 export function loginWithGoogle(code: string): Promise<AuthResponse> {
