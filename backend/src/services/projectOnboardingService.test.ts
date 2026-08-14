@@ -27,6 +27,10 @@ const bag = vi.hoisted(() => ({
   // markOnboardingFailed: db.update().set(arg).where()
   dbUpdateSetArg: null as Record<string, unknown> | null,
   dbUpdateCallCount: 0,
+  // decommission tx: tx.update().set(arg) + tx.insert().values(arg) — the
+  // service's db.transaction runs markDecommissioningInTx against the mock tx
+  txUpdateSetArg: null as Record<string, unknown> | null,
+  txUpdateCallCount: 0,
   // mocked postToDispatcher
   postToDispatcher: vi.fn(),
 }));
@@ -44,6 +48,13 @@ vi.mock('../db/client', () => {
             return bag.insertReturnings[Math.min(idx, bag.insertReturnings.length - 1)]!;
           },
         };
+      },
+    }),
+    update: () => ({
+      set: (s: Record<string, unknown>) => {
+        bag.txUpdateSetArg = s;
+        bag.txUpdateCallCount += 1;
+        return { where: () => Promise.resolve([]) };
       },
     }),
   };
@@ -75,7 +86,7 @@ vi.mock('./dispatcherClient', () => ({
 }));
 
 import { DispatcherError, postToDispatcher } from './dispatcherClient';
-import { createAgentProject } from './projectOnboardingService';
+import { createAgentProject, decommissionAgentProject } from './projectOnboardingService';
 
 const mockedPost = vi.mocked(postToDispatcher);
 
@@ -147,6 +158,8 @@ beforeEach(() => {
   bag.insertReturnings = [];
   bag.dbUpdateSetArg = null;
   bag.dbUpdateCallCount = 0;
+  bag.txUpdateSetArg = null;
+  bag.txUpdateCallCount = 0;
   // Default: all three uniqueness pre-checks find nothing.
   bag.dbSelectLimit.mockResolvedValue([]);
   setupHappyTx();
@@ -396,10 +409,14 @@ describe('createAgentProject — dispatcher failures', () => {
 });
 
 describe('createAgentProject — unique-violation race backstop', () => {
+  // These tests swap db.transaction for one that throws. Restore the fluent
+  // mock in a finally — later describes (decommission) call db.transaction
+  // through the same module instance and must see the working mock.
   it('tx unique violation on Projects slug → CONFLICT (not 500)', async () => {
     const { db } = (await import('../db/client')) as unknown as {
       db: { transaction: (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown> };
     };
+    const originalTransaction = db.transaction;
     const err = Object.assign(new Error('dup'), {
       code: '23505',
       constraint: 'Projects_slug_unique',
@@ -408,24 +425,284 @@ describe('createAgentProject — unique-violation race backstop', () => {
       throw err;
     });
 
-    await expect(
-      createAgentProject({ body: { ...VALID_BODY }, creatorId: CREATOR_ID }),
-    ).rejects.toMatchObject({
-      code: 'CONFLICT',
-      status: 409,
-      details: { constraint: 'Projects_slug_unique' },
-    });
+    try {
+      await expect(
+        createAgentProject({ body: { ...VALID_BODY }, creatorId: CREATOR_ID }),
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        status: 409,
+        details: { constraint: 'Projects_slug_unique' },
+      });
+    } finally {
+      (db as { transaction: unknown }).transaction = originalTransaction;
+    }
   });
 
   it('non-unique driver error propagates untouched', async () => {
     const { db } = (await import('../db/client')) as unknown as { db: { transaction: unknown } };
+    const originalTransaction = (
+      db as unknown as { transaction: (cb: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    ).transaction;
     const err = Object.assign(new Error('boom'), { code: '42P01' });
     (db as { transaction: unknown }).transaction = vi.fn(async () => {
       throw err;
     });
 
+    try {
+      await expect(
+        createAgentProject({ body: { ...VALID_BODY }, creatorId: CREATOR_ID }),
+      ).rejects.toBe(err);
+    } finally {
+      (db as { transaction: unknown }).transaction = originalTransaction;
+    }
+  });
+});
+
+// ── SLYK-0210 — decommissionAgentProject ───────────────────────────────────
+// decommissionAgentProject issues:
+//   (pre) findMetaBySlug(slug)          → db.select().from().where().limit(1)
+//   (tx)  markDecommissioningInTx       → tx.update().set().where()
+//                                     + tx.insert().values()  (audit event)
+//   (post) postToDispatcher('/decommission', payload) — mocked module
+//
+// Acceptance criteria map (ticket SLYK-0210): happy path, confirmSlug gate,
+// 404, dispatcher-failure state retention. Route-level gates (403/501/400
+// envelope) live in admin-agent.routes.test.ts.
+
+const LIVE_META = {
+  ...META_ROW,
+  onboardingState: 'LIVE',
+  lxcCtid: 142,
+  lanIp: '10.0.0.5',
+  systemdService: 'slyk-inventory-tracker',
+  zoraxyProxyId: 'proxy-abc',
+  githubRepo: 'git@github.com:kmlab/inventory-tracker.git',
+  githubRepoCreated: true,
+  agentBackend: 'cyrus',
+};
+
+const ADMIN_ID = '55555555-5555-4555-8555-555555555555';
+
+describe('decommissionAgentProject — happy path', () => {
+  it('marks DECOMMISSIONING + audit event in one tx, then POSTs /decommission', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+    mockedPost.mockResolvedValue(undefined);
+
+    const meta = await decommissionAgentProject({
+      slug: 'inventory-tracker',
+      body: { confirmSlug: 'inventory-tracker' },
+      initiatedBy: ADMIN_ID,
+    });
+
+    // Response meta reflects the new state (route returns it in the 202).
+    expect(meta.onboardingState).toBe('DECOMMISSIONING');
+
+    // Tx write: state flip.
+    expect(bag.txUpdateCallCount).toBe(1);
+    expect(bag.txUpdateSetArg).toEqual({ onboardingState: 'DECOMMISSIONING' });
+
+    // Audit event row: fromState = previous state, initiated admin id in
+    // detail (03-security.md safety layer 5 — user id + timestamp; timestamp
+    // is the column default).
+    const auditEvent = bag.txInserts.find((v) => 'toState' in v);
+    expect(auditEvent).toMatchObject({
+      projectId: LIVE_META.projectId,
+      fromState: 'LIVE',
+      toState: 'DECOMMISSIONING',
+      detail: { initiatedBy: ADMIN_ID },
+    });
+    // No db-level FAILED write (that's the create flow's failure mode).
+    expect(bag.dbUpdateCallCount).toBe(0);
+
+    // Dispatcher call happens AFTER the tx commit.
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    const [path, payload] = mockedPost.mock.calls[0]!;
+    expect(path).toBe('/decommission');
+    expect(payload).toEqual({
+      projectId: LIVE_META.projectId,
+      slug: 'inventory-tracker',
+      repoUrl: LIVE_META.githubRepo,
+      lxcCtid: 142,
+      zoraxyProxyId: 'proxy-abc',
+      githubRepoCreated: true,
+      agentBackend: 'cyrus',
+    });
+  });
+
+  it('dispatcher 202 with EMPTY body resolves (contract: 202, no body)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+    mockedPost.mockResolvedValue(undefined);
+
     await expect(
-      createAgentProject({ body: { ...VALID_BODY }, creatorId: CREATOR_ID }),
-    ).rejects.toBe(err);
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-tracker' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).resolves.toMatchObject({ onboardingState: 'DECOMMISSIONING' });
+  });
+
+  it('retry from DECOMMISSIONING (manual re-POST after failure) is legal', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([{ ...LIVE_META, onboardingState: 'DECOMMISSIONING' }]);
+    mockedPost.mockResolvedValue(undefined);
+
+    const meta = await decommissionAgentProject({
+      slug: 'inventory-tracker',
+      body: { confirmSlug: 'inventory-tracker' },
+      initiatedBy: ADMIN_ID,
+    });
+
+    expect(meta.onboardingState).toBe('DECOMMISSIONING');
+    // The audit row records the true from-state for the retry.
+    expect(bag.txInserts.find((v) => 'toState' in v)).toMatchObject({
+      fromState: 'DECOMMISSIONING',
+      toState: 'DECOMMISSIONING',
+    });
+  });
+
+  it('FAILED project can be decommissioned (cleanup of half-provisioned)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([{ ...LIVE_META, onboardingState: 'FAILED' }]);
+    mockedPost.mockResolvedValue(undefined);
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-tracker' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).resolves.toMatchObject({ onboardingState: 'DECOMMISSIONING' });
+  });
+});
+
+describe('decommissionAgentProject — gates (404 / confirmSlug / terminal)', () => {
+  it('unknown slug → 404 NOT_FOUND, no writes, no dispatcher call', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([]);
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'ghost',
+        body: { confirmSlug: 'ghost' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404, details: { slug: 'ghost' } });
+
+    expect(bag.txUpdateCallCount).toBe(0);
+    expect(bag.txInserts).toHaveLength(0);
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
+
+  it('wrong confirmSlug → 400 VALIDATION_FAILED with details.expected naming the slug', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-trackerr' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      status: 400,
+      details: { expected: 'inventory-tracker' },
+    });
+
+    expect(bag.txUpdateCallCount).toBe(0);
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
+
+  it('confirmSlug does not echo anything beyond the slug (empty string blocked by Zod at the route)', async () => {
+    // The service gate is the equality check — detail carries ONLY `expected`.
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'INVENTORYTRACKER' }, // core-alphabet slug must NOT pass
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({
+      details: { expected: 'inventory-tracker' }, // exactly one key
+    });
+  });
+
+  it('DECOMMISSIONED (terminal) → 409 CONFLICT, no second dispatcher call', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([{ ...LIVE_META, onboardingState: 'DECOMMISSIONED' }]);
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-tracker' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      status: 409,
+      details: { slug: 'inventory-tracker', onboardingState: 'DECOMMISSIONED' },
+    });
+
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
+});
+
+describe('decommissionAgentProject — dispatcher failures (safety layer 4)', () => {
+  it('dispatcher down (status 0) → 502, state STAYS DECOMMISSIONING (no FAILED write)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+    mockedPost.mockRejectedValue(new DispatcherError('/decommission', 0, 'ECONNREFUSED'));
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-tracker' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: 'UPSTREAM_FAILED',
+      status: 502,
+      details: { slug: 'inventory-tracker', dispatcherStatus: 0 },
+    });
+
+    // The DECOMMISSIONING write committed and is NOT rolled back / overridden.
+    expect(bag.txUpdateSetArg).toEqual({ onboardingState: 'DECOMMISSIONING' });
+    expect(bag.dbUpdateSetArg).toBeNull(); // no FAILED write, ever
+    expect(bag.dbUpdateCallCount).toBe(0);
+  });
+
+  it('dispatcher 4xx rejection → 502, audit row + DECOMMISSIONING retained', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+    mockedPost.mockRejectedValue(new DispatcherError('/decommission', 400, 'unknown projectId'));
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-tracker' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: 'UPSTREAM_FAILED',
+      status: 502,
+      details: { slug: 'inventory-tracker', dispatcherStatus: 400 },
+    });
+
+    expect(bag.txInserts.find((v) => 'toState' in v)).toMatchObject({
+      toState: 'DECOMMISSIONING',
+      detail: { initiatedBy: ADMIN_ID },
+    });
+    expect(bag.dbUpdateCallCount).toBe(0);
+  });
+
+  it('no auto-retry loop: exactly ONE dispatcher call (retries are the client-internal 3)', async () => {
+    bag.dbSelectLimit.mockResolvedValueOnce([LIVE_META]);
+    mockedPost.mockRejectedValue(new DispatcherError('/decommission', 0, 'down'));
+
+    await expect(
+      decommissionAgentProject({
+        slug: 'inventory-tracker',
+        body: { confirmSlug: 'inventory-tracker' },
+        initiatedBy: ADMIN_ID,
+      }),
+    ).rejects.toMatchObject({ status: 502 });
+
+    // One service-level call — transport-level retries live in dispatcherClient.
+    expect(mockedPost).toHaveBeenCalledTimes(1);
   });
 });

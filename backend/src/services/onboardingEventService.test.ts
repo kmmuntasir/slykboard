@@ -215,3 +215,48 @@ describe('getDeployTarget', () => {
 // expose a runtime name property).
 void onboardingEvents;
 void projectAgentMeta;
+
+// ── SLYK-0210 AC: mock streams DECOMMISSIONING→DECOMMISSIONED events → state
+// lands DECOMMISSIONED. The callback path is generic (SLYK-0200) — decommission
+// needs no special-casing, and these tests pin that contract.
+describe('recordOnboardingEvent — decommission lifecycle (SLYK-0210)', () => {
+  it('toState=DECOMMISSIONING advances the state and appends the event', async () => {
+    const event = await recordOnboardingEvent({
+      slug: 'inventory-tracker',
+      body: { fromState: 'LIVE', toState: 'DECOMMISSIONING' },
+    });
+
+    expect(event).toEqual(EVENT_ROW);
+    // No onboardedAt/onboardingError side effects — pure state advance.
+    expect(bag.txUpdateSetArg).toEqual({ onboardingState: 'DECOMMISSIONING' });
+    expect(bag.insertValues).toMatchObject({
+      fromState: 'LIVE',
+      toState: 'DECOMMISSIONING',
+    });
+  });
+
+  it('toState=DECOMMISSIONED lands terminal (LIVE → teardown complete)', async () => {
+    await recordOnboardingEvent({
+      slug: 'inventory-tracker',
+      body: { fromState: 'DECOMMISSIONING', toState: 'DECOMMISSIONED' },
+    });
+
+    expect(bag.txUpdateSetArg).toEqual({ onboardingState: 'DECOMMISSIONED' });
+    expect(bag.insertValues).toMatchObject({
+      fromState: 'DECOMMISSIONING',
+      toState: 'DECOMMISSIONED',
+    });
+  });
+
+  it('dispatcher terminal event with detail (e.g. deleted ctid) is stored verbatim', async () => {
+    await recordOnboardingEvent({
+      slug: 'inventory-tracker',
+      body: { fromState: 'DECOMMISSIONING', toState: 'DECOMMISSIONED', detail: { ctid: 142 } },
+    });
+
+    expect(bag.insertValues).toMatchObject({
+      toState: 'DECOMMISSIONED',
+      detail: { ctid: 142 },
+    });
+  });
+});

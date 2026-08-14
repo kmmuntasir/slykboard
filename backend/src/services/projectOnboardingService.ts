@@ -3,11 +3,12 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { isReservedSlug, isValidSlug, normalizeSlug } from '../utils/slug';
 import { logger } from '../config/logger';
-import type { CreateAgentProjectBody } from '../routes/admin-agent.schema';
+import type { CreateAgentProjectBody, DecommissionProjectBody } from '../routes/admin-agent.schema';
 import {
   findMetaBySlug,
   findSubdomainOwner,
   insertMeta,
+  markDecommissioningInTx,
   markOnboardingFailed,
   type ProjectAgentMetaRow,
 } from '../repositories/projectAgentMetaRepository';
@@ -182,4 +183,101 @@ export async function createAgentProject(
   }
 
   return created;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SLYK-0210 — POST /api/v1/admin/projects/:slug/decommission
+// (05-backend-routes.md § decommission; 03-security.md § Decommission
+// safety layers 1–5). The teardown itself runs on the dispatcher — this is
+// only the audited trigger.
+// ─────────────────────────────────────────────────────────────────────────
+
+// 03-security.md layer 4 + 05-backend-routes.md transition table:
+// DECOMMISSIONED is terminal. Every other state may decommission — including
+// DECOMMISSIONING itself (manual retry after a dispatcher failure) and FAILED
+// (cleanup of a half-provisioned project).
+const DECOMMISSION_TERMINAL_STATE = 'DECOMMISSIONED';
+
+export interface DecommissionAgentProjectInput {
+  slug: string;
+  body: DecommissionProjectBody;
+  initiatedBy: string;
+}
+
+/**
+ * Trigger dispatcher teardown for a project:
+ *
+ * 1. Load meta by slug → 404 when absent.
+ * 2. confirmSlug gate (safety layer 2): mismatch → 400 with details.expected
+ *    naming the real slug. The slug is public in URLs, so naming it leaks
+ *    nothing an attacker doesn't already have from the URL bar.
+ * 3. Terminal-state gate: DECOMMISSIONED → 409 (already torn down).
+ * 4. One transaction: onboardingState = DECOMMISSIONING + audit event row
+ *    (layer 5 — initiating user id + timestamp on OnboardingEvents).
+ * 5. AFTER commit: signed POST /decommission with the teardown targets
+ *    (07-dispatcher-contract.md § POST /decommission).
+ * 6. Dispatcher failure → state STAYS DECOMMISSIONING (layer 4: no
+ *    auto-retry, no FAILED — the admin retries manually) + 502 surfaced.
+ */
+export async function decommissionAgentProject(
+  input: DecommissionAgentProjectInput,
+): Promise<ProjectAgentMetaRow> {
+  const { slug, body, initiatedBy } = input;
+  const meta = await findMetaBySlug(slug);
+  if (!meta) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Project '${slug}' not found`, {
+      details: { slug },
+    });
+  }
+
+  if (body.confirmSlug !== meta.slug) {
+    throw new AppError(ErrorCode.VALIDATION_FAILED, 'confirmSlug does not match the project slug', {
+      details: { expected: meta.slug },
+    });
+  }
+
+  if (meta.onboardingState === DECOMMISSION_TERMINAL_STATE) {
+    throw new AppError(ErrorCode.CONFLICT, `Project '${slug}' is already decommissioned`, {
+      details: { slug, onboardingState: meta.onboardingState },
+    });
+  }
+
+  await db.transaction(async (tx) => {
+    await markDecommissioningInTx(tx, {
+      projectId: meta.projectId,
+      fromState: meta.onboardingState,
+      initiatedBy,
+    });
+  });
+
+  // Teardown-target payload per 07-dispatcher-contract.md § POST /decommission
+  // (superset of 05: adds slug + agentBackend). repoUrl ← meta.githubRepo.
+  // The dispatcherClient injects the idempotencyKey and signs the exact bytes.
+  try {
+    await postToDispatcher('/decommission', {
+      projectId: meta.projectId,
+      slug: meta.slug,
+      repoUrl: meta.githubRepo,
+      lxcCtid: meta.lxcCtid,
+      zoraxyProxyId: meta.zoraxyProxyId,
+      githubRepoCreated: meta.githubRepoCreated,
+      agentBackend: meta.agentBackend,
+    });
+  } catch (cause) {
+    // Layer 4: one-shot trigger, no auto-retry. The DECOMMISSIONING write has
+    // committed and STAYS — the admin retries this same POST manually. Never
+    // mark FAILED here (unlike createAgentProject): FAILED would mislead the
+    // UI into thinking teardown stopped.
+    const detail =
+      cause instanceof DispatcherError || cause instanceof Error ? cause.message : String(cause);
+    throw new AppError(ErrorCode.UPSTREAM_FAILED, `Dispatcher decommission failed: ${detail}`, {
+      details: {
+        slug,
+        dispatcherStatus: cause instanceof DispatcherError ? cause.status : undefined,
+      },
+      cause,
+    });
+  }
+
+  return { ...meta, onboardingState: 'DECOMMISSIONING' };
 }

@@ -153,7 +153,12 @@ export async function postToDispatcher<T>(
 
     if (res?.ok) {
       logger.info({ ...base, status: res.status }, 'dispatcher call');
-      return (res.status === 204 ? undefined : ((await res.json()) as T)) as T;
+      // 204 has no body by definition, and /decommission replies 202 with an
+      // empty body (07-dispatcher-contract.md) — both resolve undefined
+      // rather than failing JSON parsing on a successful response.
+      if (res.status === 204) return undefined as T;
+      const text = (await res.text()).trim();
+      return (text === '' ? undefined : (JSON.parse(text) as T)) as T;
     }
 
     if (!res) {
