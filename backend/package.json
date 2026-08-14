@@ -18,7 +18,9 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio:core": "drizzle-kit studio --config=drizzle.config.ts",
     "db:studio:agent": "drizzle-kit studio --config=drizzle.config.agent.ts",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "mock:dispatcher": "tsx tools/mock-dispatcher/index.ts",
+    "mock:dispatcher:scenario": "tsx tools/mock-dispatcher/index.ts --scenario"
   },
   "dependencies": {
     "cors": "^2.8.5",

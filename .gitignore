@@ -26,6 +26,10 @@ build/
 # Test coverage
 coverage/
 
+# Mock dispatcher runtime artifacts (SLYK-0170)
+backend/tools/mock-dispatcher/.token
+backend/tools/mock-dispatcher/state.json
+
 # Vite cache
 .vite/
 
