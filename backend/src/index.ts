@@ -92,17 +92,31 @@ const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.ar
 // Runs pending drizzle migrations against the direct (non-pooled) DB url.
 // Uses its own short-lived Pool — migrations may require the direct url and
 // must not ride the app Pool (which may set prepare:false for pgBouncer).
+// Runs pending drizzle migrations against the direct (non-pooled) DB url.
+// Uses its own short-lived Pool — migrations may require the direct url and
+// must not ride the app Pool (which may set prepare:false for pgBouncer).
+// Core migrations always run; agent migrations only when agent mode is on
+// (docs/agentic-automation/02-dual-mode.md Layer 1).
 async function runMigrations(): Promise<void> {
-  const migrationsFolder =
-    process.env.MIGRATIONS_FOLDER?.trim() ||
-    fileURLToPath(new URL('./db/migrations', import.meta.url));
+  const coreFolder =
+    process.env.CORE_MIGRATIONS_FOLDER?.trim() ||
+    fileURLToPath(new URL('./db/migrations/core', import.meta.url));
 
   const migrationPool = new Pool({ connectionString: env.directDatabaseUrl });
   const migrationDb = drizzle(migrationPool);
 
-  logger.info({ migrationsFolder }, '[slykboard-backend] running migrations');
+  logger.info({ coreFolder }, '[slykboard-backend] running core migrations');
   try {
-    await migrate(migrationDb, { migrationsFolder });
+    await migrate(migrationDb, { migrationsFolder: coreFolder });
+
+    if (process.env.SLYKBOARD_AGENT_MODE === 'true') {
+      const agentFolder =
+        process.env.AGENT_MIGRATIONS_FOLDER?.trim() ||
+        fileURLToPath(new URL('./db/migrations/agent', import.meta.url));
+      logger.info({ agentFolder }, '[slykboard-backend] running agent migrations');
+      await migrate(migrationDb, { migrationsFolder: agentFolder });
+    }
+
     logger.info('[slykboard-backend] migrations applied');
   } finally {
     await migrationPool.end();
