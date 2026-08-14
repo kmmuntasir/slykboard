@@ -1,0 +1,12 @@
+{
+  "name": "decommission",
+  "description": "Decommission ack → DECOMMISSIONING audit event → DECOMMISSIONED terminal state",
+  "decommissionEvents": [
+    { "delayMs": 1000, "toState": "DECOMMISSIONING", "detail": { "reason": "teardown started" } },
+    {
+      "delayMs": 1000,
+      "toState": "DECOMMISSIONED",
+      "detail": { "releasedAt": "2026-08-13T13:00:00Z" }
+    }
+  ]
+}

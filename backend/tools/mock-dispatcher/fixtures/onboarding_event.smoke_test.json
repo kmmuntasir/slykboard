@@ -1,0 +1,4 @@
+{
+  "toState": "SMOKE_TEST",
+  "detail": { "checks": ["health", "deploy-target", "http-200"] }
+}

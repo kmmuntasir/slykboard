@@ -1,0 +1,4 @@
+{
+  "toState": "WIRING_GITHUB",
+  "detail": { "repoUrl": "git@github.com:example-org/inventory-tracker.git" }
+}

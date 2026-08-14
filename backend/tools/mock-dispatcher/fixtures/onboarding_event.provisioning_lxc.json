@@ -1,0 +1,4 @@
+{
+  "toState": "PROVISIONING_LXC",
+  "detail": { "ctid": 999, "lanIp": "192.168.31.999" }
+}
