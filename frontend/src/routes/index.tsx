@@ -1,4 +1,5 @@
 import { Navigate, Outlet, createBrowserRouter, type RouteObject } from 'react-router';
+import { lazy } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { CrossTabLogoutSync } from '@/components/CrossTabLogoutSync';
 import { RequireAuth } from '@/components/RequireAuth';
@@ -49,11 +50,49 @@ function ReportsRedirect() {
 }
 
 // SLYK-0120: agent-route spread site (docs/agentic-automation/06-frontend-ui.md
-// §Routing). Agent routes are `React.lazy(() => import(...))` entries appended
-// here in later phases; `__AGENT_MODE__` is a build-time constant, so plain
-// builds (`SLYKBOARD_AGENT_MODE=false`) statically prune this spread — agent
-// chunks are never emitted. Empty for now: this only establishes the pattern.
-const agentRoutes: RouteObject[] = [];
+// §Routing). `__AGENT_MODE__` is a build-time constant, so plain builds
+// (`SLYKBOARD_AGENT_MODE=false`) statically prune this entire block — including
+// the React.lazy dynamic imports, so agent page chunks are never even emitted.
+// SLYK-0230 fills in the onboarding trio: the form page, the per-project
+// timeline page (both canonical path + /onboarding alias the form redirects
+// to), and the admin project list.
+//
+// The lazy declarations live INSIDE the conditional for a reason: hoisting
+// them out keeps the `import()` reachable in plain mode and Rollup then emits
+// the chunks (tree-shaken from the route table but present on disk — the
+// exact leak the plain-mode bundle check exists to catch).
+function buildAgentRoutes(): RouteObject[] {
+    if (!__AGENT_MODE__) return [];
+
+    const AdminOnboardingPage = lazy(() =>
+        import('@/pages/AdminOnboardingPage').then((m) => ({ default: m.AdminOnboardingPage })),
+    );
+    const AdminProjectPage = lazy(() =>
+        import('@/pages/AdminProjectPage').then((m) => ({ default: m.AdminProjectPage })),
+    );
+    const AdminProjectsPage = lazy(() =>
+        import('@/pages/AdminProjectsPage').then((m) => ({ default: m.AdminProjectsPage })),
+    );
+
+    return [
+        // All three admin pages are platform-admin-only (RequirePlatformAdmin
+        // renders ForbiddenPage for non-admins — same guard as /settings).
+        {
+            element: <RequirePlatformAdmin />,
+            children: [
+                { path: '/admin/onboarding', element: <AdminOnboardingPage /> },
+                // /admin/projects/:slug/onboarding is the doc's canonical
+                // timeline URL; the bare :slug form is the 06 §Routing table's
+                // alias — both render the same page.
+                { path: '/admin/projects/:slug', element: <AdminProjectPage /> },
+                { path: '/admin/projects/:slug/onboarding', element: <AdminProjectPage /> },
+                { path: '/admin/projects', element: <AdminProjectsPage /> },
+            ],
+        },
+    ];
+}
+
+const agentRoutes: RouteObject[] = buildAgentRoutes();
 
 const routes: RouteObject[] = [
     {
@@ -130,8 +169,8 @@ const routes: RouteObject[] = [
                                     { path: '/account', element: <AccountSettingsPage /> },
                                     // SLYK-F28: dedicated 403 page, reachable directly.
                                     { path: '/forbidden', element: <ForbiddenPage /> },
-                                    // Agent routes (agent mode only). Empty until later
-                                    // phases populate `agentRoutes` above.
+                                    // Agent routes (agent mode only) — SLYK-0230
+                                    // onboarding trio; see `agentRoutes` above.
                                     ...(__AGENT_MODE__ ? agentRoutes : []),
                                     { path: '*', element: <NotFoundPage /> },
                                 ],
