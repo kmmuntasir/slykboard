@@ -1,0 +1,4 @@
+{
+  "state": "CI_RUNNING",
+  "detail": { "workflow": "ci.yml", "runId": 4242 }
+}

@@ -1,0 +1,4 @@
+{
+  "state": "AGENT_RUNNING",
+  "detail": { "agentSessionId": "mock-cyrus-001" }
+}

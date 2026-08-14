@@ -1,0 +1,4 @@
+{
+  "state": "AGENT_WAITING",
+  "detail": { "question": "Should the CSV importer validate headers before inserting rows?" }
+}

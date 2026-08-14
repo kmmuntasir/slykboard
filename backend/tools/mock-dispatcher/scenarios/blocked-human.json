@@ -1,0 +1,59 @@
+{
+  "name": "blocked-human",
+  "description": "FAILED_CI three times (attempts 0→1→2) → retry cap reached → terminal BLOCKED_HUMAN",
+  "onboardReply": { "status": 202, "body": { "orchestratorId": "mock-orch-001" } },
+  "onboardingEvents": [
+    {
+      "delayMs": 1000,
+      "toState": "PROVISIONING_LXC",
+      "detail": { "ctid": 999, "lanIp": "192.168.31.999" }
+    },
+    { "delayMs": 1000, "toState": "WIRING_GITHUB" },
+    { "delayMs": 1000, "toState": "WIRING_AGENT" },
+    { "delayMs": 1000, "toState": "WIRING_ZORAXY" },
+    { "delayMs": 1000, "toState": "SMOKE_TEST" },
+    { "delayMs": 1000, "toState": "LIVE", "detail": { "deployedAt": "2026-08-13T12:00:00Z" } }
+  ],
+  "ticketCreatedStateSequence": [
+    { "delayMs": 500, "state": "QUEUED" },
+    { "delayMs": 1500, "state": "AGENT_RUNNING", "detail": { "agentSessionId": "mock-cyrus-001" } },
+    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "abc1234" } },
+    { "delayMs": 1500, "state": "CI_RUNNING" },
+    {
+      "delayMs": 2000,
+      "state": "FAILED_CI",
+      "detail": { "error": "vitest: 2 tests failed (attempt 1)", "attempt": 1 }
+    },
+    { "delayMs": 2000, "state": "QUEUED", "detail": { "source": "auto-retry after FAILED_CI" } },
+    {
+      "delayMs": 1500,
+      "state": "AGENT_RUNNING",
+      "detail": { "agentSessionId": "mock-cyrus-002", "attempt": 2 }
+    },
+    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "bcd2345" } },
+    { "delayMs": 1500, "state": "CI_RUNNING" },
+    {
+      "delayMs": 2000,
+      "state": "FAILED_CI",
+      "detail": { "error": "vitest: 2 tests failed (attempt 2)", "attempt": 2 }
+    },
+    { "delayMs": 2000, "state": "QUEUED", "detail": { "source": "auto-retry after FAILED_CI" } },
+    {
+      "delayMs": 1500,
+      "state": "AGENT_RUNNING",
+      "detail": { "agentSessionId": "mock-cyrus-003", "attempt": 3 }
+    },
+    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "cde3456" } },
+    { "delayMs": 1500, "state": "CI_RUNNING" },
+    {
+      "delayMs": 2000,
+      "state": "FAILED_CI",
+      "detail": { "error": "vitest: 2 tests failed (attempt 3)", "attempt": 3 }
+    },
+    {
+      "delayMs": 2000,
+      "state": "BLOCKED_HUMAN",
+      "detail": { "error": "Retry cap reached (3/3); escalating to human", "attempts": 3 }
+    }
+  ]
+}

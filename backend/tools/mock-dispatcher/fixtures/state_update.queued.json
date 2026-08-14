@@ -1,0 +1,4 @@
+{
+  "state": "QUEUED",
+  "detail": { "source": "mock-dispatcher auto-queue" }
+}

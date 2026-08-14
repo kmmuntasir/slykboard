@@ -1,0 +1,4 @@
+{
+  "state": "FAILED_CI",
+  "detail": { "error": "vitest: 2 tests failed", "attempt": 1 }
+}

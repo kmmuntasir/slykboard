@@ -1,0 +1,4 @@
+{
+  "state": "DEPLOYING",
+  "detail": { "runner": "github-actions", "target": "lxc-999" }
+}

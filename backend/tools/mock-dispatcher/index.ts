@@ -14,16 +14,22 @@ import {
 // 10-mock-dispatcher.md. SLYK-0220 (Phase 0.5) adds the scenario engine:
 // --scenario=<name> loads scenarios/<name>.json and replays scripted
 // onboarding/decommission callbacks to slykboard's /api/v1/internal routes.
+// SLYK-0300 (Phase 1) adds /webhooks/ticket-events handling + the
+// state_update.* callback stream to /api/v1/internal/jobs/:ticketId/state.
 // NOT part of the runtime backend bundle — backend/tsconfig.json
-// rootDir/include keep tools/ out of dist/. Ticket-event state_update
-// emission arrives with SLYK-0300 (Phase 1), messages with SLYK-0360
-// (Phase 2), latency/rate-limit profiles with Phase 5.
+// rootDir/include keep tools/ out of dist/. Agent messages arrive with
+// SLYK-0360 (Phase 2), latency/rate-limit profiles with Phase 5.
 
 const DEFAULT_PORT = 4001;
 const DEFAULT_SLYKBOARD_URL = 'http://localhost:3000';
 const MOCK_ORCHESTRATOR_ID = 'mock-orch-001';
 const TOKEN_LENGTH_BYTES = 32; // crypto.randomBytes(32) → 64-char hex, matches SLYKBOARD_DISPATCHER_TOKEN
 const ONBOARDING_EVENTS_PATH = '/api/v1/internal/projects';
+const JOB_STATE_PATH = '/api/v1/internal/jobs';
+// queue_for_agent follow-up per doc 10 § Endpoints mock must implement
+// ("emit state_update.queued then agent_running"): slykboard already wrote
+// QUEUED before the webhook, so the mock's single callback is AGENT_RUNNING.
+const QUEUE_AGENT_DELAY_MS = 1000;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOKEN_FILE = join(HERE, '.token');
@@ -122,6 +128,16 @@ declare module 'express-serve-static-core' {
   }
 }
 
+// ticket_created carries the id under body.ticket.id; queue_for_agent and
+// pm_reply carry it flat (07-dispatcher-contract.md § /webhooks/ticket-events).
+// Returns '' when absent — callers treat that as "nothing to stream".
+function ticketIdOf(body: unknown): string {
+  if (typeof body !== 'object' || body === null) return '';
+  const record = body as { ticketId?: unknown; ticket?: { id?: unknown } };
+  const id = record.ticketId ?? record.ticket?.id;
+  return typeof id === 'string' ? id : '';
+}
+
 // --- Scenario engine (SLYK-0220, Phase 0.5) ---------------------------------
 // Shape per docs/agentic-automation/10-mock-dispatcher.md § Scenario file
 // shape. One process replays at most one scenario.
@@ -132,15 +148,23 @@ interface ScenarioStep {
   fromState?: string; // optional explicit override; default = previous toState
 }
 
+// Phase 1 (SLYK-0300) per doc 10 § Scenario file shape: ticket_created steps
+// key the target as "state" (not "toState") and POST {state, detail} — the
+// jobs/:ticketId/state body shape from 05-backend-routes.md. fromState is
+// NOT sent: slykboard derives it from the job row inside its transaction.
+interface StateStep {
+  delayMs: number;
+  state: string;
+  detail?: Record<string, unknown>;
+}
+
 interface Scenario {
   name: string;
   description?: string;
   onboardReply?: { status?: number; body?: { orchestratorId?: string } };
   onboardingEvents?: ScenarioStep[];
   decommissionEvents?: ScenarioStep[];
-  // Phase 1 (SLYK-0300) field per doc 10 § Scenario file shape — carried in
-  // the JSON now, ignored by the mock until ticket-event emission lands.
-  ticketCreatedStateSequence?: unknown[];
+  ticketCreatedStateSequence?: StateStep[];
 }
 
 // Kebab-name allowlist doubles as path-traversal protection for the join.
@@ -159,16 +183,51 @@ function parseSteps(name: string, field: string, value: unknown): ScenarioStep[]
     if (typeof step.toState !== 'string' || step.toState.length === 0) {
       throw new Error(`Scenario "${name}": ${field}[${i}].toState must be a string`);
     }
-    if (typeof step.delayMs !== 'number' || step.delayMs < 0) {
+    if (!isLegalDelay(step.delayMs)) {
       throw new Error(`Scenario "${name}": ${field}[${i}].delayMs must be a non-negative number`);
     }
     return {
-      delayMs: step.delayMs,
+      delayMs: step.delayMs as number,
       toState: step.toState,
       ...(step.detail !== undefined ? { detail: step.detail as Record<string, unknown> } : {}),
       ...(step.fromState !== undefined ? { fromState: step.fromState as string } : {}),
     };
   });
+}
+
+// ticketCreatedStateSequence twin of parseSteps — target key is "state" and
+// every value must be a real PipelineState, else the stream would 400 on the
+// first callback (05-backend-routes.md Zod enum).
+function parseStateSteps(name: string, value: unknown): StateStep[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`Scenario "${name}": ticketCreatedStateSequence must be an array`);
+  }
+  return value.map((raw, i) => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error(`Scenario "${name}": ticketCreatedStateSequence[${i}] must be an object`);
+    }
+    const step = raw as Record<string, unknown>;
+    if (typeof step.state !== 'string' || !PIPELINE_STATES.includes(step.state)) {
+      throw new Error(
+        `Scenario "${name}": ticketCreatedStateSequence[${i}].state must be one of ${PIPELINE_STATES.join('|')}`,
+      );
+    }
+    if (!isLegalDelay(step.delayMs)) {
+      throw new Error(
+        `Scenario "${name}": ticketCreatedStateSequence[${i}].delayMs must be a non-negative number`,
+      );
+    }
+    return {
+      delayMs: step.delayMs as number,
+      state: step.state,
+      ...(step.detail !== undefined ? { detail: step.detail as Record<string, unknown> } : {}),
+    };
+  });
+}
+
+function isLegalDelay(value: unknown): value is number {
+  return typeof value === 'number' && value >= 0;
 }
 
 function loadScenario(name: string): Scenario {
@@ -197,9 +256,7 @@ function loadScenario(name: string): Scenario {
       : {}),
     onboardingEvents: parseSteps(name, 'onboardingEvents', raw.onboardingEvents),
     decommissionEvents: parseSteps(name, 'decommissionEvents', raw.decommissionEvents),
-    ...(raw.ticketCreatedStateSequence !== undefined
-      ? { ticketCreatedStateSequence: raw.ticketCreatedStateSequence }
-      : {}),
+    ticketCreatedStateSequence: parseStateSteps(name, raw.ticketCreatedStateSequence),
   };
 }
 
@@ -208,6 +265,39 @@ function loadScenario(name: string): Scenario {
 // (it depends on the live state chain, not the template).
 function loadEventFixture(toState: string): { detail?: Record<string, unknown> } | null {
   const file = join(FIXTURES_DIR, `onboarding_event.${toState.toLowerCase()}.json`);
+  if (!existsSync(file)) return null;
+  const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  return parsed as { detail?: Record<string, unknown> };
+}
+
+// The 15-value PipelineState enum (04-schema.md) — validation target for
+// scenario state steps, mirrored from slykboard's db enum. A local literal
+// (not an import of src/db/schema) keeps the tool out of the backend's
+// module graph; drift is caught by the e2e suite asserting real transitions.
+const PIPELINE_STATES: readonly string[] = [
+  'BACKLOG',
+  'QUEUED',
+  'AGENT_RUNNING',
+  'AGENT_WAITING',
+  'PR_OPEN',
+  'CI_RUNNING',
+  'MERGING',
+  'CONFLICT_RETRY',
+  'DEPLOYING',
+  'DONE',
+  'FAILED_AGENT',
+  'FAILED_CI',
+  'FAILED_CONFLICT',
+  'FAILED_DEPLOY',
+  'BLOCKED_HUMAN',
+];
+
+// state_update.* template twin of loadEventFixture (SLYK-0300): files carry
+// {state, detail}; the engine strips "state" and sends detail only — the
+// target state always comes from the scenario step, never the fixture.
+function loadStateFixture(state: string): { detail?: Record<string, unknown> } | null {
+  const file = join(FIXTURES_DIR, `state_update.${state.toLowerCase()}.json`);
   if (!existsSync(file)) return null;
   const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
   if (typeof parsed !== 'object' || parsed === null) return null;
@@ -287,6 +377,56 @@ async function streamOnboardingEvents(opts: StreamOptions): Promise<void> {
   }
 }
 
+// SLYK-0300 — state_update.* callback stream (mock → slykboard's
+// POST /api/v1/internal/jobs/:ticketId/state). Same sequential
+// sleep-then-POST shape as streamOnboardingEvents; body is the
+// stateUpdateBody Zod shape ({state, detail?}) — fromState is derived
+// server-side from the job row, and a non-2xx (e.g. 400 on an illegal
+// transition) is logged and skipped, not retried: the mock is a script
+// player, and re-sending the same state would just 400 again (07 § Retry
+// semantics puts inbound dedup on the dispatcher).
+async function streamStateUpdates(opts: {
+  slykboardUrl: string;
+  ticketId: string;
+  steps: StateStep[];
+  token: string;
+  fetchImpl?: FetchImpl;
+  sleepImpl?: SleepImpl;
+}): Promise<void> {
+  const { slykboardUrl, ticketId, steps, token } = opts;
+  const doFetch = opts.fetchImpl ?? defaultFetchImpl;
+  const sleep = opts.sleepImpl ?? defaultSleepImpl;
+  const url = `${slykboardUrl}${JOB_STATE_PATH}/${ticketId}/state`;
+
+  for (const step of steps) {
+    try {
+      await sleep(step.delayMs);
+      // Scenario step detail wins; otherwise the state_update.* fixture.
+      const detail = step.detail ?? loadStateFixture(step.state)?.detail;
+      const body: Record<string, unknown> = { state: step.state };
+      if (detail !== undefined) body.detail = detail;
+      const raw = JSON.stringify(body);
+      const res = await doFetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          [DISPATCHER_SIGNATURE_HEADER]: sign(raw, token),
+        },
+        body: raw,
+      });
+      if (!res.ok) {
+        console.error(
+          `[mock-dispatcher] state_update ${step.state} → ${res.status}: ${await res.text()}`,
+        );
+      } else {
+        console.log(`[mock-dispatcher] state_update ${step.state} → ${res.status}`);
+      }
+    } catch (err) {
+      console.error(`[mock-dispatcher] state_update ${step.state} failed:`, err);
+    }
+  }
+}
+
 // --- App ---------------------------------------------------------------------
 interface BuildAppOptions {
   scenario?: Scenario;
@@ -348,6 +488,18 @@ function buildApp(token: string, options: BuildAppOptions = {}): Express {
       slug,
       steps,
       seedFromState: seed,
+      token,
+      fetchImpl: options.fetchImpl,
+      sleepImpl: options.sleepImpl,
+    });
+  };
+
+  const streamStatesFromScenario = (steps: StateStep[] | undefined, ticketId: string) => {
+    if (!steps || steps.length === 0 || !ticketId) return;
+    void streamStateUpdates({
+      slykboardUrl,
+      ticketId,
+      steps,
       token,
       fetchImpl: options.fetchImpl,
       sleepImpl: options.sleepImpl,
@@ -424,9 +576,14 @@ function buildApp(token: string, options: BuildAppOptions = {}): Express {
     streamFromScenario(scenario?.decommissionEvents, body.slug ?? '', 'DECOMMISSIONING');
   });
 
+  // Phase 1 (SLYK-0300) per doc 10 § Endpoints mock must implement:
+  //   ticket_created   → stream the scenario's ticketCreatedStateSequence
+  //   queue_for_agent  → emit state_update.queued then agent_running
+  //   pm_reply         → log only (message emission = SLYK-0360, Phase 2)
   app.post('/webhooks/ticket-events', (req, res) => {
     if (!requireValidSignature(req, res)) return;
     if (applyInjectedStatus(req, res)) return;
+    const body = (req.body ?? {}) as { eventType?: string };
     logCall({
       at: new Date().toISOString(),
       method: 'POST',
@@ -435,6 +592,32 @@ function buildApp(token: string, options: BuildAppOptions = {}): Express {
       body: req.body,
     });
     res.status(202).json({ acceptedAt: new Date().toISOString() });
+
+    const ticketId = ticketIdOf(req.body);
+    if (body.eventType === 'ticket_created') {
+      // Payload shape 07-dispatcher-contract.md § ticket_created — the ticket
+      // object rides under body.ticket. Stream the scripted lifecycle; a
+      // missing sequence (no scenario) leaves the stub ack as-is.
+      streamStatesFromScenario(scenario?.ticketCreatedStateSequence, ticketId);
+    } else if (body.eventType === 'queue_for_agent') {
+      // PM pressed "Start work" — slykboard already wrote QUEUED through its
+      // own service path, so the ack pair re-emits QUEUED is NOT sent (a
+      // same-state write is a 400 self-loop); only AGENT_RUNNING follows.
+      if (ticketId && scenario?.ticketCreatedStateSequence?.length) {
+        void streamStateUpdates({
+          slykboardUrl,
+          ticketId,
+          steps: [{ delayMs: QUEUE_AGENT_DELAY_MS, state: 'AGENT_RUNNING' }],
+          token,
+          fetchImpl: options.fetchImpl,
+          sleepImpl: options.sleepImpl,
+        });
+      }
+    } else if (body.eventType === 'pm_reply') {
+      // Phase 2 slice (SLYK-0360) forwards the reply to the agent and emits
+      // message callbacks; until then the receipt is logged above only.
+      console.log(`[mock-dispatcher] pm_reply for ticket ${ticketId ?? '(unknown)'} — logged only`);
+    }
   });
 
   app.post('/webhooks/pm-action/need-human-help', (req, res) => {
@@ -465,10 +648,11 @@ function main(): void {
   if (
     opts.scenario &&
     !scenario?.onboardingEvents?.length &&
-    !scenario?.decommissionEvents?.length
+    !scenario?.decommissionEvents?.length &&
+    !scenario?.ticketCreatedStateSequence?.length
   ) {
     console.warn(
-      `[mock-dispatcher] scenario "${opts.scenario}" streams no onboarding/decommission events`,
+      `[mock-dispatcher] scenario "${opts.scenario}" streams no onboarding/decommission/state events`,
     );
   }
 
@@ -502,5 +686,7 @@ export {
   loadOrCreateToken,
   verifySignature,
   loadScenario,
+  parseStateSteps,
   streamOnboardingEvents,
+  streamStateUpdates,
 };

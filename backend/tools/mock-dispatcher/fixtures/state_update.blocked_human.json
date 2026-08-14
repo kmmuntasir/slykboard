@@ -1,0 +1,4 @@
+{
+  "state": "BLOCKED_HUMAN",
+  "detail": { "error": "Retry cap reached (3/3); escalating to human", "attempts": 3 }
+}

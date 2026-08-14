@@ -1,6 +1,6 @@
 {
-  "name": "happy-path",
-  "description": "Onboard → onboarding event stream to LIVE → full ticket pipeline to DONE",
+  "name": "agent-waiting",
+  "description": "Mid-task question → AGENT_WAITING → PM resume → AGENT_RUNNING → DONE (state part; message emission arrives with SLYK-0360)",
   "onboardReply": { "status": 202, "body": { "orchestratorId": "mock-orch-001" } },
   "onboardingEvents": [
     {
@@ -17,7 +17,13 @@
   "ticketCreatedStateSequence": [
     { "delayMs": 500, "state": "QUEUED" },
     { "delayMs": 1500, "state": "AGENT_RUNNING", "detail": { "agentSessionId": "mock-cyrus-001" } },
-    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 137, "sha": "abc1234" } },
+    {
+      "delayMs": 2000,
+      "state": "AGENT_WAITING",
+      "detail": { "question": "Should the CSV importer validate headers before inserting rows?" }
+    },
+    { "delayMs": 3000, "state": "AGENT_RUNNING", "detail": { "resumedBy": "pm_reply" } },
+    { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 138, "sha": "def5678" } },
     { "delayMs": 1500, "state": "CI_RUNNING" },
     {
       "delayMs": 3000,
@@ -26,10 +32,10 @@
         "checksPassed": ["lint", "test", "build"],
         "checksFailed": [],
         "coverageDelta": { "files": 2, "lines": 24 },
-        "diffSize": { "filesChanged": 3, "insertions": 120, "deletions": 15 },
+        "diffSize": { "filesChanged": 3, "insertions": 96, "deletions": 8 },
         "touchedSensitivePaths": { "infra": false, "migrations": false, "deployConfig": false }
       }
     },
-    { "delayMs": 1500, "state": "DONE", "detail": { "deployedAt": "2026-08-13T12:30:00Z" } }
+    { "delayMs": 1500, "state": "DONE", "detail": { "deployedAt": "2026-08-13T12:40:00Z" } }
   ]
 }
