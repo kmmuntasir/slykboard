@@ -17,11 +17,13 @@ import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useProjectMembers, useCurrentProjectMembership } from '@/hooks/useProjectMembers';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LabelManager } from '@/components/LabelManager';
+import { NotificationPreferences } from '@/components/NotificationPreferences';
 import { ProjectColumnsManager } from '@/components/ProjectColumnsManager';
 import { Retry } from '@/components/Retry';
 import { SkeletonLine } from '@/components/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { useDeactivateProject } from '@/hooks/useDeactivateProject';
 import { useReactivateProject } from '@/hooks/useReactivateProject';
 
@@ -29,14 +31,20 @@ import { useReactivateProject } from '@/hooks/useReactivateProject';
 // (mirrors the REMOVE_DIALOG_TITLE_ID pattern from ProjectMembersPage).
 const PROJECT_STATUS_DIALOG_TITLE_ID = 'project-status-title';
 
-type SectionId = 'general' | 'members' | 'labels';
+type SectionId = 'general' | 'members' | 'labels' | 'notifications';
 
-// The section registry — the single extension point for the in-page sidebar.
-const SECTIONS: { id: SectionId; label: string }[] = [
-    { id: 'general', label: 'General' },
-    { id: 'members', label: 'Members' },
-    { id: 'labels', label: 'Labels' },
-];
+// SLYK-0390: the Notifications section exists only in agent mode (the
+// preference endpoints ride the /api/v1 agent mount). Computed once per
+// render — the runtime-config store is the doc-mandated gate.
+function sectionsFor(agentMode: boolean): { id: SectionId; label: string }[] {
+    const sections: { id: SectionId; label: string }[] = [
+        { id: 'general', label: 'General' },
+        { id: 'members', label: 'Members' },
+        { id: 'labels', label: 'Labels' },
+    ];
+    if (agentMode) sections.push({ id: 'notifications', label: 'Notifications' });
+    return sections;
+}
 
 export function ProjectSettingsPage() {
     const { slug } = useParams<{ slug: string }>();
@@ -59,6 +67,8 @@ function SettingsBody({ slug }: SettingsBodyProps) {
     // Membership has no dedicated loading flag on useCurrentProjectMembership;
     // read it from the underlying roster query so management UI never flashes.
     const { isLoading: membershipLoading } = useProjectMembers(slug);
+    // SLYK-0390: runtime agent-mode gate for the Notifications section.
+    const agentMode = useRuntimeConfigStore((s) => s.agentMode);
 
     const [active, setActive] = useState<SectionId>('general');
 
@@ -94,7 +104,7 @@ function SettingsBody({ slug }: SettingsBodyProps) {
             <div className="flex gap-6">
                 <nav aria-label="Project settings sections" className="w-48 shrink-0">
                     <ul className="space-y-1">
-                        {SECTIONS.map((section) => {
+                        {sectionsFor(agentMode).map((section) => {
                             const isActive = active === section.id;
                             return (
                                 <li key={section.id}>
@@ -143,6 +153,7 @@ function SettingsBody({ slug }: SettingsBodyProps) {
                         </section>
                     )}
                     {active === 'labels' && renderLabels(slug, canManage, membershipReady)}
+                    {active === 'notifications' && <NotificationPreferences projectSlug={slug} />}
                 </div>
             </div>
         </div>

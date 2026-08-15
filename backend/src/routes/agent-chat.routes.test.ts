@@ -77,6 +77,18 @@ const agentMessageServiceMock = vi.hoisted(() => ({
   postPmReply: vi.fn(),
 }));
 vi.mock('../services/agentMessageService', () => agentMessageServiceMock);
+// SLYK-0390 — the preference endpoints' seams. SQL coverage lives in
+// notificationPreferenceService.test.ts; the access check reuses the real
+// projectService.getProjectBySlug user-scoped overload (mocked here).
+const projectServiceMock = vi.hoisted(() => ({
+  getProjectBySlug: vi.fn(),
+}));
+vi.mock('../services/projectService', () => projectServiceMock);
+const notificationPreferenceServiceMock = vi.hoisted(() => ({
+  getNotificationPreferences: vi.fn(),
+  saveNotificationPreferences: vi.fn(),
+}));
+vi.mock('../services/notificationPreferenceService', () => notificationPreferenceServiceMock);
 
 // AppError identity across vi.resetModules: errorMiddleware (re-imported per
 // boot) checks `err instanceof AppError`, so a rejection built from THIS
@@ -93,6 +105,8 @@ import * as pipelineViewService from '../services/pipelineViewService';
 import * as ticketAgentService from '../services/ticketAgentService';
 import * as onboardingEventService from '../services/onboardingEventService';
 import * as agentMessageService from '../services/agentMessageService';
+import * as projectService from '../services/projectService';
+import * as notificationPreferenceService from '../services/notificationPreferenceService';
 
 afterEach(async () => {
   const mod = await import('../utils/appError');
@@ -106,6 +120,9 @@ const mockedQueueForAgent = vi.mocked(ticketAgentService.queueForAgent);
 const mockedGetOnboardingTimeline = vi.mocked(onboardingEventService.getOnboardingTimeline);
 const mockedGetChatThread = vi.mocked(agentMessageService.getChatThread);
 const mockedPostPmReply = vi.mocked(agentMessageService.postPmReply);
+const mockedGetProjectBySlug = vi.mocked(projectService.getProjectBySlug);
+const mockedGetPreferences = vi.mocked(notificationPreferenceService.getNotificationPreferences);
+const mockedSavePreferences = vi.mocked(notificationPreferenceService.saveNotificationPreferences);
 
 const secretKey = new TextEncoder().encode(TEST_ENV.jwtSecret);
 
@@ -1063,5 +1080,165 @@ describe('agent-mode POST /api/v1/me/tickets/:ticketId/messages (SLYK-0330)', ()
     expect(res.status).toBe(501);
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
     expect(mockedPostPmReply).not.toHaveBeenCalled();
+  });
+});
+
+// ── SLYK-0390: notification-preferences routes ─────────────────────────────
+
+const PREF_SLUG = 'inventory-tracker';
+const PREF_PATH = `/api/v1/me/projects/${PREF_SLUG}/notification-preferences`;
+const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
+
+describe('agent-mode GET /api/v1/me/projects/:slug/notification-preferences (SLYK-0390)', () => {
+  beforeEach(() => {
+    mockedGetProjectBySlug.mockReset();
+    mockedGetPreferences.mockReset();
+    mockedGetProjectBySlug.mockResolvedValue({ id: PROJECT_ID } as never);
+    mockedGetPreferences.mockResolvedValue({
+      notifyOnDone: true,
+      notifyOnBlockedHuman: true,
+      notifyOnAgentWaiting: true,
+    });
+  });
+
+  it('member → 200 { data: three booleans }, both services called with resolved ids', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      data: { notifyOnDone: true, notifyOnBlockedHuman: true, notifyOnAgentWaiting: true },
+    });
+    expect(mockedGetProjectBySlug).toHaveBeenCalledWith(PREF_SLUG, PM.id, false);
+    expect(mockedGetPreferences).toHaveBeenCalledWith(PM.id, PROJECT_ID);
+  });
+
+  it('platform admin bypasses the membership probe (isPlatformAdmin=true)', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken({ ...PM, isPlatformAdmin: true })}`);
+
+    expect(res.status).toBe(200);
+    expect(mockedGetProjectBySlug).toHaveBeenCalledWith(PREF_SLUG, PM.id, true);
+  });
+
+  it('non-member → 403 FORBIDDEN (non-revealing), preference service never runs', async () => {
+    mockedGetProjectBySlug.mockRejectedValue(
+      freshAppError.build!('FORBIDDEN', 'You do not have access to this project'),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(OUTSIDER)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedGetPreferences).not.toHaveBeenCalled();
+  });
+
+  it('uppercase slug fails the kebab pattern → 400 VALIDATION_FAILED before the service', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .get('/api/v1/me/projects/InventoryTracker/notification-preferences')
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetProjectBySlug).not.toHaveBeenCalled();
+  });
+
+  it('no JWT → 401 UNAUTHENTICATED before any service runs', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app).get(PREF_PATH);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedGetPreferences).not.toHaveBeenCalled();
+  });
+
+  it('plain mode → 501 NOT_IMPLEMENTED (requireAgentMode gate)', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app).get(PREF_PATH);
+
+    expect(res.status).toBe(501);
+    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(mockedGetPreferences).not.toHaveBeenCalled();
+  });
+});
+
+describe('agent-mode PUT /api/v1/me/projects/:slug/notification-preferences (SLYK-0390)', () => {
+  const BODY = { notifyOnDone: false, notifyOnBlockedHuman: true, notifyOnAgentWaiting: false };
+
+  beforeEach(() => {
+    mockedGetProjectBySlug.mockReset();
+    mockedSavePreferences.mockReset();
+    mockedGetProjectBySlug.mockResolvedValue({ id: PROJECT_ID } as never);
+    mockedSavePreferences.mockResolvedValue(BODY);
+  });
+
+  it('member → 200 { data: saved values }, upsert called with resolved ids + body', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .put(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send(BODY);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: BODY });
+    expect(mockedSavePreferences).toHaveBeenCalledWith(PM.id, PROJECT_ID, BODY);
+  });
+
+  it('non-boolean body → 400 VALIDATION_FAILED before the access check', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .put(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ notifyOnDone: 'yes', notifyOnBlockedHuman: true, notifyOnAgentWaiting: true });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetProjectBySlug).not.toHaveBeenCalled();
+    expect(mockedSavePreferences).not.toHaveBeenCalled();
+  });
+
+  it('missing a boolean → 400 VALIDATION_FAILED (full trio required)', async () => {
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .put(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send({ notifyOnDone: true });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedSavePreferences).not.toHaveBeenCalled();
+  });
+
+  it('non-member → 403 FORBIDDEN, upsert never runs', async () => {
+    mockedGetProjectBySlug.mockRejectedValue(
+      freshAppError.build!('FORBIDDEN', 'You do not have access to this project'),
+    );
+    const app = await bootAgentModeApp();
+    const res = await request(app)
+      .put(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(OUTSIDER)}`)
+      .send(BODY);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedSavePreferences).not.toHaveBeenCalled();
+  });
+
+  it('plain mode → 501 NOT_IMPLEMENTED (requireAgentMode gate)', async () => {
+    const app = await bootPlainModeApp();
+    const res = await request(app)
+      .put(PREF_PATH)
+      .set('Authorization', `Bearer ${await sessionToken(PM)}`)
+      .send(BODY);
+
+    expect(res.status).toBe(501);
+    expect(mockedSavePreferences).not.toHaveBeenCalled();
   });
 });

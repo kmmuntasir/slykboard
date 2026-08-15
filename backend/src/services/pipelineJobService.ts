@@ -8,6 +8,7 @@ import * as pipelineJobRepository from '../repositories/pipelineJobRepository';
 import type { PipelineJobRow } from '../repositories/pipelineJobRepository';
 import { sseEmit } from './sseEmitter';
 import { notifyAgentWaitingEmail } from './agentWaitingNotifyService';
+import { notifyTicketStateEmail } from './ticketStateNotifyService';
 
 // SLYK-0260 — dispatcher state-write endpoint's business logic
 // (docs/agentic-automation/05-backend-routes.md § jobs/:ticketId/state,
@@ -153,6 +154,22 @@ export async function updateJobState(args: {
       logger.error(
         { err: err instanceof Error ? err.message : String(err), ticketId },
         'AGENT_WAITING email hook threw',
+      );
+    }
+  }
+
+  // 9. SLYK-0390 — DONE / BLOCKED_HUMAN entry emails the ticket creator
+  //    (the other two email-triggering states, 06-frontend-ui.md §
+  //    Notifications). Same fire-and-forget posture as the AGENT_WAITING
+  //    hook above; the notify service preference-gates per trigger.
+  if (to === 'DONE' || to === 'BLOCKED_HUMAN') {
+    const kind = to === 'DONE' ? 'done' : 'blockedHuman';
+    try {
+      await notifyTicketStateEmail(ticketId, kind);
+    } catch (err) {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err), ticketId, kind },
+        'ticket-state email hook threw',
       );
     }
   }

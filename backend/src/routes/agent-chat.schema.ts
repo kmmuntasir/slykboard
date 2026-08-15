@@ -33,3 +33,27 @@ export const onboardingSlugParam = z.object({
 });
 
 export type OnboardingSlugParam = z.infer<typeof onboardingSlugParam>;
+
+// SLYK-0390 — notification-preferences read/write (06-frontend-ui.md §
+// Notifications; 05-backend-routes.md defines no preference endpoints — this
+// ticket adds them). Same kebab-slug param as the onboarding read: the project
+// slug is the URL-natural key on /api/v1/me routes.
+export const notificationPreferenceSlugParam = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(63)
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+});
+
+export type NotificationPreferenceSlugParam = z.infer<typeof notificationPreferenceSlugParam>;
+
+// PUT body — the three booleans, all required (partial updates are not part
+// of the contract; the UI always sends the full trio).
+export const notificationPreferenceBody = z.object({
+  notifyOnDone: z.boolean(),
+  notifyOnBlockedHuman: z.boolean(),
+  notifyOnAgentWaiting: z.boolean(),
+});
+
+export type NotificationPreferenceBody = z.infer<typeof notificationPreferenceBody>;
