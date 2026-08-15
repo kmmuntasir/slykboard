@@ -75,9 +75,17 @@ the dispatcher. See `03-security.md`.
 | `06-frontend-ui.md` | Pages, components, feature gating, forms, decommission dialog UX. |
 | `07-dispatcher-contract.md` | The HTTP/HMAC contract between slykboard and dispatcher. Exact request shapes slykboard must emit / consume. |
 | `08-cyrus-contract.md` | What Cyrus (the default agent) expects in the Linear-shape webhook. Slykboard never talks to Cyrus directly — included for context. |
-| `09-implementation-phases.md` | Phase 0 → Phase 5 build order. What to ship first, smoke tests per phase. |
-| `10-mock-dispatcher.md` | Mock dispatcher contract — required for every phase's smoke tests. Scenarios, fixtures, npm scripts. |
+| `09-implementation-phases.md` | Phase 0 → Phase 5 build order. What to ship first, smoke tests per phase. Slykboard-side phases — all done. |
+| `10-mock-dispatcher.md` | Mock dispatcher contract — required for every phase's smoke tests. Scenarios, fixtures, npm scripts. Remains the dev tool + golden-scenario set after the real dispatcher lands. |
 | `11-existing-patterns.md` | Existing slykboard code to use as templates (routes, services, middleware, API client, SSE, tests). |
+| `12-completion-plan.md` | **Master completion plan.** Where the build stands (audited), milestones M0–M7, repo layout, ticket blocks, risks. Start here for remaining work. |
+| `13-dispatcher-service.md` | The dispatcher service build book (M1 core + M4 mergebot): layout, env, queue lease loop, onboarding orchestrator, HTTP surface, tests. |
+| `14-agent-backend.md` | `AgentBackend` interface + Cyrus implementation (M2): Linear-shape emitter, SSH repo lifecycle, status bridge, chat, AI rebase, 72h timeout. |
+| `15-project-template.md` | Greenfield project template (M3): five stack skeletons, rendered CI/deploy workflows, branch protection recipe. |
+| `16-deploy-chain.md` | Deploy chain (M5): jumphost trust model, `gh-deploy-snap`/`gh-deploy-lxc`/`bootstrap-stack.sh`, deploy flow, rollback semantics. |
+| `17-operator-runbook.md` | Operator runbook: separate-service contract, secret inventory, one-time pre-flight, dispatcher LXC provisioning, routine ops, security checklist. |
+| `18-observability.md` | Monitoring stack (M6): Prometheus/Grafana/Loki/Alertmanager, dispatcher metrics, dashboards, alerts, trace links. |
+| `19-acceptance-drills.md` | Real-stack acceptance drills for every milestone + per-milestone security gate + drill log. A milestone isn't done until its drill passes. |
 
 ## Conventions reminder (from `AGENTS.md`)
 
@@ -94,10 +102,18 @@ the dispatcher. See `03-security.md`.
 - **Middleware factories:** `requirePlatformAdmin()` is a factory —
   invoke with `()` when mounting, not as a bare reference.
 
-## What is out of scope for slykboard
+## What is out of scope for the slykboard *service*
 
-The following are owned by the **dispatcher** service (separate repo,
-not this one). Do NOT implement them here:
+> **Repo note (2026-08-15, doc 12 §2):** the dispatcher now lives **in this
+> repo** as a third workspace (`dispatcher/`) — but it is built and deployed
+> as a **separate service** (own Dockerfile, own LXC, own secrets; see
+> `17-operator-runbook.md` §1). Earlier drafts of this folder said "separate
+> repo, not this one" — the separation that matters is the deployed-process
+> boundary, not the git boundary. The bullets below still hold verbatim for
+> the slykboard *backend/frontend service*:
+
+The following are owned by the **dispatcher service** (in-repo workspace,
+separately deployed). Do NOT implement them in `backend/` or `frontend/`:
 
 - The task queue / lease loop / state machine driver.
 - The Linear-shape webhook emitter to Cyrus.
