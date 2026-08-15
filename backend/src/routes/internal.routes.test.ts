@@ -817,7 +817,7 @@ describe('agent-mode /api/v1/admin — authenticate + platform admin', () => {
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
-  it('admin decommission (SLYK-0210 real route) → 400 on invalid body; agent-tokens stub → 501 Phase 5', async () => {
+  it('admin decommission (SLYK-0210 real route) → 400 on invalid body; agent-tokens (SLYK-0370 real route) → 400 on invalid body', async () => {
     const app = await bootAgentModeApp();
     const token = await sessionToken(true);
 
@@ -832,11 +832,15 @@ describe('agent-mode /api/v1/admin — authenticate + platform admin', () => {
     expect(decommission.status).toBe(400);
     expect(decommission.body.error.code).toBe('VALIDATION_FAILED');
 
+    // SLYK-0370 implemented the agent-token trio — an invalid body (missing
+    // projectId) now runs the real Zod validation (400) instead of the old
+    // Phase-5 501 stub. Full coverage lives in
+    // admin-agent-tokens.routes.test.ts with the service mocked.
     const tokens = await request(app)
       .post('/api/v1/admin/agent-tokens')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'dispatcher-prod' });
-    expect(tokens.status).toBe(501);
-    expect(tokens.body.error.message).toBe('Not implemented until Phase 5');
+    expect(tokens.status).toBe(400);
+    expect(tokens.body.error.code).toBe('VALIDATION_FAILED');
   });
 });
