@@ -10,6 +10,11 @@ import { logger } from '../config/logger';
 // per attempt would break the signature on key-ordering differences, so all
 // retries send the identical byte string (and the identical idempotencyKey,
 // letting the dispatcher dedupe).
+//
+// SLYK-0440 adds getFromDispatcher — same auth approach for GETs. 07 defines
+// POST shapes only, so the GET deviation is: sign the empty string
+// (HMAC(token, "")) and send X-Slykboard-Signature with no body. Documented
+// for the dispatcher repo here; no idempotencyKey (GETs are pure reads).
 
 /** Backoff before retry 1..3 — 07-dispatcher-contract.md § Retry semantics. */
 const RETRY_BACKOFF_MS: readonly [number, number, number] = [1_000, 5_000, 30_000];
@@ -198,6 +203,104 @@ export async function postToDispatcher<T>(
       status: lastError?.status,
       detail: lastError ? truncateForLog(lastError.detail) : undefined,
       ...ids,
+    },
+    'dispatcher call failed — gave up after 3 retries',
+  );
+  throw lastError!;
+}
+
+/**
+ * GET `path` from the dispatcher, HMAC-signed over the empty string — the
+ * documented GET deviation (07 § Auth outbound defines POST shapes only;
+ * SLYK-0440 pins `X-Slykboard-Signature: HMAC(token, "")` + no body, for the
+ * dispatcher repo to mirror). Same retry posture as POST: 5xx/network retry
+ * 3× with backoff, 4xx never. 2xx is parsed as JSON; a 404 (dispatcher holds
+ * no job for the ticket) is a thrown DispatcherError like any other 4xx —
+ * callers decide what "no job on the dispatcher side" means.
+ */
+export async function getFromDispatcher<T>(
+  path: string,
+  options: DispatcherCallOptions = {},
+): Promise<T> {
+  const baseUrl = options.baseUrl ?? env.dispatcherUrl;
+  const token = options.token ?? env.dispatcherToken;
+
+  if (!baseUrl || !token) {
+    throw new Error(
+      'dispatcherClient: SLYKBOARD_DISPATCHER_URL and _TOKEN are required (agent mode only)',
+    );
+  }
+
+  // Sign the empty body — the exact bytes a GET carries (none). A fixed
+  // signature, unlike POST's per-payload one.
+  const signature = createHmac('sha256', token).update('').digest('hex');
+  const scale = resolveBackoffScale(options.backoffScale);
+
+  let lastError: DispatcherError | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const startedAt = Date.now();
+    let res: Response | undefined;
+    try {
+      res = await fetch(`${baseUrl}${path}`, {
+        method: 'GET',
+        headers: { 'X-Slykboard-Signature': signature },
+      });
+    } catch (cause) {
+      lastError = new DispatcherError(
+        path,
+        0,
+        cause instanceof Error ? cause.message : String(cause),
+      );
+    }
+
+    const base = {
+      direction: 'outbound',
+      path,
+      method: 'GET',
+      attempt,
+      durationMs: Date.now() - startedAt,
+    };
+
+    if (res?.ok) {
+      logger.info({ ...base, status: res.status }, 'dispatcher call');
+      const text = (await res.text()).trim();
+      return (text === '' ? undefined : (JSON.parse(text) as T)) as T;
+    }
+
+    if (!res) {
+      logger.warn(
+        { ...base, status: 0, detail: truncateForLog(lastError!.detail) },
+        'dispatcher call failed (network error)',
+      );
+    } else if (res.status < 500) {
+      const detail = await readErrorDetail(res);
+      logger.error(
+        { ...base, status: res.status, detail: truncateForLog(detail) },
+        'dispatcher call rejected — not retrying (4xx)',
+      );
+      throw new DispatcherError(path, res.status, detail);
+    } else {
+      const detail = await readErrorDetail(res);
+      lastError = new DispatcherError(path, res.status, detail);
+      logger.warn(
+        { ...base, status: res.status, detail: truncateForLog(detail) },
+        'dispatcher call failed (5xx)',
+      );
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(RETRY_BACKOFF_MS[attempt - 1]! * scale);
+    }
+  }
+
+  logger.error(
+    {
+      direction: 'outbound',
+      path,
+      method: 'GET',
+      status: lastError?.status,
+      detail: lastError ? truncateForLog(lastError.detail) : undefined,
     },
     'dispatcher call failed — gave up after 3 retries',
   );

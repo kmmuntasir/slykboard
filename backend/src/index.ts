@@ -129,6 +129,25 @@ app.use(errorHandler);
 // --- Boot / shutdown (untouched by F03) ---
 const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
+// SLYK-0440 — pipeline reconciler handle. Started only in agent mode (below,
+// after migrations — it polls PipelineJobs, which exist only once the agent
+// migrations have run) and cleared on shutdown. The dynamic import keeps the
+// reconciler + dispatcherClient out of plain-mode memory entirely.
+let stopReconciler: (() => void) | null = null;
+
+/**
+ * SLYK-0440 — arm the agent-mode background jobs (currently just the polling
+ * reconciler). No-op in plain mode. Exported for boot tests — start() itself
+ * is main-gated, so this is the seam agentModeBoot.test.ts drives.
+ */
+export async function startAgentBackgroundJobs(): Promise<void> {
+  if (!runtimeConfig.agentMode) return;
+  const { startPipelineReconciler, stopPipelineReconciler } =
+    await import('./services/pipelineReconciler');
+  startPipelineReconciler();
+  stopReconciler = stopPipelineReconciler;
+}
+
 // Runs pending drizzle migrations against the direct (non-pooled) DB url.
 // Uses its own short-lived Pool — migrations may require the direct url and
 // must not ride the app Pool (which may set prepare:false for pgBouncer).
@@ -180,6 +199,12 @@ async function start(): Promise<void> {
     }
   }
 
+  // SLYK-0440 — missed-webhook polling fallback. Agent mode only: plain mode
+  // has no PipelineJobs rows and no dispatcher to poll. Started after
+  // migrations so the first sweep sees a settled schema; the interval is
+  // unref'd + cleared in shutdown() below.
+  await startAgentBackgroundJobs();
+
   const server = app.listen(env.port, () => {
     logger.info(`[slykboard-backend] listening on :${env.port}`);
   });
@@ -199,6 +224,7 @@ async function start(): Promise<void> {
     forceExit.unref();
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    stopReconciler?.();
     await pool.end();
     clearTimeout(forceExit);
     process.exit(0);

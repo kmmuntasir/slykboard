@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import { createServer, type Server } from 'node:http';
 import { createHmac } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { postToDispatcher, DispatcherError } from './dispatcherClient';
+import { postToDispatcher, getFromDispatcher, DispatcherError } from './dispatcherClient';
 import { TEST_DISPATCHER_TOKEN } from '../test/hmac';
 
 // SLYK-0180 — dispatcherClient against a REAL HTTP listener (ticket: local
@@ -358,6 +358,151 @@ describe('postToDispatcher', () => {
     // env (SLYK-0130 vitest config) has no dispatcher URL/token, and none is
     // passed — the client must fail fast instead of signing with nothing.
     await expect(postToDispatcher('/onboard', { project: { slug: 'x' } })).rejects.toThrow(
+      /SLYKBOARD_DISPATCHER_URL and _TOKEN are required/,
+    );
+    expect(l.requests.length).toBe(0);
+  });
+});
+
+// SLYK-0440 — getFromDispatcher: the polling reconciler's read path. Same
+// auth approach as POST, adapted per the documented GET deviation
+// (07-dispatcher-contract.md defines POST shapes only):
+// X-Slykboard-Signature: HMAC(token, "") — the empty string is "the exact
+// raw bytes" a bodyless GET carries. Listener replies with a real JSON body
+// (the reconciler consumes state payloads) instead of the POST fixture's
+// `{"error":"scripted N"}`.
+
+interface GetListenerHandle {
+  server: Server;
+  requests: RecordedRequest[];
+  baseUrl: string;
+}
+
+/** GET listener: scripted status sequence + a configurable JSON reply body. */
+async function startGetListener(
+  script: number[],
+  body: unknown = { state: 'QUEUED' },
+): Promise<GetListenerHandle> {
+  const requests: RecordedRequest[] = [];
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      const rawBody = Buffer.concat(chunks).toString('utf8');
+      requests.push({
+        method: req.method,
+        url: req.url,
+        rawBody,
+        signature: req.headers['x-slykboard-signature'],
+        contentType: req.headers['content-type'],
+        parsed: undefined,
+      });
+      const status = script[Math.min(requests.length - 1, script.length - 1)]!;
+      if (status >= 200 && status < 300) {
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(body));
+      } else {
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `scripted ${status}` }));
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return { server, requests, baseUrl: `http://127.0.0.1:${port}` };
+}
+
+describe('getFromDispatcher', () => {
+  it('sends a GET with the empty-string HMAC signature and parses the JSON body', async () => {
+    const l = await startGetListener([200], { state: 'AGENT_RUNNING', traceId: 'trace-1' });
+    listeners.push(l.server);
+    vi.mocked(logger.info).mockClear();
+
+    const result = await getFromDispatcher<{ state: string }>('/jobs/t-1/state', {
+      baseUrl: l.baseUrl,
+      token: TOKEN,
+    });
+
+    expect(l.requests.length).toBe(1);
+    expect(l.requests[0]!.method).toBe('GET');
+    expect(l.requests[0]!.url).toBe('/jobs/t-1/state');
+    expect(l.requests[0]!.rawBody).toBe('');
+    // The documented deviation: sign "" for bodyless GETs.
+    expect(headerValue(l.requests[0]!.signature)).toBe(
+      createHmac('sha256', TOKEN).update('').digest('hex'),
+    );
+    expect(result).toEqual({ state: 'AGENT_RUNNING', traceId: 'trace-1' });
+
+    // Observability: same documented fields, method GET.
+    const line = vi.mocked(logger.info).mock.calls.at(-1)!;
+    const fields = line[0] as Record<string, unknown>;
+    expect(fields).toMatchObject({
+      direction: 'outbound',
+      path: '/jobs/t-1/state',
+      method: 'GET',
+      status: 200,
+    });
+  });
+
+  it('retries 5xx with backoff, then succeeds — one signature every attempt', async () => {
+    const l = await startGetListener([500, 500, 200]);
+    listeners.push(l.server);
+
+    const result = await getFromDispatcher('/jobs/t-2/state', {
+      baseUrl: l.baseUrl,
+      token: TOKEN,
+    });
+
+    expect(l.requests.length).toBe(3);
+    for (const req of l.requests) expect(req.method).toBe('GET');
+    // Fixed empty-string signature — identical bytes on every attempt.
+    expect(new Set(l.requests.map((r) => r.signature)).size).toBe(1);
+    expect(result).toEqual({ state: 'QUEUED' });
+  });
+
+  it('does NOT retry a 404 — thrown DispatcherError (reconciler decides meaning)', async () => {
+    const l = await startGetListener([404]);
+    listeners.push(l.server);
+
+    const err = await getFromDispatcher('/jobs/t-3/state', {
+      baseUrl: l.baseUrl,
+      token: TOKEN,
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    expect(l.requests.length).toBe(1);
+    expect(err).toBeInstanceOf(DispatcherError);
+    expect((err as DispatcherError).status).toBe(404);
+  });
+
+  it('gives up after 3 retries on persistent 5xx and throws DispatcherError', async () => {
+    const l = await startGetListener([503, 503, 503, 503]);
+    listeners.push(l.server);
+    vi.mocked(logger.error).mockClear();
+
+    const err = await getFromDispatcher('/jobs/t-4/state', {
+      baseUrl: l.baseUrl,
+      token: TOKEN,
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    expect(l.requests.length).toBe(4);
+    expect(err).toBeInstanceOf(DispatcherError);
+    expect((err as DispatcherError).status).toBe(503);
+    const giveUp = vi.mocked(logger.error).mock.calls.find((c) => String(c[1]).includes('gave up'));
+    expect(giveUp).toBeDefined();
+    expect((giveUp![0] as Record<string, unknown>).method).toBe('GET');
+  });
+
+  it('refuses to send without agent-mode config (same guard as POST)', async () => {
+    const l = await startGetListener([200]);
+    listeners.push(l.server);
+
+    await expect(getFromDispatcher('/jobs/t-5/state')).rejects.toThrow(
       /SLYKBOARD_DISPATCHER_URL and _TOKEN are required/,
     );
     expect(l.requests.length).toBe(0);
