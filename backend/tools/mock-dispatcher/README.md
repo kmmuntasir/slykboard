@@ -145,12 +145,15 @@ Trigger `POST /api/v1/admin/projects/:slug/decommission` (correct
 `confirmSlug`): the mock acks `202`, then streams
 `DECOMMISSIONING → DECOMMISSIONED` so meta reaches the terminal state.
 
-### Failure injection (stub — exercised by SLYK-0410/0450)
+### Failure injection (SLYK-0450)
 
 ```bash
 # Arm: every /onboard call fails 500 until cleared — slykboard retries
 # with backoff, then marks onboarding FAILED
 curl "http://localhost:4001/admin/next-status?path=/onboard&status=500"
+
+# Rate-limit simulation: inbound webhooks answered 429 on demand
+curl "http://localhost:4001/admin/next-status?path=/webhooks/ticket-events&status=429"
 
 # Disarm
 curl "http://localhost:4001/admin/next-status?path=/onboard&status=clear"
@@ -160,6 +163,32 @@ The override is **sticky until cleared** (not one-shot) so all of
 slykboard's retry attempts fail — a one-shot would let retry #1 succeed
 and never exercise the FAILED path. The signature gate still runs first
 (an unsigned armed call gets `401`, not the injected status).
+
+### Latency profiles (SLYK-0450)
+
+```bash
+npm run mock:dispatcher -- --latency=fast   # 0ms (default)
+npm run mock:dispatcher -- --latency=slow   # 2s delay on every inbound webhook
+npm run mock:dispatcher -- --latency=flaky  # 30% of inbound webhooks answered 500
+```
+
+`slow` exercises SSE reconnect tolerance + slow-request UI states; `flaky`
+exercises slykboard's dispatcherClient retry path end-to-end (attempts
+converge to 202 or the retry cap, mirroring the failed-ci-retry scenario).
+
+## Phase coverage matrix
+
+| Scenario / knob                      | Proves (phase · acceptance)                       |
+| ------------------------------------ | ------------------------------------------------- |
+| `happy-path`                         | 0.5 onboard → LIVE timeline; 1 full pipeline → DONE |
+| `decommission`                       | 0.5 teardown → DECOMMISSIONED                     |
+| `agent-waiting`                      | 2 chat round-trip + needsPmAttention clear         |
+| `failed-ci-retry`                    | 1 attempts bump + eventual DONE                    |
+| `blocked-human`                      | 1 retry cap → BLOCKED_HUMAN terminal               |
+| `next-status 500 on /onboard`        | 0.5 3 retries then FAILED (dispatcherClient retry) |
+| `next-status 429`                    | 5 rate-limit + retry interplay                     |
+| `--latency=slow`                     | 5 SSE reconnect + delivered:false UI states        |
+| `--latency=flaky`                    | 5 retry convergence (DONE or capped)               |
 
 ## Endpoints
 
