@@ -153,4 +153,41 @@ describe('useTicketSse', () => {
 
         expect(invalidateSpy).not.toHaveBeenCalled();
     });
+
+    // SLYK-0340 — `message` frames are handed to the onMessage seam (the chat
+    // panel appends them to its cached thread). No handler → no-op.
+    it('a message frame is handed to onMessage with the parsed payload', () => {
+        const onMessage = vi.fn();
+        renderHook(() => useTicketSse({ ticketId: TICKET_ID, onMessage }), {
+            wrapper: createWrapper(queryClient),
+        });
+
+        const frame = {
+            id: '44444444-4444-4444-4444-444444444444',
+            authorRole: 'AGENT',
+            body: 'Should I add a confirm dialog?',
+            createdAt: '2026-08-14T20:00:00.000Z',
+        };
+        act(() => {
+            FakeEventSource.instances[0]!.emit('message', JSON.stringify(frame));
+        });
+
+        expect(onMessage).toHaveBeenCalledWith(frame);
+        // Message arrival must NOT invalidate anything by itself — the chat
+        // panel appends to cache directly (no refetch flicker).
+        expect(invalidateSpy).not.toHaveBeenCalled();
+    });
+
+    it('a malformed message frame is swallowed without calling onMessage', () => {
+        const onMessage = vi.fn();
+        renderHook(() => useTicketSse({ ticketId: TICKET_ID, onMessage }), {
+            wrapper: createWrapper(queryClient),
+        });
+
+        act(() => {
+            FakeEventSource.instances[0]!.emit('message', 'not-json{{');
+        });
+
+        expect(onMessage).not.toHaveBeenCalled();
+    });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy } from 'react';
 import { useBlocker } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
@@ -18,6 +18,7 @@ import { useTicketForm, type TicketFormValues } from '@/hooks/useTicketForm';
 import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { isFailedPipelineState } from '@/constants/pipelineStates';
 import { usePipeline } from '@/hooks/usePipeline';
+import { agentChatApi, agentChatKeys } from '@/api/agentChat';
 import type { UpdateTicketDto } from '@/types/ticket';
 import { Avatar } from './ui/Avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/Tabs';
@@ -72,7 +73,32 @@ interface TicketDetailModalProps {
     onSubmit: (dto: UpdateTicketDto) => Promise<void>;
 }
 
-type DetailTab = 'metadata' | 'time-tracking' | 'activity' | 'pipeline';
+type DetailTab = 'metadata' | 'time-tracking' | 'activity' | 'pipeline' | 'chat';
+
+// SLYK-0340: <AgentChatPanel> is lazy + build-time pruned (02-dual-mode.md —
+// dynamic imports for cross-mode sharing; same pattern as routes/index.tsx's
+// buildAgentRoutes). The lazy declaration lives INSIDE this conditional so
+// plain builds never even reach the import(): Rollup emits no chat chunk and
+// react-markdown/rehype-sanitize stay out of the plain bundle (the panel + its
+// markdown deps are ~100 KB). In agent mode the chunk loads on first render of
+// the chat tab.
+//
+// `import.meta.env.MODE === 'test'` keeps the vitest path eager so the chat
+// tab's content tests can render it (vitest's __AGENT_MODE__ define is always
+// false — same limitation routes/index.test.tsx documents); the test file
+// mocks the panel module anyway, so no markdown stack loads.
+const ChatPanelForMode =
+    __AGENT_MODE__ || import.meta.env.MODE === 'test'
+        ? lazy(() => import('./AgentChatPanel').then((m) => ({ default: m.AgentChatPanel })))
+        : null;
+
+// Chat-tab visibility rule (06-frontend-ui.md § AgentChatPanel), mirrored
+// locally: importing isChatTabVisible from the panel would drag the whole
+// agent module (react-markdown et al.) back into the plain bundle through
+// this statically-imported shared component.
+function isChatTabVisible(state: string | null, messageCount: number): boolean {
+    return state === 'AGENT_RUNNING' || state === 'AGENT_WAITING' || messageCount > 0;
+}
 
 export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketDetailModalProps) {
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -236,6 +262,24 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
     const agentMode = useRuntimeConfigStore((s) => s.agentMode);
     const { data: pipelineView } = usePipeline(agentMode ? ticketId : '');
 
+    // SLYK-0340: Chat tab visibility (06-frontend-ui.md § AgentChatPanel) —
+    // visible only while AGENT_RUNNING/AGENT_WAITING or when any message
+    // exists. Reads the SAME thread cache the panel populates (agentChatKeys)
+    // so the tab appears without a duplicate fetch; absent cache (tab never
+    // opened) counts as "no messages yet", and the state half of the rule
+    // still shows the tab for live agent tickets. Called unconditionally for
+    // hook-order stability, like usePipeline above.
+    const { data: chatThread } = useQuery({
+        queryKey: agentChatKeys.thread(agentMode ? ticketId : ''),
+        queryFn: () => agentChatApi.getThread(agentMode ? ticketId : ''),
+        enabled: agentMode && !!ticketId,
+        retry: false,
+        staleTime: 30_000,
+    });
+    const chatVisible =
+        agentMode &&
+        isChatTabVisible(chatThread?.ticketState ?? null, chatThread?.messages.length ?? 0);
+
     // The modal shell is always rendered while open; only the body branches on
     // the query state (loading / error / absent / resolved).
     const modalTitle = ticket ? formatTicketId(slug, ticket.ticketNumber) : 'Loading ticket…';
@@ -289,16 +333,14 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                     )}
 
                     {/* SLYK-0310: header failure badge (agent mode, FAILED_ or BLOCKED_HUMAN). */}
-                    {agentMode &&
-                        pipelineView &&
-                        isFailedPipelineState(pipelineView.job.state) && (
-                            <div className="mb-4">
-                                <FailedPipelineBadge
-                                    state={pipelineView.job.state}
-                                    attempts={pipelineView.job.attempts}
-                                />
-                            </div>
-                        )}
+                    {agentMode && pipelineView && isFailedPipelineState(pipelineView.job.state) && (
+                        <div className="mb-4">
+                            <FailedPipelineBadge
+                                state={pipelineView.job.state}
+                                attempts={pipelineView.job.attempts}
+                            />
+                        </div>
+                    )}
 
                     {/*
                       DEL-01 T7: 2-column grid — static LEFT (title/description/
@@ -384,7 +426,10 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                         Time Tracking
                                     </TabsTrigger>
                                     <TabsTrigger value="activity">Activity</TabsTrigger>
-                                    {agentMode && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}
+                                    {agentMode && (
+                                        <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                                    )}
+                                    {chatVisible && <TabsTrigger value="chat">Chat</TabsTrigger>}
                                 </TabsList>
 
                                 {/* --- Metadata --------------------------------------- */}
@@ -441,8 +486,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                                 Danger zone
                                             </h3>
                                             <p className="mb-3 text-sm text-muted-foreground">
-                                                Permanently remove this ticket from the board. This cannot be
-                                                undone.
+                                                Permanently remove this ticket from the board. This
+                                                cannot be undone.
                                             </p>
                                             <Button
                                                 variant="destructive-outline"
@@ -465,9 +510,20 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                         <PipelinePanel ticketId={ticket.id} slug={slug} />
                                     </TabsContent>
                                 )}
+
+                                {/* --- Chat (agent mode, SLYK-0340) ------------------- */}
+                                {chatVisible && ChatPanelForMode !== null && (
+                                    <TabsContent
+                                        value="chat"
+                                        forceMount
+                                        hidden={activeTab !== 'chat'}
+                                        className="mt-4"
+                                    >
+                                        <ChatPanelForMode ticketId={ticket.id} />
+                                    </TabsContent>
+                                )}
                             </Tabs>
                         </div>
-
                     </div>
                 </form>
             </FormProvider>
