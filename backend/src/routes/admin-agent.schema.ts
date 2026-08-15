@@ -3,8 +3,8 @@ import { z } from 'zod';
 // SLYK-0190 — request validation for POST /api/v1/admin/projects
 // (docs/agentic-automation/05-backend-routes.md § admin routes).
 // SLYK-0150 left the param shapes here; SLYK-0190 adds the create-project
-// body. SLYK-0210 adds the decommission confirmation body; the agent-token
-// body stays with Phase 5.
+// body. SLYK-0210 adds the decommission confirmation body; SLYK-0370 adds
+// the agent-token body + id param.
 
 export const slugParam = z.object({
   slug: z.string().min(1),
@@ -98,6 +98,20 @@ export const decommissionProjectBody = z.object({
   confirmSlug: z.string().min(1, 'confirmSlug is required'),
 });
 
+// SLYK-0370 — generate body (05-backend-routes.md § POST /api/v1/admin/
+// agent-tokens). name 1..200 free text; projectId null = platform-wide.
+// Names are NOT unique (04-schema.md AgentTokens) — duplicates allowed.
+export const agentTokenBody = z.object({
+  name: z.string().min(1, 'Name is required').max(200, 'Name must be ≤200 chars'),
+  projectId: z.uuid().nullable(),
+});
+
+export const agentTokenParam = z.object({
+  id: z.uuid(),
+});
+
 export type SlugParam = z.infer<typeof slugParam>;
 export type CreateAgentProjectBody = z.infer<typeof createAgentProjectBody>;
 export type DecommissionProjectBody = z.infer<typeof decommissionProjectBody>;
+export type AgentTokenBody = z.infer<typeof agentTokenBody>;
+export type AgentTokenParam = z.infer<typeof agentTokenParam>;

@@ -1,23 +1,24 @@
 import { Router } from 'express';
-import { AppError } from '../utils/appError';
-import { ErrorCode, success } from '../utils/envelope';
+import { success } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
 import { validateRequest } from '../middleware/validateRequest';
-import { createAgentProjectBody, decommissionProjectBody, slugParam } from './admin-agent.schema';
+import {
+  agentTokenBody,
+  agentTokenParam,
+  createAgentProjectBody,
+  decommissionProjectBody,
+  slugParam,
+} from './admin-agent.schema';
 import * as projectOnboardingService from '../services/projectOnboardingService';
+import * as agentTokenService from '../services/agentTokenService';
 
 // SLYK-0150 — admin UI action routes. Mounted at /api/v1/admin behind
 // requireAgentMode + authenticate + requirePlatformAdmin() (user JWT auth,
-// NOT HMAC — these are browser-driven). SLYK-0190 implemented create-project
-// and SLYK-0210 decommission; the remaining stub returns 501 NOT_IMPLEMENTED
-// naming the phase that fills it in:
-//   POST   /agent-tokens                    → Phase 5 (token rotation path)
+// NOT HMAC — these are browser-driven). SLYK-0190 implemented create-project,
+// SLYK-0210 decommission, SLYK-0370 the agent-token trio (generate shown
+// once / revoke / list — no hashes ever leave the DB).
 // Path shapes per docs/agentic-automation/05-backend-routes.md § /api/v1/admin.
 export const adminAgentRouter = Router();
-
-function notImplementedUntil(phase: string): AppError {
-  return new AppError(ErrorCode.NOT_IMPLEMENTED, `Not implemented until ${phase}`);
-}
 
 // Create a project + kick off dispatcher onboarding (SLYK-0190). Auth chain
 // (requirePlatformAdmin) runs at the mount point; validateRequest strips and
@@ -56,7 +57,39 @@ adminAgentRouter.post(
   },
 );
 
-// Generate a dispatcher HMAC token (shown once).
-adminAgentRouter.post('/agent-tokens', (_req, _res, next) => {
-  next(notImplementedUntil('Phase 5'));
+// Generate a dispatcher HMAC token (SLYK-0370). 201 with the RAW token
+// exactly once — only sha256(raw) is stored, so this response is the last
+// time the value exists server-side. Never log the response body.
+adminAgentRouter.post(
+  '/agent-tokens',
+  validateRequest({ body: agentTokenBody }),
+  async (req, res) => {
+    const generated = await agentTokenService.createAgentToken({
+      body: req.body,
+      createdBy: req.user!.id,
+    });
+    res.status(HttpStatus.CREATED).json(success(generated));
+  },
+);
+
+// Revoke a token (SLYK-0370) — revokedAt flip only; the row + its hash stay
+// for audit. 204 No Content per doc; 404 unknown id, 409 already revoked
+// come from the service. Revocation takes effect on the next inbound
+// candidate query (agentTokenAuth excludes revoked rows).
+adminAgentRouter.delete(
+  '/agent-tokens/:id',
+  validateRequest({ params: agentTokenParam }),
+  async (req, res) => {
+    const { id } = req.params as { id: string };
+    await agentTokenService.revokeAgentToken(id);
+    res.status(HttpStatus.NO_CONTENT).send();
+  },
+);
+
+// List tokens (SLYK-0370 — doc gap: 05 omits the list endpoint but the
+// /admin/tokens page in 06/09 requires it). Revoked rows included (the UI
+// renders revoke state); the service projection has no hash field at all.
+adminAgentRouter.get('/agent-tokens', async (_req, res) => {
+  const tokens = await agentTokenService.listAgentTokens();
+  res.json(success(tokens));
 });
