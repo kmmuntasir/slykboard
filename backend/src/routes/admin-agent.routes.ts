@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { success } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
 import { validateRequest } from '../middleware/validateRequest';
+import { rateLimit } from '../middleware/rateLimit';
 import {
   agentTokenBody,
   agentTokenParam,
@@ -27,6 +28,9 @@ export const adminAgentRouter = Router();
 // after the service marks the meta FAILED.
 adminAgentRouter.post(
   '/projects',
+  // SLYK-0410 — 1/10s/admin (onboarding is expensive; 03-security.md § Rate
+  // limiting). Mounted after requireAgentMode + authenticate + admin gate.
+  rateLimit({ windowMs: 10_000, max: 1 }),
   validateRequest({ body: createAgentProjectBody }),
   async (req, res) => {
     const { project } = await projectOnboardingService.createAgentProject({

@@ -17,6 +17,9 @@ export const ErrorCode = {
   // itself is healthy but onboarding cannot proceed (502 per
   // 05-backend-routes.md § POST /api/v1/admin/projects behavior 4).
   UPSTREAM_FAILED: 'UPSTREAM_FAILED',
+  // SLYK-0410 — rate limiter rejection (429 + Retry-After, per 03-security.md
+  // § Rate limiting).
+  TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -33,6 +36,7 @@ export const codeToStatus: Readonly<Record<ErrorCodeValue, number>> = Object.fre
   [ErrorCode.INTERNAL_ERROR]: HttpStatus.INTERNAL_SERVER_ERROR,
   [ErrorCode.NOT_IMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
   [ErrorCode.UPSTREAM_FAILED]: HttpStatus.BAD_GATEWAY,
+  [ErrorCode.TOO_MANY_REQUESTS]: HttpStatus.TOO_MANY_REQUESTS,
 });
 
 // Success body: { data }. data may be a resource, array, null, or scalar.
