@@ -1,12 +1,14 @@
-// SLYK-0230 — /admin/projects page (agent mode only): all projects with their
-// onboarding-state badges, filterable by state, searchable by name/slug
-// (06-frontend-ui.md § "Project Admin List"). Data = the plain
-// GET /api/projects list (admins already see every project there) joined
-// client-side with per-slug timeline fetches — the dedicated admin-list
-// endpoint 05-backend-routes.md defines doesn't exist yet, and the timeline
-// response carries exactly the state + error fields this page renders.
+// SLYK-0230/0430 — /admin/projects dashboard (agent mode only): all projects
+// with their onboarding-state badges, multi-select state-chip filters,
+// 300ms-debounced name/slug search, FAILED-row error detail, rows linking to
+// the timeline (06-frontend-ui.md § "Project Admin List"). Data = the plain
+// GET /api/projects list joined client-side with per-slug timeline fetches —
+// the dedicated admin-list endpoint 05-backend-routes.md defines doesn't
+// exist yet, and the timeline response carries exactly the state + error
+// fields this page renders. Filters stay client-side for the same reason
+// (ticket allows either when the project count is naturally tiny).
 // Non-admin redirect + agent-mode gating live in routes/index.tsx.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueries } from '@tanstack/react-query';
 
@@ -49,8 +51,27 @@ export function AdminProjectsPage() {
     // data surfaces even though the route chunk is already loaded.
     const agentMode = useRuntimeConfigStore((s) => s.agentMode);
 
-    const [stateFilter, setStateFilter] = useState<OnboardingState | null>(null);
+    // SLYK-0430 — multi-select state chips + debounced search (300ms).
+    const [stateFilters, setStateFilters] = useState<Set<OnboardingState>>(new Set());
+    const [searchInput, setSearchInput] = useState('');
     const [search, setSearch] = useState('');
+
+    useEffect(() => {
+        const t = setTimeout(() => setSearch(searchInput), 300);
+        return () => clearTimeout(t);
+    }, [searchInput]);
+
+    const toggleStateFilter = (state: OnboardingState) => {
+        setStateFilters((prev) => {
+            const next = new Set(prev);
+            if (next.has(state)) {
+                next.delete(state);
+            } else {
+                next.add(state);
+            }
+            return next;
+        });
+    };
 
     const projectsQuery = useQuery({
         queryKey: ['projects', 'admin-list'],
@@ -88,14 +109,14 @@ export function AdminProjectsPage() {
                 };
             })
             .filter((row): row is AdminProjectRow => row !== null)
-            .filter((row) => !stateFilter || row.onboardingState === stateFilter)
+            .filter((row) => stateFilters.size === 0 || stateFilters.has(row.onboardingState))
             .filter(
                 (row) =>
                     !q ||
                     row.name.toLowerCase().includes(q) ||
                     row.agentSlug.toLowerCase().includes(q),
             );
-    }, [projects, timelineQueries, stateFilter, search]);
+    }, [projects, timelineQueries, stateFilters, search]);
 
     if (projectsQuery.isLoading) {
         return (
@@ -130,31 +151,42 @@ export function AdminProjectsPage() {
                 </Link>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <TextInput
                     aria-label="Search projects"
                     placeholder="Search name or slug…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                     className="w-56"
                 />
-                <select
-                    aria-label="Filter by onboarding state"
-                    value={stateFilter ?? ''}
-                    onChange={(e) =>
-                        setStateFilter(
-                            e.target.value === '' ? null : (e.target.value as OnboardingState),
-                        )
-                    }
-                    className="rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                    <option value="">All states</option>
-                    {Object.entries(ONBOARDING_STATE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
+            </div>
+
+            {/* SLYK-0430 — multi-select state chips. A chip toggles its state
+                in/out of the filter set; zero selected = all states. */}
+            <div
+                className="flex flex-wrap gap-1.5"
+                role="group"
+                aria-label="Filter by onboarding state"
+            >
+                {Object.entries(ONBOARDING_STATE_LABELS).map(([value, label]) => {
+                    const state = value as OnboardingState;
+                    const active = stateFilters.has(state);
+                    return (
+                        <button
+                            key={value}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => toggleStateFilter(state)}
+                            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                                active
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-input bg-background text-muted-foreground hover:bg-muted'
+                            }`}
+                        >
                             {label}
-                        </option>
-                    ))}
-                </select>
+                        </button>
+                    );
+                })}
             </div>
 
             {rows.length === 0 ? (
