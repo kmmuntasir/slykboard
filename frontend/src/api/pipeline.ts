@@ -17,3 +17,17 @@ export function queueTicketForAgent(ticketId: string): Promise<PipelineJob> {
     method: 'POST',
   });
 }
+
+/** SLYK-0400 escalation result (202 payload). */
+export interface EscalationResult {
+  ticketId: string;
+  projectId: string;
+  escalatedAt: string;
+}
+
+/** POST /api/v1/me/tickets/:id/escalate — "Need human help" on BLOCKED_HUMAN. */
+export function escalateTicket(ticketId: string): Promise<EscalationResult> {
+  return apiFetch<EscalationResult>(`/api/v1/me/tickets/${ticketId}/escalate`, {
+    method: 'POST',
+  });
+}

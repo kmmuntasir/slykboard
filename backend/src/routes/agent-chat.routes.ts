@@ -20,6 +20,7 @@ import * as pipelineViewService from '../services/pipelineViewService';
 import * as sseEmitter from '../services/sseEmitter';
 import * as ticketAgentService from '../services/ticketAgentService';
 import * as onboardingEventService from '../services/onboardingEventService';
+import * as escalationService from '../services/escalationService';
 import * as agentMessageService from '../services/agentMessageService';
 import * as projectService from '../services/projectService';
 import * as notificationPreferenceService from '../services/notificationPreferenceService';
@@ -139,6 +140,27 @@ agentChatRouter.post(
     });
     const job = await ticketAgentService.queueForAgent(ticketId);
     res.status(HttpStatus.OK).json(success(job));
+  },
+);
+
+// SLYK-0400 — "Need human help" escalation for BLOCKED_HUMAN tickets
+// (06-frontend-ui.md § FailedPipelineBadge BLOCKED variant; 07-dispatcher-
+// contract.md § /webhooks/pm-action/need-human-help). Access check, then the
+// service gates on state (409 unless BLOCKED_HUMAN), debounces 60s/ticket,
+// and posts the signed dispatcher webhook. Dispatcher failure → 502
+// UPSTREAM_FAILED so the badge button re-enables for a retry.
+agentChatRouter.post(
+  '/tickets/:ticketId/escalate',
+  validateRequest({ params: ticketIdParam }),
+  async (req, res) => {
+    const { ticketId } = req.params as TicketIdParam;
+    await ticketService.getTicketForUser({
+      ticketId,
+      userId: req.user!.id,
+      isPlatformAdmin: req.user!.isPlatformAdmin,
+    });
+    const result = await escalationService.escalateTicket(ticketId);
+    res.status(HttpStatus.ACCEPTED).json(success(result));
   },
 );
 

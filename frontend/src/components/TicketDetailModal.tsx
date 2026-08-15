@@ -16,6 +16,7 @@ import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { useTicketForm, type TicketFormValues } from '@/hooks/useTicketForm';
 import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
+import { escalateTicket } from '@/api/pipeline';
 import { isFailedPipelineState } from '@/constants/pipelineStates';
 import { usePipeline } from '@/hooks/usePipeline';
 import { agentChatApi, agentChatKeys } from '@/api/agentChat';
@@ -332,12 +333,14 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                         </div>
                     )}
 
-                    {/* SLYK-0310: header failure badge (agent mode, FAILED_ or BLOCKED_HUMAN). */}
+                    {/* SLYK-0310/0400: header failure badge (agent mode, FAILED_ or
+                        BLOCKED_HUMAN) with the escalation action in the modal. */}
                     {agentMode && pipelineView && isFailedPipelineState(pipelineView.job.state) && (
                         <div className="mb-4">
                             <FailedPipelineBadge
                                 state={pipelineView.job.state}
                                 attempts={pipelineView.job.attempts}
+                                onEscalate={() => escalateTicket(ticketId)}
                             />
                         </div>
                     )}
