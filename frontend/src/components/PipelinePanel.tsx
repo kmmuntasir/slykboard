@@ -1,4 +1,5 @@
 import { ApiClientError } from '@/api/client';
+import { escalateTicket } from '@/api/pipeline';
 import { usePipeline, useQueueForAgent } from '@/hooks/usePipeline';
 import { useTicketSse } from '@/hooks/useTicketSse';
 import {
@@ -124,7 +125,11 @@ export function PipelinePanel({ ticketId, slug }: PipelinePanelProps) {
             </ol>
 
             {isFailedPipelineState(job.state) && (
-                <FailedPipelineBadge state={job.state} attempts={job.attempts} />
+                <FailedPipelineBadge
+                    state={job.state}
+                    attempts={job.attempts}
+                    onEscalate={() => escalateTicket(ticketId)}
+                />
             )}
         </div>
     );
