@@ -6,13 +6,16 @@ harness for slykboard's agent mode per
 **Not part of the runtime backend bundle** (`backend/tsconfig.json` keeps
 `tools/` out of `dist/`).
 
-Current scope: **SLYK-0300 Phase 1** — HMAC round-trip, `202` stubs, the
+Current scope: **SLYK-0360 Phase 2** — HMAC round-trip, `202` stubs, the
 **scenario engine** (SLYK-0220: `--scenario=<name>` replays scripted
-onboarding/decommission callbacks), and **ticket-event handling**: a signed
-`ticket_created` (or `queue_for_agent`) webhook streams scripted
-`state_update.*` callbacks to slykboard's `/api/v1/internal/jobs/:ticketId/state`.
-Agent messages arrive with SLYK-0360 (Phase 2), latency/rate-limit profiles
-with Phase 5.
+onboarding/decommission callbacks), **ticket-event handling** (SLYK-0300:
+a signed `ticket_created`/`queue_for_agent` webhook streams scripted
+`state_update.*` callbacks to `/api/v1/internal/jobs/:ticketId/state`), and
+**agent message emission + pm_reply** (SLYK-0360: message steps stream to
+`/api/v1/internal/jobs/:ticketId/messages`; the agent-waiting scenario
+pauses at `AGENT_WAITING` + a question and resumes when slykboard delivers
+the PM's `pm_reply` webhook). Latency/rate-limit profiles arrive with
+Phase 5.
 
 ## Run
 
@@ -78,18 +81,31 @@ column. (Note: `MERGING` goes straight to `DONE` — the 15×15 matrix in
 05-backend-routes.md has no edge into `DEPLOYING`, so the doc-10 example's
 `MERGING → DEPLOYING → DONE` hop is not replayable as written.)
 
-### agent-waiting — mid-task question + resume (state part)
+### agent-waiting — mid-task question + PM reply + resume (full chat)
 
 ```bash
 npm run mock:dispatcher -- --scenario=agent-waiting
 ```
 
-Create a ticket → the stream pauses on a question and resumes:
+Create a ticket → the mock streams to the pause point and asks:
 
-`QUEUED → AGENT_RUNNING → AGENT_WAITING → AGENT_RUNNING → PR_OPEN → CI_RUNNING → MERGING → DONE`
+`QUEUED → AGENT_RUNNING → AGENT_WAITING` + an **AGENT question message**
+("should the CSV importer validate headers before inserting rows?") posted
+to `/api/v1/internal/jobs/:ticketId/messages`.
 
-`AGENT_WAITING` sets `needsPmAttention` (UI badge); the exit clears it. The
-`AGENT_WAITING` chat message emission itself arrives with SLYK-0360 (Phase 2).
+`AGENT_WAITING` sets `needsPmAttention` (UI badge + SLYK-0350 creator email).
+The stream now WAITS — the resume tail only fires when the PM replies via
+`POST /api/v1/me/tickets/:id/messages` (slykboard delivers the signed
+`pm_reply` webhook). Then:
+
+`AGENT` ack message ("Got it — validating headers before insert. Resuming
+work.") → `AGENT_RUNNING → PR_OPEN → CI_RUNNING → MERGING → DONE`
+
+The PM reply clears `needsPmAttention`; the AGENT_WAITING exit clears it
+again on the state path. A duplicate `pm_reply` webhook (same
+`idempotencyKey` — slykboard's delivery queue retries) is acked `202` and
+NOT re-streamed: inbound dedup is the dispatcher's job
+(07-dispatcher-contract.md § Retry semantics).
 
 ### failed-ci-retry — one CI failure, then success
 
@@ -153,7 +169,7 @@ Inbound (slykboard → mock, signed with `X-Slykboard-Signature`):
 | ------------------------------------ | ------------------------------- |
 | `POST /onboard`                      | `202 {orchestratorId}` (+ streams onboarding events when a scenario is loaded) |
 | `POST /decommission`                 | `202` (+ streams teardown events when a scenario is loaded) |
-| `POST /webhooks/ticket-events`       | `202 {acceptedAt}` (+ `ticket_created` streams the scenario's state sequence; `queue_for_agent` follows with `AGENT_RUNNING`; `pm_reply` logs only until SLYK-0360) |
+| `POST /webhooks/ticket-events`       | `202 {acceptedAt}` (+ `ticket_created` streams the scenario's state/message sequence; `queue_for_agent` follows with `AGENT_RUNNING`; `pm_reply` streams the scenario's `pmReplySequence` when scripted — deduped on the webhook's `idempotencyKey` — else logs only) |
 | `POST /webhooks/pm-action/need-human-help` | `202`                     |
 | `GET /admin/next-status`             | local control — see above       |
 
@@ -165,6 +181,7 @@ Outbound (mock → slykboard, signed with `X-Dispatcher-Signature`):
 |---|---|
 | `POST /api/v1/internal/projects/:slug/onboarding/events` | Stream onboarding lifecycle (Phase 0.5) |
 | `POST /api/v1/internal/jobs/:ticketId/state` | Stream ticket pipeline states (Phase 1, SLYK-0300) |
+| `POST /api/v1/internal/jobs/:ticketId/messages` | Stream agent chat messages — question on `AGENT_WAITING`, ack on `pm_reply` (Phase 2, SLYK-0360) |
 
 Every received call (valid or rejected) is appended to `state.json` as one
 JSON line: `{at, method, path, signatureValid, body, injectedStatus?}`.
@@ -215,6 +232,10 @@ exported `sign()` helper in [`sign.ts`](./sign.ts) — slykboard's
   "ticketCreatedStateSequence": [
     { "delayMs": 500, "state": "QUEUED" },
     { "delayMs": 1500, "state": "AGENT_RUNNING", "detail": { "agentSessionId": "mock-cyrus-001" } }
+  ],
+  "pmReplySequence": [
+    { "delayMs": 2000, "message": { "authorRole": "AGENT", "body": "Got it — resuming." } },
+    { "delayMs": 1000, "state": "AGENT_RUNNING", "detail": { "resumedBy": "pm_reply" } }
   ]
 }
 ```
@@ -229,6 +250,17 @@ back to the matching `fixtures/onboarding_event.*.json` /
 the 15-value `PipelineState` enum at load; every edge must exist in the
 15×15 matrix (05-backend-routes.md).
 
+**Message steps** (SLYK-0360): a step keyed `message` instead of `state`
+POSTs the `agentMessageBody` shape to `/api/v1/internal/jobs/:ticketId/messages`
+— `{authorRole: "AGENT"|"SYSTEM", body, agentSessionId?, idempotencyKey}` —
+with a fresh uuid `idempotencyKey` minted per emission. Fields the step
+omits fall back to `fixtures/message.agent.json` / `message.system.json`
+(`authorRole` defaults `AGENT`). In the `pmReplySequence`, ack messages with
+no explicit `agentSessionId` inherit the one the `pm_reply` webhook carried
+(routing the reply back to the session that asked). `pmReplySequence` is
+optional — without it, `pm_reply` receipts are logged only (the pre-Phase-2
+stub behavior, still used by scenarios that never pause).
+
 ## Layout
 
 ```
@@ -237,19 +269,25 @@ tools/mock-dispatcher/
   index.ts        # the server itself (Express, single file)
   index.test.ts   # unit suite (supertest + transport double)
   sign.ts         # shared HMAC sign/verify helpers
+  tsconfig.json   # referenced from backend/tsconfig.json (declarations only)
   scenarios/
     happy-path.json      # onboard → LIVE; ticket → DONE
-    agent-waiting.json   # ticket pauses on a question, resumes, DONE
+    agent-waiting.json   # ticket pauses on a question, PM replies, DONE
     failed-ci-retry.json # one CI failure, requeue, DONE (attempts 1)
     blocked-human.json   # three failures over cap → BLOCKED_HUMAN
     decommission.json    # DECOMMISSIONING → DECOMMISSIONED
-  fixtures/       # onboarding_event.* + state_update.* payload templates
+  fixtures/       # onboarding_event.* + state_update.* + message.* payload
+                  # templates; pm_reply.request.json documents the inbound shape
   .token          # generated on first run (gitignored)
   state.json      # runtime: append-only log of received calls (gitignored)
 ```
 
 E2E coverage: `backend/src/routes/internal.e2e.test.ts` boots the mock and
 slykboard on paired random ports against the real test Postgres and asserts
-all three ticket scenarios propagate to their terminal states (happy-path +
+all ticket scenarios propagate to their terminal states (happy-path +
 failed-ci-retry → `DONE` with the kanban move; blocked-human →
-`BLOCKED_HUMAN`), with zero `401`s on the mock's signed callbacks.
+`BLOCKED_HUMAN`), with zero `401`s on the mock's signed callbacks. The
+SLYK-0360 suite drives the full agent-waiting chat round-trip: question
+message → PM reply via `/api/v1/me/tickets/:id/messages` → ack + resume →
+`DONE`, `needsPmAttention` cleared, and a duplicate message delivery (same
+`idempotencyKey`) creating exactly ONE row.

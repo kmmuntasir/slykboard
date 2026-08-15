@@ -26,7 +26,7 @@ import {
   loadScenario,
   parseArgs,
   parseStateSteps,
-  streamStateUpdates,
+  streamJobCallbacks,
 } from './index';
 import { sign, signaturesMatch, DISPATCHER_SIGNATURE_HEADER } from './sign';
 
@@ -293,9 +293,13 @@ describe('SLYK-0220 — loadScenario + parseArgs', () => {
     ]);
   });
 
-  // SLYK-0300 — the three Phase-1 scenarios, each validated against the
-  // 15×15 matrix (05-backend-routes.md): no MERGING→DEPLOYING hop (illegal —
-  // no edge enters DEPLOYING; MERGING goes straight to DONE).
+  // SLYK-0300 — the Phase-1 scenarios, each validated against the 15×15
+  // matrix (05-backend-routes.md): no MERGING→DEPLOYING hop (illegal —
+  // no edge enters DEPLOYING; MERGING goes straight to DONE). SLYK-0360:
+  // agent-waiting splits at the AGENT_WAITING pause — the resume tail lives
+  // in pmReplySequence and only streams when slykboard delivers a pm_reply,
+  // so the edge walk covers BOTH sequences end-to-end (message steps are
+  // not state writes and are filtered out of the walk).
   it.each([
     {
       name: 'agent-waiting',
@@ -350,7 +354,14 @@ describe('SLYK-0220 — loadScenario + parseArgs', () => {
   ])('loads scenarios/$name.json with a legal $name sequence', ({ name, states }) => {
     const scenario = loadScenario(name);
     expect(scenario.name).toBe(name);
-    expect(scenario.ticketCreatedStateSequence?.map((s) => s.state)).toEqual(states);
+    const statesOf = (steps: typeof scenario.ticketCreatedStateSequence) =>
+      (steps ?? [])
+        .filter((s): s is { delayMs: number; state: string } => 'state' in s)
+        .map((s) => s.state);
+    expect([
+      ...statesOf(scenario.ticketCreatedStateSequence),
+      ...statesOf(scenario.pmReplySequence),
+    ]).toEqual(states);
     // Every edge in the sequence must exist in slykboard's matrix, and the
     // FAILED_*→QUEUED requeues must stay under the attempts cap of 3
     // (attempts bumps on each requeue: 1, 2 — the third FAILED_CI escalates).
@@ -393,12 +404,28 @@ describe('SLYK-0220 — loadScenario + parseArgs', () => {
 
   it('rejects ticketCreatedStateSequence steps with an unknown state', () => {
     expect(() => parseStateSteps('happy-path', [{ delayMs: 1, state: 'NOT_A_STATE' }])).toThrow(
-      /must be one of/,
+      /needs a "state".*"message" key/,
     );
     expect(() => parseStateSteps('happy-path', [{ state: 'QUEUED' }])).toThrow(
       /delayMs must be a non-negative number/,
     );
     expect(() => parseStateSteps('happy-path', 'nope')).toThrow(/must be an array/);
+  });
+
+  // SLYK-0360 — message-step validation (agentMessageBody Zod span).
+  it('rejects message steps with a bad role/body/shape', () => {
+    expect(() =>
+      parseStateSteps('happy-path', [{ delayMs: 1, message: { authorRole: 'PM', body: 'hi' } }]),
+    ).toThrow(/authorRole must be AGENT or SYSTEM/);
+    expect(() =>
+      parseStateSteps('happy-path', [{ delayMs: 1, message: { body: 'x'.repeat(4001) } }]),
+    ).toThrow(/body must be a string of 1\.\.4000 chars/);
+    expect(() =>
+      parseStateSteps('happy-path', [{ delayMs: 1, message: { authorRole: 'AGENT', body: '' } }]),
+    ).toThrow(/body must be a string of 1\.\.4000 chars/);
+    expect(() => parseStateSteps('happy-path', [{ delayMs: 1, message: 'nope' }])).toThrow(
+      /message must be an object/,
+    );
   });
 
   it('loads scenarios/decommission.json streaming DECOMMISSIONING → DECOMMISSIONED', () => {
@@ -906,10 +933,13 @@ describe('SLYK-0300 — queue_for_agent + pm_reply handling', () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  it('pm_reply → 202, logged only (message emission = SLYK-0360, Phase 2)', async () => {
+  // SLYK-0360 — happy-path scripts no pmReplySequence, so pm_reply stays a
+  // logged receipt (the pre-Phase-2 behavior, now scoped to scenarios that
+  // don't script the resume).
+  it('pm_reply with no scripted pmReplySequence → 202, logged only', async () => {
     const transport = makeTransport();
     const app = buildApp(TEST_DISPATCHER_TOKEN, {
-      scenario: loadScenario('agent-waiting'),
+      scenario: loadScenario('happy-path'),
       slykboardUrl: 'http://slyk.test',
       fetchImpl: transport.fetchImpl as never,
       sleepImpl: instantSleep,
@@ -923,17 +953,231 @@ describe('SLYK-0300 — queue_for_agent + pm_reply handling', () => {
     });
     expect(res.status).toBe(202);
     await drain();
-    expect(transport.requests).toHaveLength(0); // no state, no messages yet
+    expect(transport.requests).toHaveLength(0); // no state, no messages
 
     const last = readStateLines().at(-1)!;
     expect(last.body).toMatchObject({ eventType: 'pm_reply', ticketId: TICKET_ID });
   });
 });
 
-describe('SLYK-0300 — streamStateUpdates direct (agent-waiting sequence)', () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// SLYK-0360 — agent message emission + pm_reply resume (Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const pmReplyBody = (idempotencyKey: string) => ({
+  eventType: 'pm_reply',
+  ticketId: TICKET_ID,
+  agentSessionId: 'mock-cyrus-001',
+  body: 'Yes, validate headers first.',
+  idempotencyKey,
+});
+
+describe('SLYK-0360 — ticket_created streams the question message (agent-waiting)', () => {
+  it('stops at AGENT_WAITING, then posts one signed AGENT question to /messages', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('agent-waiting'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    expect(res.status).toBe(202);
+    await drain();
+
+    // 3 state callbacks + 1 message callback, in scripted order — the
+    // question lands AFTER the AGENT_WAITING state it accompanies.
+    expect(transport.requests).toHaveLength(4);
+    expect(transport.requests.map((r) => r.url)).toEqual([
+      `http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/state`,
+      `http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/state`,
+      `http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/state`,
+      `http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/messages`,
+    ]);
+    const states = transport.requests
+      .slice(0, 3)
+      .map((r) => (JSON.parse(r.rawBody) as { state: string }).state);
+    expect(states).toEqual(['QUEUED', 'AGENT_RUNNING', 'AGENT_WAITING']);
+
+    // agentMessageBody shape (05-backend-routes.md § jobs/:ticketId/messages):
+    // fresh uuid idempotencyKey per emission, scenario body + session verbatim.
+    const message = JSON.parse(transport.requests[3]!.rawBody);
+    expect(message).toMatchObject({
+      authorRole: 'AGENT',
+      body: 'Quick question before I continue: should the CSV importer validate headers before inserting rows?',
+      agentSessionId: 'mock-cyrus-001',
+    });
+    expect(message.idempotencyKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+
+    // Message callbacks are HMAC-signed over exact raw bytes too — the
+    // zero-401 contract covers every outbound path, not just /state.
+    expect(transport.requests[3]!.headers[DISPATCHER_SIGNATURE_HEADER]).toBe(
+      sign(transport.requests[3]!.rawBody, TEST_DISPATCHER_TOKEN),
+    );
+    expect(transport.requests[3]!.headers['Content-Type']).toBe('application/json');
+  });
+});
+
+describe('SLYK-0360 — pm_reply emits ack message + resume tail (agent-waiting)', () => {
+  it('acks with an AGENT message, echoes the pm_reply session, then streams to DONE', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('agent-waiting'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const res = await signedTicketEvent(app, pmReplyBody('9b7c6d5e-1111-4222-8333-444455556666'));
+    expect(res.status).toBe(202);
+    await drain();
+
+    // 1 message + 5 state callbacks (agentMessageBody + stateUpdateBody).
+    expect(transport.requests).toHaveLength(6);
+    expect(transport.requests[0]!.url).toBe(
+      `http://slyk.test/api/v1/internal/jobs/${TICKET_ID}/messages`,
+    );
+    const ack = JSON.parse(transport.requests[0]!.rawBody);
+    expect(ack).toMatchObject({
+      authorRole: 'AGENT',
+      body: 'Got it — validating headers before insert. Resuming work.',
+      // session echoed from the pm_reply payload (routing the reply home)
+      agentSessionId: 'mock-cyrus-001',
+    });
+    expect(ack.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(ack.authorUserId).toBeUndefined(); // dispatcher may never spoof a PM author
+
+    // Message FIRST, then the agent_running resume (doc 10 § pm_reply).
+    const states = transport.requests
+      .slice(1)
+      .map((r) => (JSON.parse(r.rawBody) as { state: string }).state);
+    expect(states).toEqual(['AGENT_RUNNING', 'PR_OPEN', 'CI_RUNNING', 'MERGING', 'DONE']);
+    expect((JSON.parse(transport.requests[1]!.rawBody) as { detail?: unknown }).detail).toEqual({
+      resumedBy: 'pm_reply',
+    });
+
+    for (const r of transport.requests) {
+      expect(r.headers[DISPATCHER_SIGNATURE_HEADER]).toBe(sign(r.rawBody, TEST_DISPATCHER_TOKEN));
+    }
+  });
+
+  it('duplicate pm_reply with the same idempotencyKey → acked, no second emission', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('agent-waiting'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    // Same key twice — slykboard's delivery queue retries carry the SAME key
+    // (07 § Retry semantics puts inbound dedup on the dispatcher).
+    const body = pmReplyBody('1b7c6d5e-1111-4222-8333-444455556666');
+    const first = await signedTicketEvent(app, body);
+    const dup = await signedTicketEvent(app, body);
+    expect(first.status).toBe(202);
+    expect(dup.status).toBe(202);
+    await drain();
+
+    // Exactly one stream: 1 message + 5 states.
+    expect(transport.requests).toHaveLength(6);
+  });
+
+  it('a fresh pm_reply idempotencyKey streams again (distinct deliveries are distinct)', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: loadScenario('agent-waiting'),
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    await signedTicketEvent(app, pmReplyBody('2b7c6d5e-1111-4222-8333-444455556666'));
+    await signedTicketEvent(app, pmReplyBody('3b7c6d5e-1111-4222-8333-444455556666'));
+    await drain();
+
+    expect(transport.requests).toHaveLength(12);
+  });
+
+  it('message steps fall back to the fixtures/message.*.json template', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: {
+        name: 'message-fixture-fallback',
+        ticketCreatedStateSequence: [
+          { delayMs: 1, state: 'AGENT_WAITING' },
+          // No body → fixtures/message.agent.json; SYSTEM with no body →
+          // fixtures/message.system.json.
+          { delayMs: 1, message: {} },
+          { delayMs: 1, message: { authorRole: 'SYSTEM' } },
+        ],
+      },
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    await signedTicketEvent(app, ticketCreatedBody(TICKET_ID));
+    await drain();
+
+    const messages = transport.requests
+      .filter((r) => r.url.endsWith('/messages'))
+      .map((r) => JSON.parse(r.rawBody));
+    expect(messages).toEqual([
+      {
+        authorRole: 'AGENT',
+        body: 'Should I add a confirm dialog before deleting the user?',
+        agentSessionId: 'mock-cyrus-001',
+        idempotencyKey: messages[0]!.idempotencyKey,
+      },
+      {
+        authorRole: 'SYSTEM',
+        body: 'Agent session resumed by PM reply.',
+        idempotencyKey: messages[1]!.idempotencyKey,
+      },
+    ]);
+    expect(messages[0]!.idempotencyKey).not.toBe(messages[1]!.idempotencyKey);
+  });
+
+  // SYSTEM fixture carries no session, and the pm_reply payload omits one —
+  // so the ack must omit the key entirely (agentSessionId is optional in
+  // agentMessageBody; never null, never invented).
+  it('pm_reply without an agentSessionId → SYSTEM ack omits the key', async () => {
+    const transport = makeTransport();
+    const app = buildApp(TEST_DISPATCHER_TOKEN, {
+      scenario: {
+        name: 'no-session',
+        pmReplySequence: [{ delayMs: 1, message: { authorRole: 'SYSTEM', body: 'ack' } }],
+      },
+      slykboardUrl: 'http://slyk.test',
+      fetchImpl: transport.fetchImpl as never,
+      sleepImpl: instantSleep,
+    });
+
+    const { agentSessionId: _omit, ...withoutSession } = pmReplyBody(
+      '4b7c6d5e-1111-4222-8333-444455556666',
+    );
+    void _omit;
+    await signedTicketEvent(app, withoutSession);
+    await drain();
+
+    const ack = JSON.parse(transport.requests[0]!.rawBody);
+    expect(ack).toEqual({
+      authorRole: 'SYSTEM',
+      body: 'ack',
+      idempotencyKey: ack.idempotencyKey,
+    });
+    expect('agentSessionId' in ack).toBe(false);
+  });
+});
+
+describe('SLYK-0300 — streamJobCallbacks direct (agent-waiting sequence)', () => {
   it('streams AGENT_WAITING → AGENT_RUNNING with scenario details', async () => {
     const transport = makeTransport();
-    await streamStateUpdates({
+    await streamJobCallbacks({
       slykboardUrl: 'http://slyk.test',
       ticketId: TICKET_ID,
       steps: [

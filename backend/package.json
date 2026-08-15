@@ -5,9 +5,9 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b tsconfig.json",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b tools/mock-dispatcher && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate:core": "drizzle-kit generate --config=drizzle.config.ts",
