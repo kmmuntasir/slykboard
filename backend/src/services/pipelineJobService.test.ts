@@ -79,6 +79,7 @@ import { pipelineJobs, pipelineEvents, projects, tickets } from '../db/schema';
 import { updateJobState } from './pipelineJobService';
 import { setStateSink, type SseStateEvent } from './sseEmitter';
 import { notifyAgentWaitingEmail } from './agentWaitingNotifyService';
+import { notifyTicketStateEmail } from './ticketStateNotifyService';
 
 // SLYK-0350 — the AGENT_WAITING email trigger is a post-commit hook inside
 // updateJobState. Mock the notify service (its own delivery/gating matrix
@@ -88,7 +89,14 @@ vi.mock('./agentWaitingNotifyService', () => ({
   notifyAgentWaitingEmail: vi.fn(async () => {}),
 }));
 
+// SLYK-0390 — same posture for the DONE / BLOCKED_HUMAN trigger (delivery /
+// preference-gating matrix lives in ticketStateNotifyService.test.ts).
+vi.mock('./ticketStateNotifyService', () => ({
+  notifyTicketStateEmail: vi.fn(async () => {}),
+}));
+
 const notify = vi.mocked(notifyAgentWaitingEmail);
+const notifyState = vi.mocked(notifyTicketStateEmail);
 
 const TICKET_ID = '11111111-1111-4111-8111-111111111111';
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
@@ -137,6 +145,7 @@ beforeEach(() => {
   sseEvents.length = 0;
   setStateSink((e) => sseEvents.push(e));
   notify.mockClear();
+  notifyState.mockClear();
 });
 
 describe('updateJobState — legal transitions', () => {
@@ -377,6 +386,43 @@ describe('updateJobState — AGENT_WAITING email trigger (SLYK-0350)', () => {
     await expect(
       updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_WAITING' } }),
     ).resolves.toMatchObject({ state: 'AGENT_WAITING' });
+  });
+});
+
+describe('updateJobState — DONE/BLOCKED_HUMAN email trigger (SLYK-0390)', () => {
+  it.each([
+    { name: 'MERGING → DONE fires kind=done', from: 'MERGING', to: 'DONE', kind: 'done' },
+    {
+      name: 'FAILED_DEPLOY → BLOCKED_HUMAN fires kind=blockedHuman',
+      from: 'FAILED_DEPLOY',
+      to: 'BLOCKED_HUMAN',
+      kind: 'blockedHuman',
+    },
+  ])('$name — exactly once with the ticketId', async ({ from, to, kind }) => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: from })]);
+
+    await updateJobState({ ticketId: TICKET_ID, body: { state: to as never } });
+
+    expect(notifyState).toHaveBeenCalledTimes(1);
+    expect(notifyState).toHaveBeenCalledWith(TICKET_ID, kind);
+  });
+
+  it('non-triggering transitions never fire the ticket-state notify hook', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'QUEUED' })]);
+
+    await updateJobState({ ticketId: TICKET_ID, body: { state: 'AGENT_RUNNING' } });
+
+    expect(notifyState).not.toHaveBeenCalled();
+  });
+
+  it('a rejecting ticket-state hook never fails the state write', async () => {
+    bag.jobLimit.mockResolvedValue([baseJob({ state: 'MERGING' })]);
+    bag.jobReturning.mockResolvedValue([baseJob({ state: 'DONE' })]);
+    notifyState.mockRejectedValue(new Error('SMTP down') as never);
+
+    await expect(
+      updateJobState({ ticketId: TICKET_ID, body: { state: 'DONE' } }),
+    ).resolves.toMatchObject({ state: 'DONE' });
   });
 });
 

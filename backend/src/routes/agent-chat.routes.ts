@@ -4,9 +4,13 @@ import { validateRequest } from '../middleware/validateRequest';
 import { success } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
 import {
+  notificationPreferenceBody,
+  notificationPreferenceSlugParam,
   onboardingSlugParam,
   pmReplyBody,
   ticketIdParam,
+  type NotificationPreferenceBody,
+  type NotificationPreferenceSlugParam,
   type OnboardingSlugParam,
   type PmReplyBody,
   type TicketIdParam,
@@ -17,6 +21,8 @@ import * as sseEmitter from '../services/sseEmitter';
 import * as ticketAgentService from '../services/ticketAgentService';
 import * as onboardingEventService from '../services/onboardingEventService';
 import * as agentMessageService from '../services/agentMessageService';
+import * as projectService from '../services/projectService';
+import * as notificationPreferenceService from '../services/notificationPreferenceService';
 
 // SLYK-0270/0280 — user-facing agent routes mounted at /api/v1/me behind
 // requireAgentMode + authenticate (index.ts). PM browser JWTs — NOT the
@@ -196,5 +202,52 @@ agentChatRouter.post(
       body,
     });
     res.status(HttpStatus.CREATED).json(success({ ...row, delivered }));
+  },
+);
+
+// SLYK-0390 — per-user per-project email opt-ins (06-frontend-ui.md §
+// Notifications; 05-backend-routes.md defines no preference endpoints — this
+// ticket adds them). Slug-keyed like the onboarding timeline; access check via
+// getProjectBySlug's user-scoped overload, which throws the non-revealing
+// FORBIDDEN for both unknown slug and non-member (anti-oracle). GET returns
+// the row or the lazy all-true default WITHOUT creating one; PUT upserts on
+// the composite PK (second PUT updates in place).
+agentChatRouter.get(
+  '/projects/:slug/notification-preferences',
+  validateRequest({ params: notificationPreferenceSlugParam }),
+  async (req, res) => {
+    const { slug } = req.params as NotificationPreferenceSlugParam;
+    // user-scoped overload: unknown slug / non-member → non-revealing FORBIDDEN,
+    // never a null return (only the no-user probe overload returns null).
+    const project = (await projectService.getProjectBySlug(
+      slug,
+      req.user!.id,
+      req.user!.isPlatformAdmin,
+    ))!;
+    const values = await notificationPreferenceService.getNotificationPreferences(
+      req.user!.id,
+      project.id,
+    );
+    res.json(success(values));
+  },
+);
+
+agentChatRouter.put(
+  '/projects/:slug/notification-preferences',
+  validateRequest({ params: notificationPreferenceSlugParam, body: notificationPreferenceBody }),
+  async (req, res) => {
+    const { slug } = req.params as NotificationPreferenceSlugParam;
+    // Same access check as the GET (non-revealing FORBIDDEN).
+    const project = (await projectService.getProjectBySlug(
+      slug,
+      req.user!.id,
+      req.user!.isPlatformAdmin,
+    ))!;
+    const saved = await notificationPreferenceService.saveNotificationPreferences(
+      req.user!.id,
+      project.id,
+      req.body as NotificationPreferenceBody,
+    );
+    res.json(success(saved));
   },
 );

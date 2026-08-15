@@ -89,6 +89,26 @@ vi.mock('@/hooks/useReactivateProject', () => ({
     useReactivateProject: () => statusMuts.reactivate,
 }));
 
+// SLYK-0390 — <NotificationPreferences> is mocked as a stub so this page test
+// asserts only routing/gating; its behavior has its own suite. The captured
+// slug verifies the prop threads through.
+const { notifCaptured, runtimeState } = vi.hoisted(() => ({
+    notifCaptured: { slug: '' as string },
+    runtimeState: { agentMode: false },
+}));
+
+vi.mock('@/components/NotificationPreferences', () => ({
+    NotificationPreferences: ({ projectSlug }: { projectSlug: string }) => {
+        notifCaptured.slug = projectSlug;
+        return <div data-testid="notification-preferences">Prefs for {projectSlug}</div>;
+    },
+}));
+
+vi.mock('@/stores/useRuntimeConfigStore', () => ({
+    useRuntimeConfigStore: (selector: (s: { agentMode: boolean }) => boolean) =>
+        selector({ agentMode: runtimeState.agentMode }),
+}));
+
 // Single source of truth for the membership hooks. useProjectMembers drives the
 // loading branch; useCurrentProjectMembership drives the project-admin gate.
 vi.mock('@/hooks/useProjectMembers', () => ({
@@ -115,6 +135,7 @@ describe('ProjectSettingsPage', () => {
         mockState.project.isActive = true;
         membershipState.isProjectAdmin = false;
         membershipState.isLoading = false;
+        runtimeState.agentMode = false;
         statusMuts.deactivate.mutate.mockReset();
         statusMuts.deactivate.isPending = false;
         statusMuts.reactivate.mutate.mockReset();
@@ -128,6 +149,13 @@ describe('ProjectSettingsPage', () => {
         expect(screen.getByRole('button', { name: 'General' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Members' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument();
+    });
+
+    it('plain mode: no Notifications section in the sidebar', () => {
+        runtimeState.agentMode = false;
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull();
     });
 
     it('defaults to the General section with name + columns visible (admin)', () => {
@@ -358,15 +386,52 @@ describe('ProjectSettingsPage — platform-admin status section', () => {
         view.rerender(
             <MemoryRouter initialEntries={['/projects/SLYK/settings']}>
                 <Routes>
-                    <Route
-                        path="/projects/:slug/settings"
-                        element={<ProjectSettingsPage />}
-                    />
+                    <Route path="/projects/:slug/settings" element={<ProjectSettingsPage />} />
                 </Routes>
             </MemoryRouter>,
         );
 
         // ConfirmDialog appends '…' to the confirm label while pending.
         expect(screen.getByRole('button', { name: /Deactivate…/ })).toBeDisabled();
+    });
+});
+
+// SLYK-0390 — agent-mode Notifications section (email opt-ins). The section
+// entry is runtime-gated (useRuntimeConfigStore), so these tests flip the
+// mocked store flag and assert the section appears, threads the slug, and
+// renders for non-admins too (it edits the user's OWN preferences).
+describe('ProjectSettingsPage — agent-mode Notifications section (SLYK-0390)', () => {
+    beforeEach(() => {
+        mockState.isAdmin = true;
+        mockState.project.isActive = true;
+        membershipState.isProjectAdmin = false;
+        membershipState.isLoading = false;
+        runtimeState.agentMode = true;
+    });
+
+    it('agent mode adds the Notifications section to the sidebar', () => {
+        renderAt('/projects/SLYK/settings');
+
+        expect(screen.getByRole('button', { name: 'Notifications' })).toBeInTheDocument();
+    });
+
+    it("clicking 'Notifications' shows <NotificationPreferences> with the route slug", () => {
+        notifCaptured.slug = '';
+        renderAt('/projects/ACME/settings');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+
+        expect(screen.getByTestId('notification-preferences')).toBeInTheDocument();
+        expect(notifCaptured.slug).toBe('ACME');
+    });
+
+    it('renders for a non-admin member (own preferences, not a management control)', () => {
+        mockState.isAdmin = false;
+        membershipState.isProjectAdmin = false;
+        renderAt('/projects/SLYK/settings');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+
+        expect(screen.getByTestId('notification-preferences')).toBeInTheDocument();
     });
 });
