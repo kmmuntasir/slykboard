@@ -132,6 +132,31 @@ vi.mock('@/hooks/useDeleteTicket', () => ({
     })),
 }));
 
+// SLYK-0340: Chat tab reads the thread via agentChatApi. Default: empty
+// thread, no pipeline row → tab hidden. Agent-mode tests seed the cache or
+// flip the mock per case.
+vi.mock('@/api/agentChat', () => ({
+    agentChatApi: {
+        getThread: vi.fn().mockResolvedValue({ messages: [], ticketState: null }),
+        postReply: vi.fn(),
+    },
+    agentChatKeys: {
+        all: ['agent-chat'] as const,
+        thread: (ticketId: string) => ['agent-chat', 'thread', ticketId] as const,
+    },
+}));
+
+// The modal lazy-loads <AgentChatPanel> behind __AGENT_MODE__ (plain-build
+// pruning) — vitest's define leaves that false, so the lazy path never mounts.
+// Mock the module and render it eagerly so the chat-tab content tests exercise
+// the tab wiring without the async chunk.
+vi.mock('./AgentChatPanel', () => ({
+    AgentChatPanel: ({ ticketId }: { ticketId: string }) => (
+        <div data-testid="agent-chat-panel-stub" data-ticket-id={ticketId} />
+    ),
+    isChatTabVisible: undefined,
+}));
+
 import { TicketDetailModal } from './TicketDetailModal';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
@@ -139,6 +164,8 @@ import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { fetchTicket, fetchTicketActivity } from '@/api/tickets';
 import { fetchTicketComments } from '@/api/comments';
 import { ticketKeys, pipelineKeys } from '@/api/queryKeys';
+import { agentChatApi } from '@/api/agentChat';
+import type { ChatThreadView, AgentMessage } from '@/types/agentChat';
 import type { Ticket } from '@/types/ticket';
 
 // SLYK-0310: pipeline-tab test flag (set by the agent-mode describe below).
@@ -1065,5 +1092,90 @@ describe('TicketDetailModal Pipeline tab (SLYK-0310)', () => {
         await screen.findByRole('dialog', { name: 'SLYK-101' });
 
         expect(screen.queryByLabelText(/^Pipeline (failed|blocked)/)).not.toBeInTheDocument();
+    });
+});
+
+// SLYK-0340 — Chat tab visibility (06-frontend-ui.md § AgentChatPanel): the
+// tab exists only in agent mode AND while AGENT_RUNNING/AGENT_WAITING or when
+// the thread has any messages. Plain mode and not-queued-empty threads render
+// no Chat tab. The panel internals are covered by AgentChatPanel.test.tsx.
+describe('TicketDetailModal Chat tab (SLYK-0340)', () => {
+    let appRoot: HTMLElement;
+
+    function seedThreadCache(
+        ticketState: ChatThreadView['ticketState'],
+        messageCount: number,
+    ): ChatThreadView {
+        const messages: AgentMessage[] = Array.from({ length: messageCount }, (_, i) => ({
+            id: `m-${i}`,
+            ticketId: TICKET_ID,
+            authorRole: 'AGENT',
+            authorUserId: null,
+            body: `message ${i}`,
+            agentSessionId: null,
+            idempotencyKey: null,
+            readAt: null,
+            createdAt: '2026-08-14T20:00:00.000Z',
+        }));
+        return { messages, ticketState };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        globalThis.__agentMode = false;
+        vi.mocked(fetchTicketActivity).mockResolvedValue({ entries: [] });
+        vi.mocked(fetchTicketComments).mockResolvedValue([]);
+        vi.mocked(agentChatApi.getThread).mockResolvedValue({ messages: [], ticketState: null });
+        appRoot = document.createElement('main');
+        appRoot.id = 'app-root';
+        document.body.appendChild(appRoot);
+    });
+
+    afterEach(() => {
+        globalThis.__agentMode = undefined;
+        appRoot.remove();
+        cleanup();
+    });
+
+    it('plain mode: no Chat tab trigger (even with messages)', async () => {
+        vi.mocked(agentChatApi.getThread).mockResolvedValue(seedThreadCache('DONE', 2));
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.queryByRole('tab', { name: /chat/i })).not.toBeInTheDocument();
+    });
+
+    it('agent mode + AGENT_WAITING: Chat tab appears and activates', async () => {
+        globalThis.__agentMode = true;
+        vi.mocked(agentChatApi.getThread).mockResolvedValue(seedThreadCache('AGENT_WAITING', 1));
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /chat/i }));
+        const panel = await screen.findByRole('tabpanel', { name: /chat/i });
+        expect(panel).toBeInTheDocument();
+    });
+
+    it('agent mode + terminal state WITH messages: Chat tab visible (history)', async () => {
+        globalThis.__agentMode = true;
+        vi.mocked(agentChatApi.getThread).mockResolvedValue(seedThreadCache('DONE', 3));
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
+    });
+
+    it('agent mode + not queued, empty thread: Chat tab hidden', async () => {
+        globalThis.__agentMode = true;
+        vi.mocked(agentChatApi.getThread).mockResolvedValue(seedThreadCache(null, 0));
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.queryByRole('tab', { name: /chat/i })).not.toBeInTheDocument();
+    });
+
+    it('agent mode + QUEUED (agent not started), empty thread: Chat tab hidden', async () => {
+        globalThis.__agentMode = true;
+        vi.mocked(agentChatApi.getThread).mockResolvedValue(seedThreadCache('QUEUED', 0));
+        renderModal();
+        await screen.findByRole('dialog', { name: 'SLYK-101' });
+        expect(screen.queryByRole('tab', { name: /chat/i })).not.toBeInTheDocument();
     });
 });
