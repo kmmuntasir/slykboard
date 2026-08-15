@@ -73,9 +73,12 @@ function buildAgentRoutes(): RouteObject[] {
     const AdminProjectsPage = lazy(() =>
         import('@/pages/AdminProjectsPage').then((m) => ({ default: m.AdminProjectsPage })),
     );
+    const AdminTokensPage = lazy(() =>
+        import('@/pages/AdminTokensPage').then((m) => ({ default: m.AdminTokensPage })),
+    );
 
     return [
-        // All three admin pages are platform-admin-only (RequirePlatformAdmin
+        // All admin pages are platform-admin-only (RequirePlatformAdmin
         // renders ForbiddenPage for non-admins — same guard as /settings).
         {
             element: <RequirePlatformAdmin />,
@@ -87,6 +90,8 @@ function buildAgentRoutes(): RouteObject[] {
                 { path: '/admin/projects/:slug', element: <AdminProjectPage /> },
                 { path: '/admin/projects/:slug/onboarding', element: <AdminProjectPage /> },
                 { path: '/admin/projects', element: <AdminProjectsPage /> },
+                // SLYK-0380 — dispatcher HMAC token management.
+                { path: '/admin/tokens', element: <AdminTokensPage /> },
             ],
         },
     ];

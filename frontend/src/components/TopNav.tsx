@@ -5,6 +5,7 @@ import {
     Layers,
     LayoutGrid,
     BarChart3,
+    KeyRound,
     Settings,
     User,
     LogOut,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useProjectStore } from '@/stores/useProjectStore';
+import { useRuntimeConfigStore } from '@/stores/useRuntimeConfigStore';
 import { logout } from '@/api/auth';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
 import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
@@ -119,6 +121,9 @@ export function TopNav() {
     // F41 — server-state for the health indicator. Single source of truth;
     // this component is a pure consumer. ok===undefined while loading (3-state).
     const health = useHealth();
+    // SLYK-0380 — runtime agent-mode flag gates the Agent Tokens nav link
+    // (mirrors the build-time route gate).
+    const agentMode = useRuntimeConfigStore((s) => s.agentMode);
 
     type HealthState = 'healthy' | 'unhealthy' | 'loading';
     const healthState: HealthState = health.isLoading
@@ -332,6 +337,15 @@ export function TopNav() {
                     <DropdownItem onSelect={() => navigate('/settings')}>
                         <Settings className="h-4 w-4" aria-hidden="true" />
                         <span>Settings</span>
+                    </DropdownItem>
+                )}
+                {/* SLYK-0380 — agent-mode token management link (admins). The
+                    runtime store gate mirrors the build-time route gate: plain
+                    mode never renders a dead link. */}
+                {isAdmin && agentMode && (
+                    <DropdownItem onSelect={() => navigate('/admin/tokens')}>
+                        <KeyRound className="h-4 w-4" aria-hidden="true" />
+                        <span>Agent Tokens</span>
                     </DropdownItem>
                 )}
                 <DropdownSeparator />
