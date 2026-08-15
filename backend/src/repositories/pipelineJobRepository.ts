@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, notInArray } from 'drizzle-orm';
 import { db } from '../db/client';
 import { pipelineEvents, pipelineJobs, projects, tickets } from '../db/schema';
 import type { Column } from '../db/schema';
@@ -149,4 +149,21 @@ export async function setTicketStatusColumn(
   columnId: string,
 ): Promise<void> {
   await tx.update(tickets).set({ statusColumn: columnId }).where(eq(tickets.id, ticketId));
+}
+
+/**
+ * SLYK-0440 — every job NOT in a terminal state, oldest first. The polling
+ * reconciler's selection query: DONE / FAILED_* / BLOCKED_HUMAN are terminal
+ * per the matrix (no legal exit except FAILED_*→QUEUED/BLOCKED_HUMAN), so
+ * they never get polled. Runs on `db` directly — no caller transaction.
+ */
+export async function findNonTerminalJobs(
+  tx: Tx | typeof db,
+  terminalStates: PipelineState[],
+): Promise<PipelineJobRow[]> {
+  return tx
+    .select()
+    .from(pipelineJobs)
+    .where(notInArray(pipelineJobs.state, terminalStates))
+    .orderBy(pipelineJobs.createdAt);
 }

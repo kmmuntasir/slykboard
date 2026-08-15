@@ -56,4 +56,30 @@ describe('agent-mode boot (/api/v1 mount block)', () => {
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
+
+  // SLYK-0440 — the polling reconciler arms at boot in agent mode ONLY.
+  // start() is main-gated, so startAgentBackgroundJobs is the exported seam
+  // standing in for the boot sequence; it must arm the loop under agent mode
+  // and stay silent in plain mode.
+  it('agent mode boots the pipeline reconciler; plain mode never arms it', async () => {
+    // Plain mode: nothing arms — the reconciler module is never even loaded
+    // (dynamic import behind the runtimeConfig.agentMode branch).
+    vi.stubEnv('SLYKBOARD_AGENT_MODE', 'false');
+    const plain = await bootApp();
+    expect(plain).toBeDefined();
+    const plainReconciler = await import('./services/pipelineReconciler');
+    expect(plainReconciler.reconcilerIsRunning()).toBe(false);
+
+    // Agent mode: the same boot seam arms the loop (and stops cleanly).
+    vi.resetModules();
+    vi.stubEnv('SLYKBOARD_AGENT_MODE', 'true');
+    vi.stubEnv('SLYKBOARD_DISPATCHER_URL', 'http://dispatcher.local:4001');
+    vi.stubEnv('SLYKBOARD_DISPATCHER_TOKEN', 'a'.repeat(64));
+    const agentMod = await import('./index');
+    await agentMod.startAgentBackgroundJobs();
+    const agentReconciler = await import('./services/pipelineReconciler');
+    expect(agentReconciler.reconcilerIsRunning()).toBe(true);
+    agentReconciler.stopPipelineReconciler();
+    expect(agentReconciler.reconcilerIsRunning()).toBe(false);
+  });
 });
