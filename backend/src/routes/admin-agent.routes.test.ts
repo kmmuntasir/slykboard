@@ -658,3 +658,61 @@ describe('POST /api/v1/admin/projects/:slug/decommission — live dispatcher wir
     }
   });
 });
+
+// ── SLYK-0410: onboarding rate limit (1/10s/admin) ──────────────────────────
+
+describe('POST /api/v1/admin/projects — rate limit (SLYK-0410)', () => {
+  beforeEach(() => {
+    mockedCreate.mockReset();
+    mockedCreate.mockResolvedValue({ project: PROJECT_ROW, meta: {} } as never);
+  });
+
+  it('second POST within 10s → 429 TOO_MANY_REQUESTS + Retry-After; service called once', async () => {
+    const app = await bootAgentModeApp();
+    const token = await sessionToken(true);
+
+    const first = await request(app)
+      .post('/api/v1/admin/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post('/api/v1/admin/projects')
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_BODY);
+
+    expect(second.status).toBe(429);
+    expect(second.body.error.code).toBe('TOO_MANY_REQUESTS');
+    expect(Number(second.headers['retry-after'])).toBeGreaterThan(0);
+    expect(mockedCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('different admins have separate budgets', async () => {
+    const app = await bootAgentModeApp();
+
+    const first = await request(app)
+      .post('/api/v1/admin/projects')
+      .set('Authorization', `Bearer ${await sessionToken(true)}`)
+      .send(VALID_BODY);
+    expect(first.status).toBe(201);
+
+    // Same PA claim but a distinct subject → distinct limiter key. (In
+    // practice the platform-admin set is tiny; the key is the JWT sub.)
+    const other = await new SignJWT({ email: 'admin2@example.com', pa: true, ver: 0 })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('u2')
+      .setIssuedAt()
+      .setIssuer('slykboard')
+      .setAudience('slykboard-web')
+      .setExpirationTime('1h')
+      .sign(secretKey);
+    const second = await request(app)
+      .post('/api/v1/admin/projects')
+      .set('Authorization', `Bearer ${other}`)
+      .send(VALID_BODY);
+
+    expect(second.status).toBe(201);
+    expect(mockedCreate).toHaveBeenCalledTimes(2);
+  });
+});

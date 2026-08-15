@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validateRequest';
+import { rateLimit } from '../middleware/rateLimit';
 import { success } from '../utils/envelope';
 import { HttpStatus } from '../utils/httpStatus';
 import {
@@ -209,6 +210,9 @@ agentChatRouter.get(
 // (07-dispatcher-contract.md § failure table).
 agentChatRouter.post(
   '/tickets/:ticketId/messages',
+  // SLYK-0410 — 30/min/user (03-security.md § Rate limiting). Mounted AFTER
+  // requireAgentMode (plain mode 501s before any limiter state is touched).
+  rateLimit({ windowMs: 60_000, max: 30 }),
   validateRequest({ params: ticketIdParam, body: pmReplyBody }),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
