@@ -1,0 +1,5 @@
+{
+  "authorRole": "AGENT",
+  "body": "Should I add a confirm dialog before deleting the user?",
+  "agentSessionId": "mock-cyrus-001"
+}

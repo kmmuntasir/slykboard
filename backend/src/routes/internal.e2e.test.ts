@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { SignJWT } from 'jose';
 import { eq } from 'drizzle-orm';
 import { TEST_DISPATCHER_TOKEN } from '../test/hmac';
@@ -50,6 +50,7 @@ vi.mock('../services/tokenVersion', () => ({
 }));
 
 import { buildApp, loadScenario } from '../../tools/mock-dispatcher/index';
+import type { TicketEventStep } from '../../tools/mock-dispatcher/index';
 import { db, pool } from '../db/client';
 import {
   projectAgentMeta,
@@ -150,11 +151,17 @@ async function seedProject(index: number): Promise<E2eProject> {
 // ── Live servers ────────────────────────────────────────────────────────────
 // Outbound state-callback statuses recorded via a wrapping fetchImpl — the
 // zero-401 acceptance criterion needs an assertion surface beyond the DB.
+// SLYK-0360: message callbacks (question + ack) are captured raw-body-first
+// so the duplicate-delivery criterion can replay the exact signed bytes.
 const stateCallbackStatuses: number[] = [];
+const messageCallbacks: Array<{ rawBody: string; status: number }> = [];
 
 function recordingFetch(url: string, init: RequestInit): Promise<Response> {
   return fetch(url, init).then((res) => {
     if (url.endsWith('/state')) stateCallbackStatuses.push(res.status);
+    if (url.endsWith('/messages')) {
+      messageCallbacks.push({ rawBody: String(init.body ?? ''), status: res.status });
+    }
     return res;
   });
 }
@@ -232,11 +239,12 @@ async function createTicket(): Promise<string> {
 interface JobRow {
   state: string;
   attempts: number;
+  needsPmAttention: boolean;
 }
 
 async function jobRow(ticketId: string): Promise<JobRow | undefined> {
   const { rows } = await pool.query(
-    'SELECT state, attempts FROM "PipelineJobs" WHERE ticket_id = $1',
+    'SELECT state, attempts, needs_pm_attention AS "needsPmAttention" FROM "PipelineJobs" WHERE ticket_id = $1',
     [ticketId],
   );
   return rows[0] as JobRow | undefined;
@@ -273,6 +281,48 @@ async function eventStates(ticketId: string): Promise<string[]> {
     [ticketId],
   );
   return rows.map((r) => r.to_state as string);
+}
+
+// ── SLYK-0360 — chat-thread helpers ─────────────────────────────────────────
+
+// Scenario step streams mix state and message callbacks (agent-waiting's
+// question rides as a message step); state-only views filter with this.
+function stateStepsOnly(step: TicketEventStep): step is { delayMs: number; state: string } {
+  return 'state' in step;
+}
+
+interface MessageRow {
+  author_role: string;
+  body: string;
+  agent_session_id: string | null;
+}
+
+async function messageRows(ticketId: string): Promise<MessageRow[]> {
+  const { rows } = await pool.query(
+    'SELECT author_role, body, agent_session_id FROM "AgentMessages" WHERE ticket_id = $1 ORDER BY created_at ASC',
+    [ticketId],
+  );
+  return rows as MessageRow[];
+}
+
+/** Wait until the thread holds ≥wanted messages from the given roles, in order prefix. */
+async function waitForMessages(
+  ticketId: string,
+  wanted: string[],
+  timeoutMs = TERMINAL_TIMEOUT_MS,
+): Promise<MessageRow[]> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const rows = await messageRows(ticketId);
+    const roles = rows.map((r) => r.author_role);
+    if (roles.join(',') === wanted.join(',')) return rows;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `ticket ${ticketId} thread never became [${wanted.join(',')}] within ${timeoutMs}ms — last: ${JSON.stringify(roles)}`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
 }
 
 // ── Suites ──────────────────────────────────────────────────────────────────
@@ -316,9 +366,12 @@ describe.each([
 
     // Every scripted state landed in the append-only event log, in order —
     // the scenario's first step IS the BACKLOG→QUEUED write, so the log is
-    // exactly the scenario sequence.
+    // exactly the scenario sequence. Message steps are not state writes and
+    // are filtered out of the scripted expectation.
     const states = await eventStates(ticketId);
-    const scripted = loadScenario(scenario).ticketCreatedStateSequence!.map((s) => s.state);
+    const scripted = loadScenario(scenario)
+      .ticketCreatedStateSequence!.filter(stateStepsOnly)
+      .map((s) => s.state);
     expect(states).toEqual(scripted);
 
     // Zero-401 acceptance criterion: every outbound state callback the mock
@@ -329,6 +382,106 @@ describe.each([
       expect(status).toBeGreaterThanOrEqual(200);
       expect(status).toBeLessThan(300);
     }
+  });
+});
+
+// ── SLYK-0360 — agent-waiting full chat round-trip (Phase 2 smoke test,
+// 09-implementation-phases.md: "PM replies → message persisted + posted to
+// dispatcher. Ticket state was AGENT_WAITING, allowed") ─────────────────────
+//
+// The scenario is interactive: ticket_created streams only to AGENT_WAITING
+// plus the question message; the resume tail (ack → AGENT_RUNNING → … →
+// DONE) fires when slykboard delivers the PM's pm_reply webhook. So this
+// scenario cannot join the terminal describe.each above — the flow needs a
+// PM reply in the middle.
+describe('SLYK-0360 e2e — agent-waiting chat round-trip', () => {
+  beforeAll(async () => {
+    scenarioIndex += 1;
+    project = await seedProject(scenarioIndex);
+    await bootPair('agent-waiting');
+  });
+
+  afterAll(async () => {
+    await closePair();
+    await db.delete(tickets).where(eq(tickets.projectId, project.projectId));
+    await db.delete(projectSequences).where(eq(projectSequences.projectId, project.projectId));
+    await db.delete(projects).where(eq(projects.id, project.projectId));
+    await db.delete(users).where(eq(users.id, project.userId));
+  });
+
+  it('question → PM reply → ack + resume → DONE, thread + badge asserted, dup replay = 1 row', async () => {
+    // 1. Create the ticket — mock streams QUEUED → AGENT_RUNNING →
+    //    AGENT_WAITING, then the agent's question lands in the thread.
+    const ticketId = await createTicket();
+    await waitForMessages(ticketId, ['AGENT']);
+    const waiting = await waitForJobState(ticketId, ['AGENT_WAITING']);
+    expect(waiting.needsPmAttention).toBe(true); // SLYK-0260 badge set on entry
+
+    const question = (await messageRows(ticketId))[0]!;
+    expect(question.body).toContain('validate headers');
+    expect(question.agent_session_id).toBe('mock-cyrus-001');
+
+    // 2. PM replies through the Phase-2 user route (SLYK-0330). AGENT_WAITING
+    //    is a listening state → 201, row persisted, webhook delivered to the
+    //    live mock (delivered: true — its 202 came back), badge cleared.
+    const reply = await post(`/api/v1/me/tickets/${ticketId}/messages`, {
+      body: 'Yes, validate headers before inserting rows.',
+    });
+    const replyData = (await reply.json()) as { data: { authorRole: string; delivered: boolean } };
+    expect(reply.status).toBe(201);
+    expect(replyData.data.authorRole).toBe('PM');
+    expect(replyData.data.delivered).toBe(true);
+    expect((await jobRow(ticketId))!.needsPmAttention).toBe(false); // cleared by the reply
+
+    // 3. The mock received pm_reply → ack message → AGENT_RUNNING → … → DONE.
+    await waitForMessages(ticketId, ['AGENT', 'PM', 'AGENT']);
+    await waitForJobState(ticketId, ['DONE']);
+    expect(await ticketColumn(ticketId)).toBe(project.doneColumnId);
+
+    // 4. The thread reads back (through the real GET) exactly as the flow ran.
+    const thread = await fetch(
+      `http://127.0.0.1:${slykPort}/api/v1/me/tickets/${ticketId}/messages`,
+      {
+        headers: { Authorization: project.auth },
+      },
+    );
+    const threadData = (await thread.json()) as {
+      data: { messages: Array<{ authorRole: string; body: string }>; ticketState: string };
+    };
+    expect(thread.status).toBe(200);
+    expect(threadData.data.ticketState).toBe('DONE');
+    expect(threadData.data.messages.map((m) => m.authorRole)).toEqual(['AGENT', 'PM', 'AGENT']);
+    expect(threadData.data.messages[2]!.body).toBe(
+      'Got it — validating headers before insert. Resuming work.',
+    );
+
+    // 5. Every message callback the mock made (question + ack) came back 2xx.
+    const messageCalls = messageCallbacks.slice(-2);
+    expect(messageCalls).toHaveLength(2);
+    for (const call of messageCalls) {
+      expect(call.status).toBeGreaterThanOrEqual(200);
+      expect(call.status).toBeLessThan(300);
+    }
+
+    // 6. Duplicate delivery — replay the mock's exact ack bytes (same
+    //    idempotencyKey) signed over the same raw body: still 201, and the
+    //    thread stays at three rows (07 § Retry semantics).
+    const ackRaw = messageCalls[1]!.rawBody;
+    const dup = await fetch(
+      `http://127.0.0.1:${slykPort}/api/v1/internal/jobs/${ticketId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dispatcher-Signature': createHmac('sha256', TEST_DISPATCHER_TOKEN)
+            .update(ackRaw)
+            .digest('hex'),
+        },
+        body: ackRaw,
+      },
+    );
+    expect(dup.status).toBe(201);
+    expect((await messageRows(ticketId)).length).toBe(3);
   });
 });
 

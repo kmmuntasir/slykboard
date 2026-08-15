@@ -1,0 +1,22 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    // Referenced by backend/tsconfig.json so test files can import the tool
+    // without dragging it under backend's rootDir. The tool itself runs via
+    // tsx (npm run mock:dispatcher) and never ships in the backend bundle
+    // (doc 10) — a referenced project must emit something, so declarations
+    // only, into the gitignored build-artifact dir.
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "declarationMap": true,
+    "outDir": "./build",
+    "tsBuildInfoFile": "./build/tsconfig.tsbuildinfo"
+  },
+  "include": ["./index.ts", "./sign.ts"]
+}

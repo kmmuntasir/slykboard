@@ -1,6 +1,6 @@
 {
   "name": "agent-waiting",
-  "description": "Mid-task question → AGENT_WAITING → PM resume → AGENT_RUNNING → DONE (state part; message emission arrives with SLYK-0360)",
+  "description": "Mid-task question → AGENT_WAITING + question message → PM reply → ack message + AGENT_RUNNING → DONE (full chat round-trip, SLYK-0360)",
   "onboardReply": { "status": 202, "body": { "orchestratorId": "mock-orch-001" } },
   "onboardingEvents": [
     {
@@ -22,7 +22,24 @@
       "state": "AGENT_WAITING",
       "detail": { "question": "Should the CSV importer validate headers before inserting rows?" }
     },
-    { "delayMs": 3000, "state": "AGENT_RUNNING", "detail": { "resumedBy": "pm_reply" } },
+    {
+      "delayMs": 1000,
+      "message": {
+        "authorRole": "AGENT",
+        "body": "Quick question before I continue: should the CSV importer validate headers before inserting rows?",
+        "agentSessionId": "mock-cyrus-001"
+      }
+    }
+  ],
+  "pmReplySequence": [
+    {
+      "delayMs": 2000,
+      "message": {
+        "authorRole": "AGENT",
+        "body": "Got it — validating headers before insert. Resuming work."
+      }
+    },
+    { "delayMs": 1000, "state": "AGENT_RUNNING", "detail": { "resumedBy": "pm_reply" } },
     { "delayMs": 2000, "state": "PR_OPEN", "detail": { "prNumber": 138, "sha": "def5678" } },
     { "delayMs": 1500, "state": "CI_RUNNING" },
     {
