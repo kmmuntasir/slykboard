@@ -114,13 +114,16 @@ app.use('/api/comments', commentsRouter);
 // at boot still keep agent modules out of the plain-mode request path; the
 // requireAgentMode gate short-circuits before any agent code runs.
 const { internalRouter } = await import('./routes/internal.routes');
-const { adminAgentRouter } = await import('./routes/admin-agent.routes');
+const { adminAgentRouter, openApiJsonHandler } = await import('./routes/admin-agent.routes');
 const { agentChatRouter } = await import('./routes/agent-chat.routes');
 app.use('/api/v1/internal', requireAgentMode, agentTokenAuth, internalRouter);
 app.use('/api/v1/admin', requireAgentMode, authenticate, requirePlatformAdmin(), adminAgentRouter);
 // SLYK-0270/0280 — user-facing SSE + Pipeline read routes (PM browser JWTs,
 // not HMAC). Plain mode 501s from requireAgentMode before any agent code runs.
 app.use('/api/v1/me', requireAgentMode, authenticate, agentChatRouter);
+// SLYK-0420 — OpenAPI document at the 05-backend-routes.md path (above the
+// /admin mount), admin-gated; memoized generation, bare JSON.
+app.get('/api/v1/openapi.json', requireAgentMode, authenticate, requirePlatformAdmin(), openApiJsonHandler);
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);

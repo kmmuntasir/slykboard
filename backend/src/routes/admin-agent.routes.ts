@@ -12,6 +12,7 @@ import {
 } from './admin-agent.schema';
 import * as projectOnboardingService from '../services/projectOnboardingService';
 import * as agentTokenService from '../services/agentTokenService';
+import { generateOpenApiDocument } from '../openapi';
 
 // SLYK-0150 — admin UI action routes. Mounted at /api/v1/admin behind
 // requireAgentMode + authenticate + requirePlatformAdmin() (user JWT auth,
@@ -97,3 +98,10 @@ adminAgentRouter.get('/agent-tokens', async (_req, res) => {
   const tokens = await agentTokenService.listAgentTokens();
   res.json(success(tokens));
 });
+
+// SLYK-0420 — OpenAPI document is served at /api/v1/openapi.json (the
+// 05-backend-routes.md path), which is ABOVE this router's /api/v1/admin
+// mount. Exported here and wired in index.ts's agent-mode block instead.
+export function openApiJsonHandler(_req: unknown, res: { json: (body: unknown) => void }): void {
+  res.json(generateOpenApiDocument());
+}
