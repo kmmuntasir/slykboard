@@ -1,7 +1,9 @@
-import { config as loadEnv } from 'dotenv';
-// Override vitest's placeholder DATABASE_URL (see vitest.config.ts test.env) with the real
-// backend/.env value so this integration test hits the docker-compose dev DB.
-loadEnv({ override: true });
+// DB integration runs against vitest.config.ts test.env's DATABASE_URL
+// (postgresql://test:test@localhost:5432/test). Do NOT dotenv-override to
+// backend/.env here: the services under test resolve their own pool from the
+// same config, and a file-level override splits seed-vs-read pools whenever
+// import order differs (the db/client singleton caches the first URL it saw).
+// `make test-api` migrates the test DB (core + agent) before the suite.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/node-postgres';

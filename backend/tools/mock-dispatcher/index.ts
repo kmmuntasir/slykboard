@@ -47,17 +47,33 @@ const FIXTURES_DIR = join(HERE, 'fixtures');
 //                        onboarding/decommission callback streams (Phase 0.5)
 // --slykboard-url=<url>  base URL slykboard listens on for outbound
 //                        /api/v1/internal/* callbacks (default localhost:3000)
+// --latency=<profile>    SLYK-0450 response-shaping profile:
+//                        fast (0ms, default) | slow (2s/call) | flaky (30% 500s)
 interface CliOptions {
   port: number;
   scenario: string | undefined;
   slykboardUrl: string;
+  latency: LatencyProfile;
 }
+
+/** SLYK-0450 — latency/failure profile applied to every inbound webhook. */
+export type LatencyProfile = 'fast' | 'slow' | 'flaky';
+
+const LATENCY_DELAYS: Record<LatencyProfile, number> = {
+  fast: 0,
+  slow: 2_000,
+  flaky: 0,
+};
+
+/** flaky: share of inbound webhook calls answered with an injected 500. */
+const FLAKY_500_RATE = 0.3;
 
 function parseArgs(argv: string[]): CliOptions {
   const opts: CliOptions = {
     port: DEFAULT_PORT,
     scenario: undefined,
     slykboardUrl: DEFAULT_SLYKBOARD_URL,
+    latency: 'fast',
   };
   for (const arg of argv) {
     if (arg.startsWith('--port=')) {
@@ -76,6 +92,12 @@ function parseArgs(argv: string[]): CliOptions {
         throw new Error(`Invalid slykboard URL: ${arg}`);
       }
       opts.slykboardUrl = url;
+    } else if (arg.startsWith('--latency=')) {
+      const profile = arg.slice('--latency='.length);
+      if (profile !== 'fast' && profile !== 'slow' && profile !== 'flaky') {
+        throw new Error(`Invalid latency profile: ${arg} (fast|slow|flaky)`);
+      }
+      opts.latency = profile;
     }
   }
   return opts;
@@ -560,6 +582,10 @@ interface BuildAppOptions {
   slykboardUrl?: string;
   fetchImpl?: FetchImpl;
   sleepImpl?: SleepImpl;
+  /** SLYK-0450 latency profile (default fast). */
+  latency?: LatencyProfile;
+  /** SLYK-0450 determinism seam — flaky 500 rolls. Defaults to Math.random. */
+  randomImpl?: () => number;
 }
 
 function buildApp(token: string, options: BuildAppOptions = {}): Express {
@@ -581,6 +607,11 @@ function buildApp(token: string, options: BuildAppOptions = {}): Express {
   // streamed, per 07 § Retry semantics ("dispatcher dedups upstream").
   const seenPmReplyKeys = new Set<string>();
 
+  // SLYK-0450 — latency/flaky profile state.
+  const latency = options.latency ?? 'fast';
+  const latencyDelayMs = LATENCY_DELAYS[latency];
+  const randomImpl = options.randomImpl ?? Math.random;
+
   const requireValidSignature = (req: Request, res: Response): boolean => {
     const result = verifySignature(req, token);
     if (result.valid) return true;
@@ -595,9 +626,14 @@ function buildApp(token: string, options: BuildAppOptions = {}): Express {
     return false;
   };
 
-  // Returns true when the response was written with the injected status.
+  // Returns true when the response was written with an injected status —
+  // either an armed /admin/next-status code or (SLYK-0450) a flaky-profile
+  // roll. Checked on every signed inbound webhook.
   const applyInjectedStatus = (req: Request, res: Response): boolean => {
-    const status = injectedStatuses.get(req.path);
+    let status = injectedStatuses.get(req.path);
+    if (status === undefined && latency === 'flaky' && randomImpl() < FLAKY_500_RATE) {
+      status = 500;
+    }
     if (status === undefined) return false;
     logCall({
       at: new Date().toISOString(),
@@ -610,6 +646,16 @@ function buildApp(token: string, options: BuildAppOptions = {}): Express {
     res.status(status).json({ error: `Injected ${status} via /admin/next-status` });
     return true;
   };
+
+  // SLYK-0450 — latency middleware: slow adds 2s to every inbound webhook
+  // (429-on-demand already rides next-status; fast is a no-op).
+  if (latencyDelayMs > 0) {
+    const sleep = options.sleepImpl ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    app.use(async (_req, _res, next) => {
+      await sleep(latencyDelayMs);
+      next();
+    });
+  }
 
   const streamFromScenario = (steps: ScenarioStep[] | undefined, slug: string, seed: string) => {
     if (!steps || steps.length === 0 || !slug) return;
@@ -821,7 +867,11 @@ function main(): void {
   }
 
   const token = loadOrCreateToken();
-  const app = buildApp(token, { scenario, slykboardUrl: opts.slykboardUrl });
+  const app = buildApp(token, {
+    scenario,
+    slykboardUrl: opts.slykboardUrl,
+    latency: opts.latency,
+  });
 
   app.listen(opts.port, () => {
     // console, not pino — standalone tool, keeps the backend dependency tree out
@@ -829,6 +879,7 @@ function main(): void {
     console.log(
       `[mock-dispatcher] scenario: ${scenario ? scenario.name : 'none (202 stubs only)'}`,
     );
+    console.log(`[mock-dispatcher] latency: ${opts.latency}`);
     console.log(`[mock-dispatcher] slykboard: ${opts.slykboardUrl}`);
     console.log(`[mock-dispatcher] token: ${TOKEN_FILE} (state log: ${STATE_FILE})`);
   });

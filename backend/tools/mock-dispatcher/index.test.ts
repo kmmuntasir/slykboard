@@ -455,6 +455,7 @@ describe('SLYK-0220 — loadScenario + parseArgs', () => {
       port: 4002,
       scenario: 'happy-path',
       slykboardUrl: 'http://localhost:3001',
+      latency: 'fast',
     });
     expect(parseArgs([]).slykboardUrl).toBe('http://localhost:3000');
     expect(() => parseArgs(['--slykboard-url=not a url'])).toThrow(/Invalid slykboard URL/);
@@ -1195,5 +1196,82 @@ describe('SLYK-0300 — streamJobCallbacks direct (agent-waiting sequence)', () 
     expect(bodies[0]!.detail).toEqual({
       question: 'Should the CSV importer validate headers before inserting rows?',
     });
+  });
+});
+
+// ── SLYK-0450: latency profiles + flaky 500 rolls ───────────────────────────
+
+describe('SLYK-0450 — latency profiles + failure injection', () => {
+  const signedPost = (expressApp: Express, path: string, body: unknown) =>
+    request(expressApp)
+      .post(path)
+      .set('X-Slykboard-Signature', signPayload(body, TEST_DISPATCHER_TOKEN))
+      .send(body);
+
+  it('parseArgs accepts --latency=fast|slow|flaky and rejects garbage', () => {
+    expect(parseArgs(['--latency=slow']).latency).toBe('slow');
+    expect(parseArgs(['--latency=flaky']).latency).toBe('flaky');
+    expect(parseArgs([]).latency).toBe('fast');
+    expect(() => parseArgs(['--latency=turbo'])).toThrow(/Invalid latency profile/);
+  });
+
+  it('slow profile delays every inbound webhook by the configured sleep', async () => {
+    const sleeps: number[] = [];
+    const slowApp = buildApp(TEST_DISPATCHER_TOKEN, {
+      latency: 'slow',
+      sleepImpl: (ms) => {
+        sleeps.push(ms);
+        return Promise.resolve();
+      },
+    });
+    const body = { eventType: 'ticket_created', ticketId: 't-slow' };
+    const res = await signedPost(slowApp, '/webhooks/ticket-events', body);
+
+    expect(res.status).toBe(202);
+    expect(sleeps).toContain(2_000);
+  });
+
+  it('flaky profile 500s when the random roll hits, 202s otherwise', async () => {
+    let roll = 0.1; // < 0.3 → 500 on the first call
+    const flakyApp = buildApp(TEST_DISPATCHER_TOKEN, {
+      latency: 'flaky',
+      randomImpl: () => roll,
+    });
+    const body = { eventType: 'ticket_created', ticketId: 't-flaky' };
+
+    const fail = await signedPost(flakyApp, '/webhooks/ticket-events', body);
+    expect(fail.status).toBe(500);
+    expect(fail.body.error).toContain('Injected 500');
+
+    roll = 0.9; // ≥ 0.3 → passes through to the 202 stub
+    const pass = await signedPost(flakyApp, '/webhooks/ticket-events', body);
+    expect(pass.status).toBe(202);
+  });
+
+  it('fast (default) profile adds no sleep and never injects', async () => {
+    const sleeps: number[] = [];
+    const fastApp = buildApp(TEST_DISPATCHER_TOKEN, {
+      sleepImpl: (ms) => {
+        sleeps.push(ms);
+        return Promise.resolve();
+      },
+      randomImpl: () => 0,
+    });
+    const body = { eventType: 'ticket_created', ticketId: 't-fast' };
+    const res = await signedPost(fastApp, '/webhooks/ticket-events', body);
+
+    expect(res.status).toBe(202);
+    expect(sleeps).toEqual([]);
+  });
+
+  it('/admin/next-status can arm a 429 on demand (rate-limit simulation)', async () => {
+    const app429 = buildApp(TEST_DISPATCHER_TOKEN);
+    await request(app429)
+      .get('/admin/next-status')
+      .query({ path: '/webhooks/ticket-events', status: 429 });
+
+    const body = { eventType: 'ticket_created', ticketId: 't-429' };
+    const res = await signedPost(app429, '/webhooks/ticket-events', body);
+    expect(res.status).toBe(429);
   });
 });
