@@ -5,7 +5,7 @@ description: Turn a list of product issues into complete, end-to-end deliverable
 
 # Product Management Skill
 
-Orchestrates the **`product-manager`** subagent across a multi-round clarification loop. You (the main agent) stay thin: spawn the PM, relay its short summary, tell the user how to continue. The PM keeps its own context clean by delegating codebase investigation to the `analyst` subagent and persisting all state under a dated `.context/pm-cycles/pm-cycle-*/` folder (gitignored).
+Orchestrates the **`product-manager`** subagent across a multi-round clarification loop. You (the main agent) stay thin: spawn the PM, relay its short summary, tell the user how to continue. The PM keeps its own context clean by delegating codebase investigation to the `analyst` subagent and persisting all state under a dated `.context/pm-cycles/pm-cycle-*/` folder.
 
 ## Cycle Folders
 
@@ -41,7 +41,7 @@ Invoking this skill **is standing approval** to:
 - Create cycle folders and write files under `.context/pm-cycles/` (questions, state, deliverables).
 - Spawn `analyst` and `product-manager` subagents (read-only investigation + the PM worker).
 
-It does **not** commit, push, merge, or touch any file outside `.context/pm-cycles/`. (That folder is gitignored.)
+It does **not** commit, push, merge, or touch any file outside `.context/pm-cycles/`. Cycle folders are ordinary tracked working state (`.context/` is committed per `.claude/rules/git-guidelines.md`); this skill never commits them itself — a later flow does.
 
 ## Execution (every invocation)
 

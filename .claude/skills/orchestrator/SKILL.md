@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Orchestrate a SET of implementation tasks by delegating to subagents instead of doing the work yourself. You (the main agent) act as the coordinator — you use the analyst subagent to read and curate the task set, then dispatch each task to the node-coder or react-coder subagent (sequentially, or in parallel when conflict-free). Use when the user hands you a plan, task-breakdown, or list of tasks and wants the whole set implemented autonomously. Invoke via /orchestrator with the task set or a path to a plan/task file.
+description: Orchestrate a SET of implementation tasks by delegating to subagents instead of doing the work yourself. You (the main agent) act as the coordinator — you use the analyst subagent to read and curate the task set, then dispatch each task to the express-coder or react-coder subagent (sequentially, or in parallel when conflict-free). Use when the user hands you a plan, task-breakdown, or list of tasks and wants the whole set implemented autonomously. Invoke via /orchestrator with the task set or a path to a plan/task file.
 ---
 
 # Orchestrator Skill
@@ -10,8 +10,8 @@ You are now the **orchestrator**. Your job: execute a **set of tasks** autonomou
 ## Your subagents (invoke by `subagent_type`)
 
 - **`analyst`** — read-only investigator/analyzer. Your eyes. Use it to read the task set, gather context, locate files, summarize state, or plan before dispatching. It returns curated digests, not raw dumps.
-- **`node-coder`** — backend implementation (Node.js / Express + PostgreSQL + Drizzle). One well-scoped task per invocation.
-- **`react-coder`** — frontend implementation (React / TypeScript). One well-scoped task per invocation.
+- **`express-coder`** — backend implementation (Node 24 / Express 5 / TypeScript / PostgreSQL + Drizzle ORM). One well-scoped task per invocation.
+- **`react-coder`** — frontend implementation (React 19 / TypeScript / Tailwind v4). One well-scoped task per invocation.
 - **`committer`** — git commit specialist. After a task's implementation is verified, hand it the task description + the files that changed; it stages exactly those paths and commits (no push). Invoke it once per completed task.
 
 ## Workflow
@@ -40,3 +40,20 @@ You are now the **orchestrator**. Your job: execute a **set of tasks** autonomou
 - **Commit after each task, but never push.** Delegate every commit to the `committer` subagent — never run git yourself. The committer stages only the current task's files and writes a project-conventional message. Pushing, merging, rebasing, and amending remain the user's call unless explicitly instructed otherwise.
 - **Invoking this skill IS the user's standing approval to commit** after each task. Do not pause for per-commit confirmation — the committer commits autonomously as each task completes. (This satisfies any project rule requiring explicit git approval; the approval is granted up-front by the act of invoking `/orchestrator`.)
 - **Single task, not a set?** Skip the orchestration overhead — dispatch it directly to the right coder.
+
+## When to defer to the Dynamic Workflow
+
+A deterministic **Dynamic Workflow** exists at `.claude/workflows/ticket-pipeline.js` and is invocable as `/ticket-pipeline`. Use it instead of this skill when:
+
+- The user passes a **file path** containing multiple tickets (a batch), OR
+- The user explicitly says "workflow", "batch", "unattended", or "all tickets", OR
+- The user has already curated the ticket list and just wants the pipeline to run.
+
+The workflow runs the same stages (curate → plan → breakdown → implement → verify → commit) but deterministically — no model deciding what to spawn next. Parallelizes backend + frontend when files are disjoint.
+
+Prefer this skill when:
+
+- The user gives a single task, a pasted list of 1–3 items, or asks for routing judgment.
+- The user wants you to investigate first and recommend an approach before dispatching.
+
+If unsure, ask the user which path they want.

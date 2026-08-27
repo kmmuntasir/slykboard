@@ -13,9 +13,11 @@ The ticket may be a **bug**, **feature**, or **enhancement** — adapt the analy
 
 User provides a **ticket file path**, e.g.:
 
-- `docs/bugfix/some-bug-ticket.md`
+- `docs/bugfix/SLYK-300.md`
 - `docs/feature/notification-matrix/some-ticket.md`
 - Absolute or relative path to a single `*.md` ticket
+
+(Path patterns are illustrative — always derive the real ticket path and ID from what the user hands you.)
 
 If no input is provided, **ask** for the ticket file path. Do not guess.
 
@@ -27,7 +29,7 @@ Follow exactly, in order.
 
 Resolve the input to an absolute path and read it **completely**. Extract and hold in context:
 
-- **Ticket ID** (e.g., `SLUG-TICKET_NUMBER`) — derive from the filename or the ticket heading
+- **Ticket ID** (e.g., `SLYK-300`) — derive from the filename or the ticket heading
 - **Ticket type** — bug / feature / enhancement. Infer from content: repro steps + expected/actual → **bug**; a new capability → **feature**; a modification/tweak to something existing → **enhancement**. State the assumption explicitly.
 - **What needs to be delivered** — the requirement or defect, in your own words
 - **Named endpoints, entities, roles, domains** (backend / frontend)
@@ -43,19 +45,19 @@ Use up to **3 parallel `analyst` subagents** (via the Agent tool, `subagent_type
 
 | Subagent | Responsibility |
 |----------|---------------|
-| **Repro path** | Trace the reproduction path end-to-end. Locate the routes/controllers/services named in the ticket, read the exact code path, and confirm where the buggy behavior occurs. Cite `path:line`. |
-| **Root cause** | Pinpoint the defect — the missing guard / wrong branch / bad assumption, *why* it allows the bad behavior, and where the correct check belongs (respect the layered rule: Route → Controller → Service → Repository). |
-| **Prior art & fix surface** | Map patterns to reuse: similar existing guards, the right error classes / HTTP error shapes, error-message conventions, Zod validation schemas, relevant test fixtures, and any frontend impact. |
+| **Repro path** | Trace the reproduction path end-to-end. Locate the routes/middleware/db queries named in the ticket, read the exact code path, and confirm where the buggy behavior occurs. Cite `path:line`. |
+| **Root cause** | Pinpoint the defect — the missing guard / wrong branch / bad assumption, *why* it allows the bad behavior, and where the correct check belongs (respect the layered rule: route → middleware → service → db). |
+| **Prior art & fix surface** | Map patterns to reuse: similar existing guards, the right error envelope shapes, validation, relevant test fixtures, and any frontend impact. |
 
 **For a feature / enhancement** — focus on the design surface:
 
 | Subagent | Responsibility |
 |----------|---------------|
-| **Integration points** | Where the new/changed capability plugs in: relevant routes/controllers/services/repositories, the Drizzle schema it extends, the next Drizzle migration, and any new API contract. Cite `path:line`. |
-| **Patterns & conventions** | Existing precedents to mirror: analogous features already implemented (Drizzle models/schemas, DTOs/types, RBAC middleware, queues/schedulers, Google OAuth/JWT), naming, Zod validation, centralized error handling, config externalization via env vars. |
-| **Cross-cutting & frontend** | Shared types/utilities, security/RBAC implications, scheduling/job touches, and frontend impact (API client, hooks, components, pages, routes, stores). |
+| **Integration points** | Where the new/changed capability plugs in: relevant routes, middleware, services, the Drizzle schema (`backend/src/db/schema.ts`) it extends plus the journal migration to generate (`make migrate-generate` → `make migrate`), and any new API contract. Cite `path:line`. |
+| **Patterns & conventions** | Existing precedents to mirror: analogous features already implemented (routes, middleware chain, service methods, error envelope), naming, Zod validation at the route edge, configuration via env vars. |
+| **Cross-cutting & frontend** | Shared types/utilities, security/auth implications (the `authenticate` → `resolveProject` → `requireProjectMember`/`requireProjectAdmin` chain, `requirePlatformAdmin` for platform-level ops, rich text sanitized both directions via `utils/sanitizeHtml.ts`, client-supplied board positions validated server-side, soft-deleted tickets excluded everywhere), kanban-domain invariants (per-project sequential display IDs via `projectSequences`, not UUIDs; positions unique & gapless within a column), and frontend impact (api modules in `frontend/src/api/*.ts`, hooks, components, pages, Zustand stores, routes). |
 
-Backend lives at `backend/src` (Express 5 + Drizzle ORM + PostgreSQL; Drizzle migrations generated via `drizzle-kit generate` and committed under `backend/src/db/migrations`). Frontend lives at `frontend/src` (React 19 + Vite + TanStack Query + Zustand + Tailwind).
+Backend lives at `backend/src/` (Node 24 + Express 5 + TypeScript + Drizzle ORM over PostgreSQL via a pg Pool singleton in `src/db/client.ts`; journal migrations under `src/db/migrations`). Frontend lives at `frontend/src/` (React 19 + Vite + Tailwind v4 CSS-first tokens + React Query/Zustand).
 
 Each subagent returns a **curated digest** with `path:line` evidence — not raw file dumps. Work from those digests.
 
@@ -66,10 +68,17 @@ If the ticket is clearly single-layer or small, drop to 1–2 subagents. Add mor
 Combine the digests into a single coherent picture:
 
 - **Bug** → state the root cause (what + why) and the minimal, convention-correct fix set
-- **Feature / enhancement** → state the design: new/changed Drizzle schema, DTOs/types, services, routes/controllers, API contract, migrations, frontend pieces — and a sensible build order (schema → repository → service → controller → route → frontend)
-- **Both** → list edge cases & risks (concurrency, RBAC, related paths needing the same change, regressions, migration concerns) and any open questions
+- **Feature / enhancement** → state the design: new/changed schema + migration, routes, middleware, services, API contract, frontend pieces — and a sensible build order (schema → migration → service → route/middleware → frontend)
+- **Both** → list edge cases & risks (concurrency, position reordering mid-board, soft-delete interaction, related paths needing the same change, regressions, migration concerns) and any open questions
 
-Respect project conventions: services own business logic; controllers exchange DTOs/types only; Drizzle migrations are the only schema path; errors handled via centralized Express error middleware; never expose raw DB rows from controllers.
+Respect project conventions: routes handle HTTP only (Zod schemas co-located, `AppError` thrown — never hand-written status codes), middleware does cross-cutting concerns, services own business logic and wrap multi-statement mutations in `db.transaction` over Drizzle (parameterized queries / `sql` template literal only); authorization decisions centralized in `services/accessControl.ts`; envelope is `{ data: T }` or `{ error: { code, message, details? } }`.
+
+Kanban-domain invariants every plan must preserve:
+- Per-project sequential display IDs (`projectSequences`) — never UUIDs in user-facing identifiers.
+- Positions unique & gapless within a column, validated server-side (client-supplied positions never trusted verbatim).
+- Destructive or role-changing actions (delete, deactivate, promote/demote) REQUIRE a confirmation modal in the UI.
+- Platform-admin vs project-role separation preserved end-to-end — enforced at both route middleware (`requirePlatformAdmin`, `requireProjectAdmin`/`requireProjectMember`) and inside service checks.
+- Soft-deleted tickets excluded from all reads; direct access yields 404 semantics.
 
 ### Step 4: Write the implementation plan
 
@@ -99,11 +108,13 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 | Layer | File | Why |
 |-------|------|-----|
-| Route | `backend/src/routes/xxxRoutes.ts` | ... |
-| Controller | `backend/src/controllers/xxxController.ts` | ... |
-| Service | `backend/src/services/xxxService.ts` | ... |
-| Repository | `backend/src/repositories/xxxRepository.ts` | ... |
+| Route | `backend/src/routes/Xxx.ts` (+ co-located `Xxx.schema.ts`) | ... |
+| Middleware | `backend/src/middleware/Xxx.ts` | ... |
+| Service | `backend/src/services/Xxx.ts` | ... |
+| Access control | `backend/src/services/accessControl.ts` | ... |
 | Schema | `backend/src/db/schema.ts` | ... |
+| Migration | `backend/src/db/migrations/` (`make migrate-generate`) | ... |
+| Component | `frontend/src/components/Xxx.tsx` | ... |
 | ... | ... | ... |
 
 ## Proposed Implementation
@@ -119,16 +130,17 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 ## Edge Cases & Risks
 
-- {concurrency / RBAC / related paths / regressions / migration concerns}
+- {concurrency / position ordering / soft-delete interaction / membership matrix / related paths / regressions / migration concerns}
 
 ## Testing
 
-*Follow project conventions — Vitest + supertest (backend) and Vitest + Testing Library (frontend); table-driven tests; one behavior per test; co-locate `*.test.ts(x)` next to source.*
+*Follow project conventions — Vitest + supertest against the exported Express app over the real Postgres test DB injected by `backend/vitest.config.ts`; Vitest + Testing Library (jsdom via `src/test-setup.ts`) for the frontend, mocking at the api-module boundary with `vi.mock`; one behavior per test; co-locate tests next to source.*
 
-- **Unit tests:** {service/repository-level cases}
-- **HTTP tests:** {route/controller via supertest, if applicable}
-- **Integration tests:** {critical flows only — exercise the real DB or stub the data-access layer per project rules}
+- **Unit tests:** {service/route-level cases}
+- **HTTP tests:** {route tests via supertest}
+- **Frontend tests:** {component/hook tests, api modules mocked with `vi.mock`; DnD components wrapped in `src/test/dndWrapper.tsx`}
 - **Manual verification:** {re-run the ticket's reproduce steps for bugs / exercise the new capability for features}
+- **Gate:** `make gate` must pass green before completion is reported — typecheck + build + lint + prettier + test across both workspaces. Single-file reruns use e.g. `npm run test -w backend -- src/utils/jwt.test.ts`.
 
 ## Acceptance Criteria
 
@@ -156,6 +168,6 @@ Write the plan to the **same directory as the ticket**, named `{ticket-filename}
 
 - **Delegate analysis, write yourself.** Keep the main context clean — investigate via `analyst` subagents, synthesize and write the plan directly.
 - **Evidence-backed.** Every code claim cites `path:line`. No guesses presented as fact.
-- **Convention-correct.** Respect the layered call rule and the project's style/exception/testing conventions; never propose exposing entities from controllers or putting business logic in controllers.
+- **Convention-correct.** Respect the route → middleware → service → db layering and the project's style/error/testing conventions; never propose bypassing `utils/sanitizeHtml.ts`, skipping service-layer authorization checks, or hand-writing status codes instead of throwing `AppError`.
 - **Adapt to the ticket type.** Bugs hunt a root cause; features/enhancements lay out a design. Same plan skeleton, type-appropriate emphasis.
 - **Comprehensive but minimal.** Cover the full surface (including related paths needing the same change) without scope creep. Out-of-scope items are called out explicitly.

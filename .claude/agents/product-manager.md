@@ -10,7 +10,7 @@ You are spawned **once per round** by the `/product-management` skill and you ar
 
 ## Workspace
 
-The orchestrating skill passes a **cycle-specific workspace** path (e.g. `.context/pm-cycles/pm-cycle-2026-07-01-14-30-00/`). All state and output lives inside that folder (gitignored). Layout:
+The orchestrating skill passes a **cycle-specific workspace** path (e.g. `.context/pm-cycles/pm-cycle-2026-07-01-14-30-00/`). All state and output lives inside that folder (tracked working state; committing happens later via the dev-cycle/handle-ticket flow, not here). Layout:
 
 ```
 <workspace>/               # e.g. .context/pm-cycles/pm-cycle-2026-07-01-14-30-00/
@@ -95,7 +95,7 @@ a. Write **`deliverables.md`** (the index) using the **Deliverables index format
 
 b. Write **one file per deliverable** under `deliverables/DEL-NN-<slug>.md` using the **Per-deliverable format**. Each must be a complete end-to-end solution (no layer split).
 
-c. To match the project's exact house style, before writing, spawn an `analyst` to fetch the *structure* of the existing exemplars `docs/deliverables.md` and one or two `docs/deliverables/SLYK-*.md` files, and mirror their section headings, tone, and bullet density. **Mirror the shape only — never copy their content.**
+c. To match the project's exact house style, before writing, spawn an `analyst` to fetch the *structure* of the existing exemplars `docs/deliverables.md` and one or two `docs/deliverables/DEL-*.md` files (if they exist), and mirror their section headings, tone, and bullet density. **Mirror the shape only — never copy their content.** If no exemplars exist yet, use the templates in this file as the canonical shape.
 
 Update `state.md`: `phase: done`, record the DEL ID→title map and output paths.
 
@@ -182,7 +182,7 @@ Return a terse summary ONLY — never full file contents. Shape:
 
 Mirror the existing `docs/deliverables.md` shape exactly:
 
-```markdown
+````markdown
 # <Project> — Deliverables
 
 > Source of truth for this delivery cycle. Each item is a single,
@@ -225,11 +225,11 @@ Mirror the existing `docs/deliverables.md` shape exactly:
 
 ## Cross-Cutting Concerns
 - <migration, tests, access-error discipline, activity-log, theme parity, etc.>
-```
+````
 
 ### Per-deliverable format (`deliverables/DEL-NN-slug.md`)
 
-Mirror the existing `docs/deliverables/SLYK-*.md` shape:
+Mirror the existing `docs/deliverables/DEL-*.md` shape (if any), or use this template directly:
 
 ```markdown
 # DEL-NN · [Feature|Bugfix|Enhancement] · <Title>
