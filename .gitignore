@@ -41,3 +41,6 @@ coverage/
 # AI-generated product-management workspace (questions, state, deliverables drafts)
 .docs/ai-generated/**
 !.docs/ai-generated/**/.gitkeep
+
+# IDE
+.idea/
