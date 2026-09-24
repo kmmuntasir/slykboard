@@ -1,9 +1,10 @@
-// F14 T9 / F27 / SLYK-03 T2: project-scoped settings page at
+// F14 T9 / F27 / SLYK-03 T2 / CR-01: project-scoped settings page at
 // /projects/:slug/settings. Two-column layout — a left in-page section sidebar
-// (General / Members / Labels) drives the right content pane. Management
-// controls (rename, columns, labels) are gated on the broadened
-// (Platform Admin OR Project Admin) gate via useCurrentProjectMembership; the
-// members pane is a navigation <Link>, not an embed of the members page.
+// (General / Members / Labels) drives the right content pane. Column and label
+// management are gated on the broadened (Platform Admin OR Project Admin) gate
+// via useCurrentProjectMembership; rename and the status controls are
+// Platform-Admin-only (CR-01 FR-01.4); the members pane is a navigation
+// <Link>, not an embed of the members page.
 //
 // Loading correctness: useCurrentProjectMembership exposes no loading flag, so
 // membership loading is read separately from useProjectMembers(slug). Until it
@@ -170,7 +171,13 @@ function renderGeneral(
     }
     return (
         <>
-            <ProjectNameSection slug={slug} name={name} />
+            {/* CR-01 (FR-01.4): rename stays Platform-Admin-only — a Project
+                Admin manages columns but must not see a rename control the
+                backend would reject. Gated on isPlatformAdmin, NOT canManage
+                (mirrors the ProjectStatusSection gating below). */}
+            {isPlatformAdmin && <ProjectNameSection slug={slug} name={name} />}
+            {/* CR-01: column management is available to Project Admins AND
+                Platform Admins (canManage) via the columns-only endpoint. */}
             <ProjectColumnsManager projectSlug={slug} columns={columns} />
             {/* SLYK-04 T6: Platform-Admin-only status control. Gated on
                 isPlatformAdmin, NOT canManage. A PA always satisfies canManage

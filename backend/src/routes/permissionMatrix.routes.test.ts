@@ -70,7 +70,10 @@ vi.mock('../services/projectService', () => ({
   getProjectBySlug: vi.fn(),
   updateProject: vi.fn(),
 }));
-vi.mock('../services/boardService', () => ({ getBoard: vi.fn(), UNSORTED_BUCKET_ID: '__unsorted__' }));
+vi.mock('../services/boardService', () => ({
+  getBoard: vi.fn(),
+  UNSORTED_BUCKET_ID: '__unsorted__',
+}));
 vi.mock('../services/ticketService', () => ({
   moveTicket: vi.fn(),
   getTicket: vi.fn(),
@@ -283,7 +286,13 @@ function applyHandlerDefaults() {
     createdAt: new Date(),
   } as never);
   vi.mocked(membershipService.createAndAddMember).mockResolvedValue({
-    user: { id: USER_ID, email: 'new@x.com', fullName: 'New', displayName: null, isPlatformAdmin: false },
+    user: {
+      id: USER_ID,
+      email: 'new@x.com',
+      fullName: 'New',
+      displayName: null,
+      isPlatformAdmin: false,
+    },
     membership: { projectId: 'p1', userId: USER_ID, role: 'MEMBER', createdAt: new Date() },
   } as never);
   vi.mocked(membershipService.setMemberRole).mockResolvedValue(undefined);
@@ -323,44 +332,209 @@ const PA_ONLY: Tier[] = ['PLATFORM_ADMIN'];
 
 const ROWS: Row[] = [
   // --- Projects ---
-  { label: 'POST /api/projects (create)', method: 'post', path: '/api/projects', allowed: PA_ONLY, body: { name: 'New', slug: 'NEW', columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] }, successStatus: 201 },
-  { label: 'PATCH /api/projects/:slug (rename)', method: 'patch', path: `/api/projects/${SLUG}`, allowed: PA_ONLY, body: { name: 'Renamed' } },
-  { label: 'GET /api/projects/:slug', method: 'get', path: `/api/projects/${SLUG}`, allowed: MEMBER_PLUS },
-  { label: 'GET /api/projects/:slug/board', method: 'get', path: `/api/projects/${SLUG}/board`, allowed: MEMBER_PLUS },
-  { label: 'POST /api/projects/:slug/tickets', method: 'post', path: `/api/projects/${SLUG}/tickets`, allowed: MEMBER_PLUS, body: { title: 'T' }, successStatus: 201 },
-  { label: 'GET /api/projects/:slug/tickets/:displayId', method: 'get', path: `/api/projects/${SLUG}/tickets/${SLUG}-1`, allowed: MEMBER_PLUS },
+  {
+    label: 'POST /api/projects (create)',
+    method: 'post',
+    path: '/api/projects',
+    allowed: PA_ONLY,
+    body: {
+      name: 'New',
+      slug: 'NEW',
+      columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }],
+    },
+    successStatus: 201,
+  },
+  {
+    label: 'PATCH /api/projects/:slug (rename)',
+    method: 'patch',
+    path: `/api/projects/${SLUG}`,
+    allowed: PA_ONLY,
+    body: { name: 'Renamed' },
+  },
+  {
+    label: 'PATCH /api/projects/:slug/columns',
+    method: 'patch',
+    path: `/api/projects/${SLUG}/columns`,
+    allowed: ADMIN_PLUS,
+    body: { columns: [{ id: '11111111-1111-4111-8111-111111111111', name: 'To Do' }] },
+  },
+  {
+    label: 'GET /api/projects/:slug',
+    method: 'get',
+    path: `/api/projects/${SLUG}`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'GET /api/projects/:slug/board',
+    method: 'get',
+    path: `/api/projects/${SLUG}/board`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'POST /api/projects/:slug/tickets',
+    method: 'post',
+    path: `/api/projects/${SLUG}/tickets`,
+    allowed: MEMBER_PLUS,
+    body: { title: 'T' },
+    successStatus: 201,
+  },
+  {
+    label: 'GET /api/projects/:slug/tickets/:displayId',
+    method: 'get',
+    path: `/api/projects/${SLUG}/tickets/${SLUG}-1`,
+    allowed: MEMBER_PLUS,
+  },
 
   // --- Labels ---
-  { label: 'GET /api/projects/:slug/labels', method: 'get', path: `/api/projects/${SLUG}/labels`, allowed: MEMBER_PLUS },
-  { label: 'POST /api/projects/:slug/labels', method: 'post', path: `/api/projects/${SLUG}/labels`, allowed: ADMIN_PLUS, body: { name: 'Bug', color: '#FF0000' }, successStatus: 201 },
-  { label: 'PATCH /api/labels/:id', method: 'patch', path: `/api/labels/${LABEL_ID}`, allowed: ADMIN_PLUS, body: { name: 'Bug2' } },
-  { label: 'DELETE /api/labels/:id', method: 'delete', path: `/api/labels/${LABEL_ID}`, allowed: ADMIN_PLUS },
+  {
+    label: 'GET /api/projects/:slug/labels',
+    method: 'get',
+    path: `/api/projects/${SLUG}/labels`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'POST /api/projects/:slug/labels',
+    method: 'post',
+    path: `/api/projects/${SLUG}/labels`,
+    allowed: ADMIN_PLUS,
+    body: { name: 'Bug', color: '#FF0000' },
+    successStatus: 201,
+  },
+  {
+    label: 'PATCH /api/labels/:id',
+    method: 'patch',
+    path: `/api/labels/${LABEL_ID}`,
+    allowed: ADMIN_PLUS,
+    body: { name: 'Bug2' },
+  },
+  {
+    label: 'DELETE /api/labels/:id',
+    method: 'delete',
+    path: `/api/labels/${LABEL_ID}`,
+    allowed: ADMIN_PLUS,
+  },
 
   // --- Tickets (ticket-id scoped) ---
-  { label: 'GET /api/tickets/:ticketId', method: 'get', path: `/api/tickets/${TICKET_ID}`, allowed: MEMBER_PLUS },
-  { label: 'GET /api/tickets/:ticketId/activity', method: 'get', path: `/api/tickets/${TICKET_ID}/activity`, allowed: MEMBER_PLUS },
-  { label: 'PATCH /api/tickets/:ticketId (move)', method: 'patch', path: `/api/tickets/${TICKET_ID}`, allowed: MEMBER_PLUS, body: { statusColumn: 'c1', position: 0 } },
-  { label: 'DELETE /api/tickets/:ticketId', method: 'delete', path: `/api/tickets/${TICKET_ID}`, allowed: ADMIN_PLUS, successStatus: 204 },
-  { label: 'POST /api/tickets/:ticketId/timer/start', method: 'post', path: `/api/tickets/${TICKET_ID}/timer/start`, allowed: MEMBER_PLUS },
-  { label: 'POST /api/tickets/:ticketId/timer/stop', method: 'post', path: `/api/tickets/${TICKET_ID}/timer/stop`, allowed: MEMBER_PLUS },
-  { label: 'GET /api/tickets/:ticketId/timer/entries', method: 'get', path: `/api/tickets/${TICKET_ID}/timer/entries`, allowed: MEMBER_PLUS },
-  { label: 'POST /api/tickets/:ticketId/timer/manual', method: 'post', path: `/api/tickets/${TICKET_ID}/timer/manual`, allowed: MEMBER_PLUS, body: { minutes: 5 }, successStatus: 201 },
+  {
+    label: 'GET /api/tickets/:ticketId',
+    method: 'get',
+    path: `/api/tickets/${TICKET_ID}`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'GET /api/tickets/:ticketId/activity',
+    method: 'get',
+    path: `/api/tickets/${TICKET_ID}/activity`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'PATCH /api/tickets/:ticketId (move)',
+    method: 'patch',
+    path: `/api/tickets/${TICKET_ID}`,
+    allowed: MEMBER_PLUS,
+    body: { statusColumn: 'c1', position: 0 },
+  },
+  {
+    label: 'DELETE /api/tickets/:ticketId',
+    method: 'delete',
+    path: `/api/tickets/${TICKET_ID}`,
+    allowed: ADMIN_PLUS,
+    successStatus: 204,
+  },
+  {
+    label: 'POST /api/tickets/:ticketId/timer/start',
+    method: 'post',
+    path: `/api/tickets/${TICKET_ID}/timer/start`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'POST /api/tickets/:ticketId/timer/stop',
+    method: 'post',
+    path: `/api/tickets/${TICKET_ID}/timer/stop`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'GET /api/tickets/:ticketId/timer/entries',
+    method: 'get',
+    path: `/api/tickets/${TICKET_ID}/timer/entries`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'POST /api/tickets/:ticketId/timer/manual',
+    method: 'post',
+    path: `/api/tickets/${TICKET_ID}/timer/manual`,
+    allowed: MEMBER_PLUS,
+    body: { minutes: 5 },
+    successStatus: 201,
+  },
 
   // --- Users (workspace-wide) ---
   { label: 'GET /api/users', method: 'get', path: '/api/users', allowed: PA_ONLY },
-  { label: 'PATCH /api/users/:userId/isPlatformAdmin', method: 'patch', path: `/api/users/${USER_ID}/isPlatformAdmin`, allowed: PA_ONLY, body: { isPlatformAdmin: true } },
-  { label: 'PATCH /api/users/:userId/blocked', method: 'patch', path: `/api/users/${USER_ID}/blocked`, allowed: PA_ONLY, body: { blocked: true } },
+  {
+    label: 'PATCH /api/users/:userId/isPlatformAdmin',
+    method: 'patch',
+    path: `/api/users/${USER_ID}/isPlatformAdmin`,
+    allowed: PA_ONLY,
+    body: { isPlatformAdmin: true },
+  },
+  {
+    label: 'PATCH /api/users/:userId/blocked',
+    method: 'patch',
+    path: `/api/users/${USER_ID}/blocked`,
+    allowed: PA_ONLY,
+    body: { blocked: true },
+  },
 
   // --- Reports ---
-  { label: 'GET /api/projects/:slug/reports/time', method: 'get', path: `/api/projects/${SLUG}/reports/time`, allowed: MEMBER_PLUS },
-  { label: 'GET /api/projects/:slug/reports/tickets', method: 'get', path: `/api/projects/${SLUG}/reports/tickets`, allowed: MEMBER_PLUS },
+  {
+    label: 'GET /api/projects/:slug/reports/time',
+    method: 'get',
+    path: `/api/projects/${SLUG}/reports/time`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'GET /api/projects/:slug/reports/tickets',
+    method: 'get',
+    path: `/api/projects/${SLUG}/reports/tickets`,
+    allowed: MEMBER_PLUS,
+  },
 
   // --- Member management ---
-  { label: 'GET /api/projects/:slug/members', method: 'get', path: `/api/projects/${SLUG}/members`, allowed: MEMBER_PLUS },
-  { label: 'POST /api/projects/:slug/members (add existing)', method: 'post', path: `/api/projects/${SLUG}/members`, allowed: ADMIN_PLUS, body: { userId: USER_ID }, successStatus: 201 },
-  { label: 'POST /api/projects/:slug/members/new (provision)', method: 'post', path: `/api/projects/${SLUG}/members/new`, allowed: ADMIN_PLUS, body: { email: 'new@allowed.com', fullName: 'New' }, successStatus: 201 },
-  { label: 'PATCH /api/projects/:slug/members/:userId/role', method: 'patch', path: `/api/projects/${SLUG}/members/${USER_ID}/role`, allowed: ADMIN_PLUS, body: { role: 'MEMBER' } },
-  { label: 'DELETE /api/projects/:slug/members/:userId', method: 'delete', path: `/api/projects/${SLUG}/members/${USER_ID}`, allowed: ADMIN_PLUS },
+  {
+    label: 'GET /api/projects/:slug/members',
+    method: 'get',
+    path: `/api/projects/${SLUG}/members`,
+    allowed: MEMBER_PLUS,
+  },
+  {
+    label: 'POST /api/projects/:slug/members (add existing)',
+    method: 'post',
+    path: `/api/projects/${SLUG}/members`,
+    allowed: ADMIN_PLUS,
+    body: { userId: USER_ID },
+    successStatus: 201,
+  },
+  {
+    label: 'POST /api/projects/:slug/members/new (provision)',
+    method: 'post',
+    path: `/api/projects/${SLUG}/members/new`,
+    allowed: ADMIN_PLUS,
+    body: { email: 'new@allowed.com', fullName: 'New' },
+    successStatus: 201,
+  },
+  {
+    label: 'PATCH /api/projects/:slug/members/:userId/role',
+    method: 'patch',
+    path: `/api/projects/${SLUG}/members/${USER_ID}/role`,
+    allowed: ADMIN_PLUS,
+    body: { role: 'MEMBER' },
+  },
+  {
+    label: 'DELETE /api/projects/:slug/members/:userId',
+    method: 'delete',
+    path: `/api/projects/${SLUG}/members/${USER_ID}`,
+    allowed: ADMIN_PLUS,
+  },
 ];
 
 describe('permission matrix — three-tier access control', () => {
@@ -469,7 +643,10 @@ describe('login gate — POST /api/auth/google', () => {
   });
 
   it('returns 403 FORBIDDEN for a blocked user (deactivation gate)', async () => {
-    vi.mocked(userService.findUserByEmail).mockResolvedValue({ ...linkedUser, blocked: true } as never);
+    vi.mocked(userService.findUserByEmail).mockResolvedValue({
+      ...linkedUser,
+      blocked: true,
+    } as never);
 
     const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
 
@@ -480,8 +657,14 @@ describe('login gate — POST /api/auth/google', () => {
   });
 
   it('first login links googleId and returns 200', async () => {
-    vi.mocked(userService.findUserByEmail).mockResolvedValue({ ...linkedUser, googleId: null } as never);
-    vi.mocked(userService.linkGoogleId).mockResolvedValue({ ...linkedUser, googleId: 'g1' } as never);
+    vi.mocked(userService.findUserByEmail).mockResolvedValue({
+      ...linkedUser,
+      googleId: null,
+    } as never);
+    vi.mocked(userService.linkGoogleId).mockResolvedValue({
+      ...linkedUser,
+      googleId: 'g1',
+    } as never);
     // signJwt is real here (no jwt mock) — the route signs a real token.
     const res = await request(app).post('/api/auth/google').send({ code: 'valid' });
 
@@ -492,7 +675,10 @@ describe('login gate — POST /api/auth/google', () => {
   });
 
   it('googleId mismatch surfaces 403 FORBIDDEN "Account identity mismatch"', async () => {
-    vi.mocked(userService.findUserByEmail).mockResolvedValue({ ...linkedUser, googleId: 'g-real' } as never);
+    vi.mocked(userService.findUserByEmail).mockResolvedValue({
+      ...linkedUser,
+      googleId: 'g-real',
+    } as never);
     vi.mocked(userService.linkGoogleId).mockRejectedValue(
       new AppError(ErrorCode.FORBIDDEN, 'Account identity mismatch'),
     );

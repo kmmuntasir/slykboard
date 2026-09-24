@@ -1,12 +1,14 @@
-// F27 / SLYK-02 T3: column management surface (rename/reorder/add/delete).
+// F27 / SLYK-02 T3 / CR-01: column management surface (rename/reorder/add/delete).
 // Columns are reordered via drag-and-drop (pangea) and auto-saved on drag-end;
 // names persist on blur; add appends + persists immediately; delete is gated by
 // a ConfirmDialog (destructive-action rule). No manual Save button or Up/Down
 // arrows — drag is the only reorder affordance. Hosted on ProjectSettingsPage.
+// CR-01: persists via the columns-only useUpdateProjectColumns hook (the
+// Project-Admin-accessible PATCH /:slug/columns), not the PA-only rename path.
 import { useState, type CSSProperties } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
-import { useUpdateProject } from '@/hooks/useUpdateProject';
+import { useUpdateProjectColumns } from '@/hooks/useUpdateProjectColumns';
 import { toast } from '@/hooks/useToast';
 import { ApiClientError } from '@/api/client';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -40,7 +42,7 @@ export function reorderColumns(
 }
 
 export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsManagerProps) {
-    const updateMut = useUpdateProject(projectSlug);
+    const updateMut = useUpdateProjectColumns(projectSlug);
 
     // Local draft of the column list. Seeded from server data and re-synced when
     // the server data changes (e.g. after our own mutation invalidates + refetches).
@@ -72,7 +74,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
         if (!reordered) return;
         setDraft(reordered);
         try {
-            await updateMut.mutateAsync({ columns: reordered });
+            await updateMut.mutateAsync(reordered);
             toast.success('Columns saved.');
         } catch {
             // error surfaced via the global mutation toast funnel (revertMessage).
@@ -83,7 +85,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
         const next = [...draft, { id: crypto.randomUUID(), name: 'New Column' }];
         setDraft(next);
         try {
-            await updateMut.mutateAsync({ columns: next });
+            await updateMut.mutateAsync(next);
         } catch {
             // error surfaced via the global mutation toast funnel (revertMessage).
         }
@@ -93,7 +95,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
     // name (updateName on change). No toast on rename per the T3 criterion.
     const persistName = async () => {
         try {
-            await updateMut.mutateAsync({ columns: draft });
+            await updateMut.mutateAsync(draft);
         } catch {
             // error surfaced via the global mutation toast funnel (revertMessage).
         }
@@ -106,7 +108,7 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
         const remaining = draft.filter((c) => c.id !== id);
         // Persist immediately and let the draft re-sync from the refetched data.
         try {
-            await updateMut.mutateAsync({ columns: remaining });
+            await updateMut.mutateAsync(remaining);
         } catch {
             // error surfaced via updateMut.error; keep draft as-is so the user
             // sees the column is still present (server blocked the delete).
@@ -136,7 +138,11 @@ export function ProjectColumnsManager({ projectSlug, columns }: ProjectColumnsMa
                                         <li
                                             ref={dragProvided.innerRef}
                                             {...dragProvided.draggableProps}
-                                            style={dragProvided.draggableProps.style as CSSProperties | undefined}
+                                            style={
+                                                dragProvided.draggableProps.style as
+                                                    | CSSProperties
+                                                    | undefined
+                                            }
                                             className={
                                                 snapshot.isDragging
                                                     ? 'flex items-center gap-2 rounded border border-border bg-card p-1 shadow-md ring-2 ring-primary/40'

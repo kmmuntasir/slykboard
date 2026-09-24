@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v2 — client review answers (2026-09-25) incorporated; remaining open questions listed in §6.2 |
+| **Document Status** | Draft v3 — client answers incorporated (2026-09-25); implementation tracking started (CR-01 done). Remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -36,7 +36,7 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Project Admin should be add/modify columns or column order for his project."_
 
-**Status:** Change to existing behavior (permission relaxation + granular operations).
+**Status:** **DONE — implemented 2026-09-25.** See Implementation notes below.
 
 **Requirement:** A Project Admin must be able to add columns, rename columns, and change column order for their own project, without involving a Platform Admin.
 
@@ -62,9 +62,11 @@ What exists today (verified against the code, not the PRD):
 - "Modify" means rename; column deletion (of empty columns) is included since it already exists today for Platform Admins.
 - The current full-array replacement API shape may stay; only the authorization tier changes. Granular endpoints are optional refinement.
 
-**Open questions**
+**Implementation notes (2026-09-25)**
 
-- OQ-01a: Should a Project Admin also be allowed to **delete a column** (empty ones), or is add/rename/reorder sufficient? *(Proposed: allowed for empty columns, same rule as Platform Admin today.)*
+- Backend: new nested route `PATCH /api/projects/:slug/columns` — columns-only body, chain `authenticate` → `validateRequest` → `requireProjectMember` → `requireProjectAdmin` — reusing `projectService.updateProject({ slug, columns })` unchanged. Rename/activation stay on the PA-only `PATCH /api/projects/:slug` (FR-01.4); Zod strips smuggled `name`/`isActive` before the service is called. Platform Admins are admitted without a membership row (existing PA bypass). Service rules unchanged: min-1 columns, unique ids, removing a column with live tickets blocked (`CONFLICT`) — removing an EMPTY column is allowed, settling **OQ-01a per the proposed default**.
+- Frontend: new `updateProjectColumns()` API function + `useUpdateProjectColumns` hook (same cache invalidations as rename); `ProjectColumnsManager` now persists through it. `ProjectSettingsPage` gates the rename section to Platform Admins only — a Project Admin sees columns + labels but not rename, fixing the pre-existing mismatch where the UI offered a rename the backend would reject.
+- Tests: 12-case route suite (project-admin 200, PA bypass, member/non-member 403, 401, `name`/`isActive` stripping, malformed-body matrix, slug validation) + a permission-matrix row (`ADMIN_PLUS`). Full suites green: backend 880/880, frontend 1063/1063; typecheck, builds, eslint, and prettier clean on all touched files.
 
 ---
 
@@ -567,7 +569,7 @@ What exists today (verified against the code, not the PRD):
 
 | Phase | CRs | Rationale |
 | --- | --- | --- |
-| 1 — Quick wins | CR-01, CR-02 (verify), CR-09 (confirm UX), CR-15 (timer widget), CR-10, CR-11, CR-12 | Small, independent, high client visibility; unblock daily usage. |
+| 1 — Quick wins | CR-01 ✅ (done 2026-09-25), CR-02 (verify), CR-09 (confirm UX), CR-15 (timer widget), CR-10, CR-11, CR-12 | Small, independent, high client visibility; unblock daily usage. |
 | 2 — Time integrity & forensics | CR-14, CR-08 | Make recorded time trustworthy and explainable before building more reporting on it. |
 | 3 — Hierarchy & reports | CR-03, CR-04, CR-05, CR-06 | Largest chunk; CR-03 unblocks 04/05 and enriches 06. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |
@@ -595,7 +597,6 @@ What exists today (verified against the code, not the PRD):
 
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
-| OQ-01a | CR-01 | Project Admin may also delete empty columns? | Yes |
 | OQ-02a | CR-02 | Anything beyond the existing label flow? | Verify via demo |
 | OQ-03d | CR-03 | Subtasks as board cards or detail-only items? | Board cards |
 | OQ-03e | CR-03 | Do intermediate parents (Story/Task with children) auto-progress like Epics? | No — Epics only |

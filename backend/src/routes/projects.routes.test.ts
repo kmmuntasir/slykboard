@@ -559,9 +559,7 @@ describe('POST /:slug/tickets (F12)', () => {
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
       .send({ title: 'New', dueDate: null });
-    expect(mockedCreateTicket).toHaveBeenCalledWith(
-      expect.objectContaining({ dueDate: null }),
-    );
+    expect(mockedCreateTicket).toHaveBeenCalledWith(expect.objectContaining({ dueDate: null }));
   });
 
   it('returns 400 VALIDATION_FAILED for non-ISO dueDate (createTicket NOT called)', async () => {
@@ -949,5 +947,169 @@ describe('PATCH /api/projects/:slug (F27)', () => {
       .set('Authorization', `Bearer ${await tokenFor(false)}`);
     expect(restored.status).toBe(200);
     expect(restored.body.data.isActive).toBe(true);
+  });
+});
+
+// CR-01 (docs/change-requests-requirements.md): Project-Admin column
+// management. PATCH /:slug/columns admits PROJECT_ADMIN (+ PA bypass) and
+// accepts ONLY columns — name/isActive must never reach the service through
+// this route (they stay on the PA-only PATCH /:slug, FR-01.4).
+describe('PATCH /api/projects/:slug/columns (CR-01)', () => {
+  const columnsPayload = [
+    { id: '11111111-1111-4111-8111-111111111111', name: 'To Do' },
+    { id: '22222222-2222-4222-8222-222222222222', name: 'In Review' },
+  ];
+  const updatedColumnsRow = {
+    ...projectRow,
+    columns: columnsPayload,
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  };
+
+  function mockProjectAdmin() {
+    membershipMock.getMemberRole.mockResolvedValue('PROJECT_ADMIN');
+  }
+
+  it('returns 200 + updated project for a PROJECT_ADMIN member; columns-only args reach the service', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockProjectAdmin();
+    mockedUpdate.mockResolvedValue(
+      updatedColumnsRow as unknown as Awaited<ReturnType<typeof projectService.updateProject>>,
+    );
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK/columns')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ columns: columnsPayload });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.columns).toEqual(columnsPayload);
+    // Exact-match assertion: the service receives ONLY slug + columns — a
+    // name/isActive leak through this route would fail the deep equality.
+    expect(mockedUpdate).toHaveBeenCalledWith({ slug: 'SLYK', columns: columnsPayload });
+  });
+
+  it('returns 200 for a Platform Admin without a membership row (PA bypass)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdate.mockResolvedValue(
+      updatedColumnsRow as unknown as Awaited<ReturnType<typeof projectService.updateProject>>,
+    );
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK/columns')
+      .set('Authorization', `Bearer ${await tokenFor(true)}`)
+      .send({ columns: columnsPayload });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdate).toHaveBeenCalledWith({ slug: 'SLYK', columns: columnsPayload });
+  });
+
+  it('returns 403 FORBIDDEN for MEMBER (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    // beforeEach default: getMemberRole → 'MEMBER'.
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK/columns')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ columns: columnsPayload });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 FORBIDDEN for a non-member (non-revealing, updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockProjectAdmin();
+    // The real getProjectBySlug makes non-member and unknown-slug
+    // indistinguishable — simulate the service-level deny.
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK/columns')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ columns: columnsPayload });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toBe('You do not have access to this project');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 UNAUTHENTICATED without Bearer (updateProject NOT called)', async () => {
+    const res = await request(app)
+      .patch('/api/projects/SLYK/columns')
+      .send({ columns: columnsPayload });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('strips name/isActive from the body — only columns reach the service (FR-01.4)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockProjectAdmin();
+    mockedUpdate.mockResolvedValue(
+      updatedColumnsRow as unknown as Awaited<ReturnType<typeof projectService.updateProject>>,
+    );
+
+    const res = await request(app)
+      .patch('/api/projects/SLYK/columns')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ columns: columnsPayload, name: 'Sneaky Rename', isActive: false });
+
+    expect(res.status).toBe(200);
+    // Exact-match: smuggled name/isActive must be stripped by Zod before the call.
+    expect(mockedUpdate).toHaveBeenCalledWith({ slug: 'SLYK', columns: columnsPayload });
+  });
+
+  const malformedBodies: Array<{ name: string; body: Record<string, unknown> }> = [
+    { name: 'columns missing', body: {} },
+    { name: 'columns array empty', body: { columns: [] } },
+    {
+      name: 'column missing id',
+      body: { columns: [{ name: 'To Do' }] },
+    },
+    {
+      name: 'column with empty name',
+      body: { columns: [{ id: '11111111-1111-4111-8111-111111111111', name: '' }] },
+    },
+    {
+      name: 'duplicate column ids',
+      body: {
+        columns: [
+          { id: '11111111-1111-4111-8111-111111111111', name: 'To Do' },
+          { id: '11111111-1111-4111-8111-111111111111', name: 'Done' },
+        ],
+      },
+    },
+  ];
+
+  malformedBodies.forEach(({ name, body }) => {
+    it(`returns 400 VALIDATION_FAILED on malformed body — ${name} (updateProject NOT called)`, async () => {
+      mockedFindVersion.mockResolvedValue(0);
+      mockProjectAdmin();
+
+      const res = await request(app)
+        .patch('/api/projects/SLYK/columns')
+        .set('Authorization', `Bearer ${await tokenFor(false)}`)
+        .send(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+      expect(mockedUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  it('returns 400 VALIDATION_FAILED on lowercase slug (updateProject NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockProjectAdmin();
+
+    const res = await request(app)
+      .patch('/api/projects/slyk/columns')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ columns: columnsPayload });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdate).not.toHaveBeenCalled();
   });
 });

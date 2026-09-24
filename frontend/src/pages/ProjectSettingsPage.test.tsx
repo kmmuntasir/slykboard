@@ -164,14 +164,18 @@ describe('ProjectSettingsPage', () => {
         expect(captured.slug).toBe('ACME');
     });
 
-    it('gate (canManage) shows management UI for a project admin', () => {
-        // Platform-admin false, project-admin true → canManage true.
+    it('gate (canManage) shows column + label management for a project admin, but NOT rename (CR-01 FR-01.4)', () => {
+        // Platform-admin false, project-admin true → canManage true for
+        // columns/labels; rename stays Platform-Admin-only.
         mockState.isAdmin = false;
         membershipState.isProjectAdmin = true;
         renderAt('/projects/SLYK/settings');
 
-        expect(screen.getByLabelText('Project name')).toBeInTheDocument();
+        // Column management IS available to a Project Admin.
         expect(screen.getByTestId('columns-manager')).toBeInTheDocument();
+        // Rename is NOT — the backend PA-only PATCH would reject it.
+        expect(screen.queryByLabelText('Project name')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Save Name' })).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Labels' }));
         expect(screen.getByTestId('label-manager')).toBeInTheDocument();
@@ -358,10 +362,7 @@ describe('ProjectSettingsPage — platform-admin status section', () => {
         view.rerender(
             <MemoryRouter initialEntries={['/projects/SLYK/settings']}>
                 <Routes>
-                    <Route
-                        path="/projects/:slug/settings"
-                        element={<ProjectSettingsPage />}
-                    />
+                    <Route path="/projects/:slug/settings" element={<ProjectSettingsPage />} />
                 </Routes>
             </MemoryRouter>,
         );

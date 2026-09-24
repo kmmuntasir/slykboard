@@ -9,13 +9,14 @@
 //      synthetic DropResult, then asserting updateMut.mutateAsync was called
 //      with the reordered columns and toast.success fired.
 //
-// Mocks useUpdateProject + toast so no QueryClientProvider / sonner is needed.
+// Mocks useUpdateProjectColumns + toast so no QueryClientProvider / sonner is
+// needed.
 // ConfirmDialog is mocked to expose deterministic Confirm/Cancel triggers so
 // the delete flow can be driven without the real Modal portal (mirrors
 // LabelManager.test.tsx). renderInDnd mounts the pangea ancestors the real
 // Droppable/Draggable require.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ProjectColumnsManager, reorderColumns } from './ProjectColumnsManager';
 import { renderInDnd } from '@/test/dndWrapper';
@@ -34,8 +35,8 @@ const { mockState, capturedOnDragEnd } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@/hooks/useUpdateProject', () => ({
-    useUpdateProject: () => ({
+vi.mock('@/hooks/useUpdateProjectColumns', () => ({
+    useUpdateProjectColumns: () => ({
         mutateAsync: mockState.mutateAsync,
         isPending: mockState.isPending,
         error: mockState.error,
@@ -202,15 +203,14 @@ describe('ProjectColumnsManager', () => {
             await capturedOnDragEnd.current!(dropResult(0, 2, 'c1'));
         });
 
-        // Mutate persisted with the reordered array.
+        // Mutate persisted with the reordered array (CR-01: columns-only hook
+        // takes the bare array, not a { columns } wrapper).
         await waitFor(() =>
-            expect(mockState.mutateAsync).toHaveBeenCalledWith({
-                columns: [
-                    { id: 'c2', name: 'In Progress' },
-                    { id: 'c3', name: 'Done' },
-                    { id: 'c1', name: 'To Do' },
-                ],
-            }),
+            expect(mockState.mutateAsync).toHaveBeenCalledWith([
+                { id: 'c2', name: 'In Progress' },
+                { id: 'c3', name: 'Done' },
+                { id: 'c1', name: 'To Do' },
+            ]),
         );
         // Toast fires after the successful mutate.
         await waitFor(() => expect(mockState.toastSuccess).toHaveBeenCalledWith('Columns saved.'));
@@ -242,13 +242,11 @@ describe('ProjectColumnsManager', () => {
         fireEvent.blur(input);
 
         await waitFor(() =>
-            expect(mockState.mutateAsync).toHaveBeenCalledWith({
-                columns: [
-                    { id: 'c1', name: 'Backlog' },
-                    { id: 'c2', name: 'In Progress' },
-                    { id: 'c3', name: 'Done' },
-                ],
-            }),
+            expect(mockState.mutateAsync).toHaveBeenCalledWith([
+                { id: 'c1', name: 'Backlog' },
+                { id: 'c2', name: 'In Progress' },
+                { id: 'c3', name: 'Done' },
+            ]),
         );
         expect(mockState.toastSuccess).not.toHaveBeenCalled();
     });
@@ -267,11 +265,12 @@ describe('ProjectColumnsManager', () => {
 
         await waitFor(() => expect(mockState.mutateAsync).toHaveBeenCalledTimes(1));
         const firstCall = mockState.mutateAsync.mock.calls[0];
-        const call = firstCall?.[0] as { columns: Column[] };
-        expect(call.columns).toHaveLength(4);
-        expect(call.columns[3]).toEqual({ id: expect.stringMatching(UUID_RE), name: 'New Column' });
+        // CR-01: the columns-only hook receives the bare array.
+        const call = firstCall?.[0] as Column[];
+        expect(call).toHaveLength(4);
+        expect(call[3]).toEqual({ id: expect.stringMatching(UUID_RE), name: 'New Column' });
         // Existing columns preserved.
-        expect(call.columns.slice(0, 3).map((c) => c.id)).toEqual(['c1', 'c2', 'c3']);
+        expect(call.slice(0, 3).map((c) => c.id)).toEqual(['c1', 'c2', 'c3']);
     });
 
     // Returns the first per-row Delete button, narrowed to a definite Element so
@@ -322,12 +321,10 @@ describe('ProjectColumnsManager', () => {
         expect(screen.queryByTestId('confirm-dialog')).toBeNull();
 
         await waitFor(() =>
-            expect(mockState.mutateAsync).toHaveBeenCalledWith({
-                columns: [
-                    { id: 'c2', name: 'In Progress' },
-                    { id: 'c3', name: 'Done' },
-                ],
-            }),
+            expect(mockState.mutateAsync).toHaveBeenCalledWith([
+                { id: 'c2', name: 'In Progress' },
+                { id: 'c3', name: 'Done' },
+            ]),
         );
         // No success toast on delete (criterion toasts only reorder).
         expect(mockState.toastSuccess).not.toHaveBeenCalled();

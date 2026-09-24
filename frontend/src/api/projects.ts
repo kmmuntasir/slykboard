@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { Project, CreateProjectDto, UpdateProjectDto } from '@/types/project';
+import type { Project, Column, CreateProjectDto, UpdateProjectDto } from '@/types/project';
 
 export function listProjects(): Promise<Project[]> {
   return apiFetch<Project[]>('/projects');
@@ -21,5 +21,15 @@ export function updateProject(slug: string, dto: UpdateProjectDto): Promise<Proj
   return apiFetch<Project>(`/projects/${slug}`, {
     method: 'PATCH',
     body: JSON.stringify(dto),
+  });
+}
+
+// CR-01 (docs/change-requests-requirements.md): Project-Admin column
+// management. Columns-only endpoint — rename and activation stay on the
+// PA-only PATCH /projects/:slug (FR-01.4).
+export function updateProjectColumns(slug: string, columns: Column[]): Promise<Project> {
+  return apiFetch<Project>(`/projects/${slug}/columns`, {
+    method: 'PATCH',
+    body: JSON.stringify({ columns }),
   });
 }

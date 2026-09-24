@@ -6,6 +6,7 @@ import { validateRequest } from '../middleware/validateRequest';
 import { authenticate } from '../middleware/auth';
 import { requirePlatformAdmin } from '../middleware/requirePlatformAdmin';
 import { requireProjectMember } from '../middleware/requireProjectMember';
+import { requireProjectAdmin } from '../middleware/requireProjectAdmin';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
 import * as ticketService from '../services/ticketService';
@@ -15,6 +16,7 @@ import {
   createTicketBody,
   ticketDisplayIdParamSchema,
   updateProjectBodySchema,
+  updateProjectColumnsBodySchema,
 } from './projects.schema';
 import { parseTicketDisplayId } from '../utils/parseTicketDisplayId';
 import { projectLabelsRouter } from './labels.routes';
@@ -127,8 +129,10 @@ projectsRouter.post(
   },
 );
 
-// SLYK-01 Task K (resolved decision): project rename/columns is Platform-Admin
-// ONLY (no Project Admin rename). Slug is NOT editable. Service blocks removing
+// SLYK-01 Task K (resolved decision): project rename/activation is
+// Platform-Admin ONLY (no Project Admin rename). Slug is NOT editable.
+// Column management is ALSO available to Project Admins via the nested
+// PATCH /:slug/columns route below (CR-01). Service blocks removing
 // a column that still holds live (non-deleted) tickets.
 projectsRouter.patch(
   '/:slug',
@@ -146,6 +150,28 @@ projectsRouter.patch(
       // deactivate, inside its transaction).
       isActive: body.isActive,
     });
+    res.json(success(updated));
+  },
+);
+
+// CR-01 (docs/change-requests-requirements.md): Project-Admin column
+// management. Admits Project Admins (and Platform Admins via the PA bypass in
+// requireProjectAdmin) and accepts ONLY the columns array — rename and
+// activation remain on the PA-only PATCH /:slug above (FR-01.4). Zod strips
+// unknown keys, so a Project Admin cannot reach name/isActive through this
+// route. Service rules unchanged: min-1 columns, unique ids, and a column
+// holding live (non-deleted) tickets cannot be removed (CONFLICT) — so
+// removing an EMPTY column is allowed, matching the PA path (OQ-01a default).
+projectsRouter.patch(
+  '/:slug/columns',
+  authenticate,
+  validateRequest({ params: slugParamSchema, body: updateProjectColumnsBodySchema }),
+  requireProjectMember(),
+  requireProjectAdmin(),
+  async (req, res) => {
+    const { slug } = req.params as z.infer<typeof slugParamSchema>;
+    const body = req.body as z.infer<typeof updateProjectColumnsBodySchema>;
+    const updated = await projectService.updateProject({ slug, columns: body.columns });
     res.json(success(updated));
   },
 );
