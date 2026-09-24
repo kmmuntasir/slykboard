@@ -8,6 +8,7 @@ import { AppError } from '../utils/appError';
 import * as ticketService from '../services/ticketService';
 import * as activityService from '../services/activityService';
 import * as timerService from '../services/timerService';
+import * as reportService from '../services/reportService';
 import {
   ticketIdParam,
   updateTicketBody,
@@ -38,7 +39,18 @@ ticketsRouter.get(
     if (!ticket) {
       throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`);
     }
-    res.json(success(ticket));
+    // CR-04 FR-04.2: all-time tracked roll-up for the node + its live subtree.
+    const tracked = await reportService.getNodeTrackedTotalMs({
+      projectId: ticket.projectId,
+      nodeId: ticket.id,
+    });
+    res.json(
+      success({
+        ...ticket,
+        trackedTotalMs: tracked.totalMs,
+        descendantCount: tracked.descendantCount,
+      }),
+    );
   },
 );
 

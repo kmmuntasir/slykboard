@@ -58,4 +58,29 @@ export const reportKeys = {
     [...reportKeys.all, 'time', period, offset, slug] as const,
   tickets: (period: 'weekly' | 'monthly', offset: number, slug: string) =>
     [...reportKeys.all, 'tickets', period, offset, slug] as const,
+  // CR-04/CR-05: hierarchy roll-up / breakdown / raw entries. The filter string
+  // (member|source) and the optional ticket scope are part of the key so each
+  // combination caches independently.
+  rollup: (
+    period: 'weekly' | 'monthly',
+    offset: number,
+    slug: string,
+    node: string,
+    filters = '',
+  ) => [...reportKeys.all, 'rollup', period, offset, slug, node, filters] as const,
+  breakdown: (
+    period: 'weekly' | 'monthly',
+    offset: number,
+    slug: string,
+    node: string,
+    filters = '',
+  ) => [...reportKeys.all, 'breakdown', period, offset, slug, node, filters] as const,
+  entries: (
+    period: 'weekly' | 'monthly',
+    offset: number,
+    slug: string,
+    node: string,
+    filters = '',
+    ticket = '',
+  ) => [...reportKeys.all, 'entries', period, offset, slug, node, filters, ticket] as const,
 };

@@ -50,6 +50,11 @@ vi.mock('../services/projectService', () => ({
 vi.mock('../services/reportService', () => ({
   getTimeReport: vi.fn(),
   getTicketSummary: vi.fn(),
+  getNodeTimeRollup: vi.fn(),
+  getNodeTimeBreakdown: vi.fn(),
+  getNodeTimeEntries: vi.fn(),
+  getNodeTrackedTotalMs: vi.fn(),
+  resolveLiveTicketByNumber: vi.fn(),
 }));
 
 import { app } from '../index';
@@ -64,6 +69,10 @@ const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
 const mockedGetTimeReport = vi.mocked(reportService.getTimeReport);
 const mockedGetTicketSummary = vi.mocked(reportService.getTicketSummary);
+const mockedGetNodeRollup = vi.mocked(reportService.getNodeTimeRollup);
+const mockedGetNodeBreakdown = vi.mocked(reportService.getNodeTimeBreakdown);
+const mockedGetNodeEntries = vi.mocked(reportService.getNodeTimeEntries);
+const mockedResolveNode = vi.mocked(reportService.resolveLiveTicketByNumber);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -71,6 +80,8 @@ beforeEach(() => {
   // / unknown-slug cases override getProjectBySlug to reject with the
   // non-revealing FORBIDDEN (the service contract makes the two indistinguishable).
   membershipMock.getMemberRole.mockResolvedValue('MEMBER');
+  // CR-04/05: the node display id resolves to a live ticket by default.
+  mockedResolveNode.mockResolvedValue({ id: 'node-uuid' });
 });
 
 // sub 'u1' is the JWT subject; used as creatorId for the "member" case.
@@ -288,5 +299,171 @@ describe('SLYK-16: removed global report routes return 404', () => {
       expect(mockedGetTimeReport).not.toHaveBeenCalled();
       expect(mockedGetTicketSummary).not.toHaveBeenCalled();
     });
+  });
+});
+
+// ----------------------------------------------------------------------------
+// CR-04 / CR-05: hierarchy roll-up + breakdown endpoints.
+// ----------------------------------------------------------------------------
+describe('hierarchy time reports (CR-04/CR-05)', () => {
+  const NODE_UUID = '11111111-1111-4111-8111-111111111111';
+
+  beforeEach(() => {
+    // requireProjectMember resolves the project via getProjectBySlug; the node
+    // display id resolves to the ticket uuid used by the assertions below.
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    mockedResolveNode.mockResolvedValue({ id: NODE_UUID });
+  });
+
+  const MEMBER_UUID = '22222222-2222-4222-8222-222222222222';
+  const rollupPayload = {
+    node: { id: NODE_UUID, ticketNumber: 42, title: 'Epic', type: 'EPIC' },
+    window: {
+      start: '2026-06-23T00:00:00.000Z',
+      end: '2026-06-30T00:00:00.000Z',
+      label: 'Week of Jun 23',
+    },
+    totalMs: 12_600_000,
+    autoMs: 10_800_000,
+    manualMs: 1_800_000,
+    entryCount: 3,
+  };
+
+  it('GET rollup returns the subtree total and forwards window + filters', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetNodeRollup.mockResolvedValue(rollupPayload as never);
+
+    const res = await request(app)
+      .get(
+        `/api/projects/SLYK/reports/time/rollup?node=SLYK-42&period=monthly&offset=-1&member=${MEMBER_UUID}&source=auto`,
+      )
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalMs).toBe(12_600_000);
+    expect(mockedGetNodeRollup).toHaveBeenCalledWith({
+      projectId: 'p1',
+      nodeId: NODE_UUID,
+      period: 'monthly',
+      offset: -1,
+      memberId: MEMBER_UUID,
+      source: 'auto',
+    });
+  });
+
+  it('GET rollup defaults to weekly offset 0 with no filters', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetNodeRollup.mockResolvedValue(rollupPayload as never);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/rollup?node=SLYK-42')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(mockedGetNodeRollup).toHaveBeenCalledWith(
+      expect.objectContaining({ period: 'weekly', offset: 0, memberId: null, source: null }),
+    );
+  });
+
+  it('GET breakdown returns rows + members', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetNodeBreakdown.mockResolvedValue({
+      ...rollupPayload,
+      members: [
+        {
+          id: 'u1',
+          fullName: 'A',
+          avatarUrl: null,
+          totalMs: 1,
+          autoMs: 1,
+          manualMs: 0,
+          entryCount: 1,
+        },
+      ],
+      rows: [
+        {
+          id: NODE_UUID,
+          ticketNumber: 42,
+          title: 'Epic',
+          type: 'EPIC',
+          ownMs: 5,
+          rollupMs: 6,
+          entryCount: 1,
+          members: [],
+        },
+      ],
+    } as never);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/breakdown?node=SLYK-42')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.rows[0].rollupMs).toBe(6);
+    expect(res.body.data.members).toHaveLength(1);
+  });
+
+  it('GET entries forwards the optional ticket scope', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedResolveNode
+      .mockResolvedValueOnce({ id: NODE_UUID })
+      .mockResolvedValueOnce({ id: 'child-uuid' });
+    mockedGetNodeEntries.mockResolvedValue({
+      node: rollupPayload.node,
+      window: rollupPayload.window,
+      entries: [],
+    } as never);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/entries?node=SLYK-42&ticket=SLYK-43')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(mockedGetNodeEntries).toHaveBeenCalledWith(
+      expect.objectContaining({ nodeId: NODE_UUID, ticketId: 'child-uuid' }),
+    );
+  });
+
+  it('400s on a malformed node display id (no service call)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/rollup?node=garbage')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetNodeRollup).not.toHaveBeenCalled();
+  });
+
+  it('404s when the node is not a live ticket in this project', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedResolveNode.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/rollup?node=SLYK-99')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('403s for a non-member (non-revealing) and never reaches the service', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockRejectedValue(FORBIDDEN_PROJECT);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/rollup?node=SLYK-42')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toBe('You do not have access to this project');
+    expect(mockedGetNodeRollup).not.toHaveBeenCalled();
+  });
+
+  it('401s without a Bearer token', async () => {
+    const res = await request(app).get('/api/projects/SLYK/reports/time/rollup?node=SLYK-42');
+    expect(res.status).toBe(401);
+    expect(mockedGetNodeRollup).not.toHaveBeenCalled();
   });
 });

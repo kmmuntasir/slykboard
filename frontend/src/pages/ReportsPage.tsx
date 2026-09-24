@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ApiClientError } from '@/api/client';
 import { useReport, useTicketSummary } from '@/hooks/useReport';
+import { useBoard } from '@/hooks/useBoard';
+import { HierarchyTimeReport } from '@/components/HierarchyTimeReport';
 import type { ReportUser, TicketSummaryUser } from '@/types/report';
 import { formatDuration } from '@/utils/formatDuration';
 
@@ -39,6 +41,10 @@ function ReportsBody({ slug }: ReportsBodyProps) {
 
     const time = useReport(period, offset, slug);
     const ticketSummary = useTicketSummary(period, offset, slug);
+    // CR-04/CR-05: the hierarchy section reuses the same period/offset window
+    // and takes its node candidates from the (unfiltered) board query.
+    const { data: board } = useBoard(slug);
+    const boardTickets = board?.columns.flatMap((column) => column.tickets) ?? [];
 
     // D7: non-member (BE 403 FORBIDDEN) → bounce to the project chooser.
     if (isForbidden(time.error) || isForbidden(ticketSummary.error)) {
@@ -113,6 +119,15 @@ function ReportsBody({ slug }: ReportsBodyProps) {
                 error={ticketSummary.error}
                 onRetry={() => ticketSummary.refetch()}
                 users={ticketSummary.data?.users ?? []}
+            />
+
+            {/* CR-04/CR-05: roll-up + per-ticket/per-member drill-down for a
+                selected epic/story/task over the same window. */}
+            <HierarchyTimeReport
+                projectSlug={slug}
+                period={period}
+                offset={offset}
+                tickets={boardTickets}
             />
         </div>
     );

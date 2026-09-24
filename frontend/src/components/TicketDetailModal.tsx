@@ -642,6 +642,14 @@ function HierarchyPanel({ slug, ticket, lastColumnId }: HierarchyPanelProps) {
                     <span className="text-foreground">{parent.title}</span>
                 </p>
             )}
+            {typeof ticket.trackedTotalMs === 'number' && (ticket.descendantCount ?? 0) > 0 && (
+                <p className="text-sm text-muted-foreground">
+                    Tracked (incl. sub-tickets):{' '}
+                    <span className="font-mono tabular-nums text-foreground">
+                        {formatDuration(ticket.trackedTotalMs)}
+                    </span>
+                </p>
+            )}
             {children.length > 0 && (
                 <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">

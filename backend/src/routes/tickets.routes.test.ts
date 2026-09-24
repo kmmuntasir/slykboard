@@ -52,6 +52,10 @@ vi.mock('../services/boardService', () => ({
   getBoard: vi.fn(),
   UNSORTED_BUCKET_ID: '__unsorted__',
 }));
+// CR-04: ticket-detail reads enrich with the subtree tracked roll-up.
+vi.mock('../services/reportService', () => ({
+  getNodeTrackedTotalMs: vi.fn(async () => ({ totalMs: 0, descendantCount: 0 })),
+}));
 vi.mock('../services/ticketService', () => ({
   moveTicket: vi.fn(),
   getTicket: vi.fn(),

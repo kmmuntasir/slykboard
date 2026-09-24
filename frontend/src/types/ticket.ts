@@ -86,6 +86,11 @@ export interface Ticket {
   epic: { id: string; ticketNumber: number; title: string } | null;
   childCount: number;
   childDoneCount: number;
+  // CR-04: all-time tracked roll-up for the node + its live subtree. Present
+  // only on detail reads (the backend enriches those responses); absent on
+  // board payloads.
+  trackedTotalMs?: number;
+  descendantCount?: number;
   createdAt: string; // ISO
   updatedAt: string;
   deletedAt?: string | null; // F17: soft-delete tombstone (absent on board payload; set on detail for soft-deleted)

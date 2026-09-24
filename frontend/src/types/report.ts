@@ -1,3 +1,5 @@
+import type { TicketType } from './ticket';
+
 // F23: per-user aggregated time report shapes. Mirrors the backend
 // GET /reports/time response (envelope's inner `data`).
 export interface ReportUser {
@@ -33,4 +35,76 @@ export interface TicketSummaryUser {
 export interface TicketSummaryResponse {
   users: TicketSummaryUser[];
   window: { start: string; end: string; label: string };
+}
+
+// ---------------------------------------------------------------------------
+// CR-04 / CR-05: hierarchy roll-up + drill-down shapes. Mirrors the backend
+// GET /reports/time/{rollup,breakdown,entries} responses.
+// ---------------------------------------------------------------------------
+
+export interface HierarchyNodeRef {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+}
+
+export interface NodeRollupResponse {
+  node: HierarchyNodeRef;
+  window: { start: string; end: string; label: string };
+  totalMs: number; // node + all live descendants
+  autoMs: number; // timer-tracked portion
+  manualMs: number; // manually logged portion
+  entryCount: number; // closed entries in the window (running timers excluded)
+}
+
+export interface NodeMemberTotal {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  totalMs: number;
+  autoMs: number;
+  manualMs: number;
+  entryCount: number;
+}
+
+export interface NodeBreakdownRow {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+  ownMs: number; // tracked on this ticket itself
+  rollupMs: number; // this ticket + its descendants (subtree fold)
+  entryCount: number;
+  members: Array<{ id: string; totalMs: number }>;
+}
+
+export interface NodeBreakdownResponse extends NodeRollupResponse {
+  members: NodeMemberTotal[]; // sorted by totalMs DESC (server-side)
+  rows: NodeBreakdownRow[]; // sorted by rollupMs DESC (server-side)
+}
+
+export interface NodeTimeEntry {
+  id: string;
+  ticketId: string;
+  ticketNumber: number;
+  ticketTitle: string;
+  ticketType: TicketType;
+  userId: string | null;
+  userFullName: string | null;
+  userAvatarUrl: string | null;
+  startTime: string;
+  endTime: string | null;
+  durationMs: number;
+  type: 'manual' | 'timer';
+  description: string | null;
+  /** CR-14 hook — false until time adjustments ship. */
+  adjusted: boolean;
+  adjustmentReason: string | null;
+}
+
+export interface NodeEntriesResponse {
+  node: HierarchyNodeRef;
+  window: { start: string; end: string; label: string };
+  entries: NodeTimeEntry[];
 }

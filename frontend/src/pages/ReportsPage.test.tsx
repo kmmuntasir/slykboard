@@ -34,9 +34,16 @@ const { timeState, ticketState } = vi.hoisted(() => ({
     } as ReportState,
 }));
 
+// CR-04/CR-05: the hierarchy section's hooks are stubbed here too — its own
+// behaviour is covered by HierarchyTimeReport.test.tsx.
+const emptyNodeState = { data: undefined, isLoading: false, error: undefined, refetch: () => {} };
+
 vi.mock('@/hooks/useReport', () => ({
     useReport: () => timeState,
     useTicketSummary: () => ticketState,
+    useNodeRollup: () => emptyNodeState,
+    useNodeBreakdown: () => emptyNodeState,
+    useNodeEntries: () => ({ data: undefined, isLoading: false }),
 }));
 
 function resetState() {

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v4 — CR-01, CR-02, CR-03 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v5 — CR-01 … CR-05 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -181,9 +181,15 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Time Tracking Report for Entire Epic/Story/Task is needed"_
 
-**Status:** New feature (depends on CR-03).
+**Status:** New feature (depends on CR-03). **DONE — implemented 2026-09-25.**
 
-**Requirement:** For any ticket that has descendants, the system reports total tracked time aggregated over the ticket itself and all of its descendants (full subtree).
+**Implementation notes (2026-09-25)**
+
+- `reportService.getNodeTimeRollup` — windowed subtree total via one shared entry read (`loadSubtreeEntries`) over the node's live descendants (BFS, depth ≤ 3, soft-deleted excluded). Returns `totalMs` + the **auto/manual split** (OQ-04a applied default: yes) + entry count; running timers contribute 0 (FR-04.5). Exposed as `GET /api/projects/:slug/reports/time/rollup?node=SLYK-42&period&offset&member&source`.
+- Effective duration lives in one exported helper (`effectiveDurationMs`) so roll-ups, rows, members, and entries can never disagree — CR-14's adjustment delta folds into that single spot.
+- Detail reads (`GET /tickets/:id`, `GET /projects/:slug/tickets/:displayId`) now carry `trackedTotalMs` + `descendantCount` (all-time roll-up, FR-04.2); the detail HierarchyPanel shows "Tracked (incl. sub-tickets)". Kept off the `getTicket` hot path so the resolver middleware is unaffected.
+- Reports page mounts `HierarchyTimeReport` sharing the existing period/offset window; node picker offers every epic/story/task.
+- Tests: 9 real-DB integration cases (doc acceptance 1h+2h+30m = 3h30m, running-timer/soft-delete/window exclusion, row fold, member split, member + source filters, entries scoping, all-time total, displayId resolution) + 7 route cases (pass-through, defaults, malformed node 400, unknown node 404, non-member 403, anon 401). Backend suite 913/913.
 
 **Functional requirements**
 
@@ -192,6 +198,7 @@ What exists today (verified against the code, not the PRD):
 - FR-04.3: The existing weekly/monthly window selector applies; `window` metadata returned as today.
 - FR-04.4: Soft-deleted descendants' time is excluded from the roll-up (they leave the working set).
 - FR-04.5: Running timers count as 0 in roll-ups (consistent with today's `totalMs` semantics) until stopped.
+- FR-04.6: Roll-ups ship with the auto/manual split (OQ-04a proposed default applied).
 
 **Acceptance criteria**
 
@@ -210,9 +217,13 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Individual Breakdown of Time Tracking for an Epic/Story/Task"_
 
-**Status:** New feature (depends on CR-03/CR-04).
+**Status:** New feature (depends on CR-03/CR-04). **DONE — implemented 2026-09-25.**
 
-**Requirement:** For any parent ticket, show a drill-down breakdown of all tracked time — by child ticket and by member — with each entry labeled auto/manual/adjusted.
+**Implementation notes (2026-09-25)**
+
+- `reportService.getNodeTimeBreakdown` — one row per ticket in the subtree with `ownMs` and `rollupMs` (own + descendants, folded up the ancestor chain), a per-member summary, and the same totals as CR-04; rows arrive sorted by tracked time. `GET .../reports/time/breakdown`.
+- `reportService.getNodeTimeEntries` — raw entries behind a row, optionally scoped to that row's subtree (`?ticket=SLYK-43`), each entry labeled Auto/Manual with the CR-14 `adjusted` flag already on the contract (false until CR-14 ships). `GET .../reports/time/entries`.
+- Frontend: `NodeBreakdownTable` (own vs tracked columns, local sort toggle, controlled expansion with per-entry source chips) inside `HierarchyTimeReport` (node picker, roll-up summary, member table, member + source filters that recompute every aggregate server-side). 16 component tests; frontend suite 1109/1109.
 
 **Functional requirements**
 
@@ -582,7 +593,7 @@ What exists today (verified against the code, not the PRD):
 | --- | --- | --- |
 | 1 — Quick wins | CR-01 ✅ (done 2026-09-25), CR-02 ✅ (verified 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget), CR-10, CR-11, CR-12 | Small, independent, high client visibility; unblock daily usage. |
 | 2 — Time integrity & forensics | CR-14, CR-08 | Make recorded time trustworthy and explainable before building more reporting on it. |
-| 3 — Hierarchy & reports | CR-03 ✅ (done 2026-09-25), CR-04, CR-05, CR-06 | Largest chunk; CR-03 unblocks 04/05 and enriches 06. |
+| 3 — Hierarchy & reports | CR-03 ✅, CR-04 ✅, CR-05 ✅ (all done 2026-09-25), CR-06 | Largest chunk; CR-03/04/05 shipped; CR-06 remains. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |
 
 ## 6. Decisions & Remaining Open Questions
@@ -599,6 +610,7 @@ What exists today (verified against the code, not the PRD):
 | OQ-15b | CR-15 | Clicking the dropdown's card title navigates to that ticket. |
 | OQ-03d | CR-03 | Epic, Story, Task, and Subtask all render as board cards. |
 | OQ-03e | CR-03 | Intermediate parents (Story/Task with children) auto-progress exactly like Epics. |
+| OQ-04a | CR-04 | Roll-ups ship with the auto/manual split (proposed default applied at implementation). |
 | Feature | CR-02 | Existing label flow confirmed sufficient; no work needed. |
 | OQ-08a | CR-08 | Show tracked working time per column alongside wall-clock residence. |
 | OQ-09a | CR-09 | Keep auto-stop; add explicit confirmation naming the currently tracked task. |
@@ -611,7 +623,6 @@ What exists today (verified against the code, not the PRD):
 
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
-| OQ-04a | CR-04 | Roll-up split auto vs manual? | Yes |
 | OQ-06a | CR-06 | Custom date ranges needed now? | No (follow-up) |
 | OQ-06b | CR-06 | CSV export needed now? | No (follow-up) |
 | OQ-10b | CR-10 | Backfill values for existing tickets? | Mechanical + review |

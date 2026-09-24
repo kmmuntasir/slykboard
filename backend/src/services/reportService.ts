@@ -1,7 +1,10 @@
-import { and, eq, gte, lt, isNull, isNotNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, isNotNull, lt } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
 import { timeEntries, tickets, projects, users } from '../db/schema';
+import { AppError } from '../utils/appError';
+import { ErrorCode } from '../utils/envelope';
+import type { TicketType } from './ticketService';
 
 export interface ReportUser {
   id: string;
@@ -226,4 +229,450 @@ export async function getTicketSummary(args: {
     users: reportUsers,
     window: { start: start.toISOString(), end: end.toISOString(), label },
   };
+}
+
+// ============================================================================
+// CR-04 / CR-05 — hierarchy roll-up + drill-down time reports.
+//
+// One shared entry query over the node's live subtree feeds every surface, so
+// the roll-up, the per-ticket rows, the member table, and the raw entries can
+// never disagree. Effective duration follows the cross-cutting rule: timer
+// entries use (end - start) and manual entries use manualEntryMinutes; CR-14's
+// adjustment column will fold into this single spot when it lands.
+// ============================================================================
+
+/** Depth cap of the type-ranked hierarchy (Epic→Story→Task→Subtask). */
+const HIERARCHY_MAX_DEPTH = 3;
+
+export interface HierarchyNodeRef {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+}
+
+export interface NodeMemberTotal {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  totalMs: number;
+  autoMs: number;
+  manualMs: number;
+  entryCount: number;
+}
+
+export interface NodeBreakdownRow {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+  /** Time tracked on this ticket itself. */
+  ownMs: number;
+  /** This ticket's own time plus its descendants' time (subtree fold). */
+  rollupMs: number;
+  entryCount: number;
+  members: Array<{ id: string; totalMs: number }>;
+}
+
+export interface NodeTimeEntryRow {
+  id: string;
+  ticketId: string;
+  ticketNumber: number;
+  ticketTitle: string;
+  ticketType: TicketType;
+  userId: string | null;
+  userFullName: string | null;
+  userAvatarUrl: string | null;
+  startTime: string;
+  endTime: string | null;
+  durationMs: number;
+  type: 'manual' | 'timer';
+  description: string | null;
+  // CR-14 hook: the adjustment columns are not in the schema yet; the field is
+  // shipped now so the UI contract is stable when adjustments land.
+  adjusted: boolean;
+  adjustmentReason: string | null;
+}
+
+interface NodeEntryAggregateRow {
+  entryId: string;
+  ticketId: string;
+  userId: string | null;
+  userFullName: string | null;
+  userAvatarUrl: string | null;
+  startTime: Date;
+  endTime: Date | null;
+  manualEntryMinutes: number | null;
+  description: string | null;
+}
+
+// Live subtree of a node as flat id → parentId rows (root first). BFS with at
+// most HIERARCHY_MAX_DEPTH+1 queries — the rank ordering bounds the depth, so
+// no recursive CTE is needed and the query stays builder-typed.
+async function loadSubtree(projectId: string, nodeId: string) {
+  const rootRows = await db
+    .select({
+      id: tickets.id,
+      parentId: tickets.parentId,
+      ticketNumber: tickets.ticketNumber,
+      title: tickets.title,
+      type: tickets.type,
+    })
+    .from(tickets)
+    .where(and(eq(tickets.id, nodeId), eq(tickets.projectId, projectId), isNull(tickets.deletedAt)))
+    .limit(1);
+  const root = rootRows[0];
+  if (!root) {
+    return null;
+  }
+
+  const byParent = new Map<string, (typeof root)[]>([[root.id, [root]]]);
+  const all: (typeof root)[] = [root];
+  let frontier = [root.id];
+  for (let depth = 0; depth < HIERARCHY_MAX_DEPTH && frontier.length > 0; depth += 1) {
+    const rows = await db
+      .select({
+        id: tickets.id,
+        parentId: tickets.parentId,
+        ticketNumber: tickets.ticketNumber,
+        title: tickets.title,
+        type: tickets.type,
+      })
+      .from(tickets)
+      .where(
+        and(
+          inArray(tickets.parentId, frontier),
+          eq(tickets.projectId, projectId),
+          isNull(tickets.deletedAt),
+        ),
+      );
+    frontier = [];
+    for (const row of rows) {
+      all.push(row);
+      frontier.push(row.id);
+      byParent.set(row.id, [row]);
+    }
+  }
+  return { root, nodes: all };
+}
+
+/**
+ * Single entry read over the subtree, window-scoped, running timers excluded
+ * (FR-04.5), optional member/source filters applied at the source so every
+ * aggregate below recomputes from the same filtered set.
+ */
+async function loadSubtreeEntries(args: {
+  projectId: string;
+  subtreeIds: string[];
+  start: Date;
+  end: Date;
+  memberId?: string | null;
+  source?: 'auto' | 'manual' | null;
+}) {
+  if (args.subtreeIds.length === 0) return [];
+  const conditions = [
+    inArray(timeEntries.ticketId, args.subtreeIds),
+    gte(timeEntries.startTime, args.start),
+    lt(timeEntries.startTime, args.end),
+    isNotNull(timeEntries.endTime),
+  ];
+  if (args.memberId) {
+    conditions.push(eq(timeEntries.userId, args.memberId));
+  }
+  if (args.source === 'manual') {
+    conditions.push(isNotNull(timeEntries.manualEntryMinutes));
+  } else if (args.source === 'auto') {
+    conditions.push(isNull(timeEntries.manualEntryMinutes));
+  }
+  return db
+    .select({
+      entryId: timeEntries.id,
+      ticketId: timeEntries.ticketId,
+      userId: timeEntries.userId,
+      userFullName: users.fullName,
+      userAvatarUrl: users.avatarUrl,
+      startTime: timeEntries.startTime,
+      endTime: timeEntries.endTime,
+      manualEntryMinutes: timeEntries.manualEntryMinutes,
+      description: timeEntries.description,
+    })
+    .from(timeEntries)
+    .leftJoin(users, eq(users.id, timeEntries.userId))
+    .where(and(...conditions))
+    .orderBy(timeEntries.startTime);
+}
+/**
+ * Effective duration of one entry — the single definition shared by every
+ * hierarchy time surface (roll-up, rows, members, entries). Timer entries use
+ * wall-clock (end - start); manual entries use their recorded minutes; running
+ * timers contribute 0 (FR-04.5). CR-14's adjustment delta folds in here when
+ * the column lands.
+ */
+export function effectiveDurationMs(row: {
+  startTime: Date;
+  endTime: Date | null;
+  manualEntryMinutes: number | null;
+}): number {
+  if (row.manualEntryMinutes !== null) return row.manualEntryMinutes * 60_000;
+  if (row.endTime === null) return 0;
+  return row.endTime.getTime() - row.startTime.getTime();
+}
+
+interface HierarchyReportArgs {
+  projectId: string;
+  nodeId: string;
+  period: 'weekly' | 'monthly';
+  offset: number;
+  memberId?: string | null;
+  source?: 'auto' | 'manual' | null;
+}
+
+interface HierarchyReportData {
+  node: HierarchyNodeRef;
+  window: { start: string; end: string; label: string };
+  totalMs: number;
+  autoMs: number;
+  manualMs: number;
+  entryCount: number;
+  members: NodeMemberTotal[];
+  rows: NodeBreakdownRow[];
+  entries: NodeTimeEntryRow[];
+}
+
+async function buildHierarchyReport(
+  args: HierarchyReportArgs,
+): Promise<HierarchyReportData | null> {
+  const start = computeWindowStart(args.period, args.offset);
+  const end = computeWindowEnd(start, args.period);
+  const label = formatWindowLabel(start, args.period);
+
+  const subtree = await loadSubtree(args.projectId, args.nodeId);
+  if (!subtree) return null;
+
+  const metaById = new Map(subtree.nodes.map((n) => [n.id, n]));
+  const entryRows = (await loadSubtreeEntries({
+    projectId: args.projectId,
+    subtreeIds: subtree.nodes.map((n) => n.id),
+    start,
+    end,
+    memberId: args.memberId ?? null,
+    source: args.source ?? null,
+  })) as NodeEntryAggregateRow[];
+
+  let totalMs = 0;
+  let autoMs = 0;
+  let manualMs = 0;
+  const memberMap = new Map<string, NodeMemberTotal>();
+  const rowMap = new Map<
+    string,
+    { ownMs: number; entryCount: number; members: Map<string, number> }
+  >();
+  const entries: NodeTimeEntryRow[] = [];
+
+  for (const raw of entryRows) {
+    const meta = metaById.get(raw.ticketId);
+    if (!meta) continue; // defensive: entry whose ticket left the subtree
+    const ms = effectiveDurationMs(raw);
+    const isManual = raw.manualEntryMinutes !== null;
+
+    totalMs += ms;
+    if (isManual) manualMs += ms;
+    else autoMs += ms;
+
+    if (raw.userId) {
+      const existing = memberMap.get(raw.userId) ?? {
+        id: raw.userId,
+        fullName: raw.userFullName ?? 'Unknown user',
+        avatarUrl: raw.userAvatarUrl,
+        totalMs: 0,
+        autoMs: 0,
+        manualMs: 0,
+        entryCount: 0,
+      };
+      existing.totalMs += ms;
+      if (isManual) existing.manualMs += ms;
+      else existing.autoMs += ms;
+      existing.entryCount += 1;
+      memberMap.set(raw.userId, existing);
+    }
+
+    const row = rowMap.get(raw.ticketId) ?? { ownMs: 0, entryCount: 0, members: new Map() };
+    row.ownMs += ms;
+    row.entryCount += 1;
+    if (raw.userId) row.members.set(raw.userId, (row.members.get(raw.userId) ?? 0) + ms);
+    rowMap.set(raw.ticketId, row);
+
+    entries.push({
+      id: raw.entryId,
+      ticketId: raw.ticketId,
+      ticketNumber: meta.ticketNumber,
+      ticketTitle: meta.title,
+      ticketType: meta.type as TicketType,
+      userId: raw.userId,
+      userFullName: raw.userFullName,
+      userAvatarUrl: raw.userAvatarUrl,
+      startTime: raw.startTime.toISOString(),
+      endTime: raw.endTime ? raw.endTime.toISOString() : null,
+      durationMs: ms,
+      type: isManual ? 'manual' : 'timer',
+      description: raw.description,
+      adjusted: false,
+      adjustmentReason: null,
+    });
+  }
+
+  // Fold each ticket's own time up its ancestor chain (depth ≤ 3), so a row's
+  // rollupMs includes its descendants — the CR-04 total, decomposed.
+  const rollupById = new Map<string, number>();
+  for (const [ticketId, row] of rowMap) {
+    rollupById.set(ticketId, (rollupById.get(ticketId) ?? 0) + row.ownMs);
+    let parentId = metaById.get(ticketId)?.parentId ?? null;
+    let guard = 0;
+    while (parentId !== null && guard < HIERARCHY_MAX_DEPTH + 1) {
+      rollupById.set(parentId, (rollupById.get(parentId) ?? 0) + row.ownMs);
+      parentId = metaById.get(parentId)?.parentId ?? null;
+      guard += 1;
+    }
+  }
+
+  const rows: NodeBreakdownRow[] = [...rowMap.entries()]
+    .map(([ticketId, row]) => {
+      const meta = metaById.get(ticketId)!;
+      return {
+        id: ticketId,
+        ticketNumber: meta.ticketNumber,
+        title: meta.title,
+        type: meta.type as TicketType,
+        ownMs: row.ownMs,
+        rollupMs: rollupById.get(ticketId) ?? row.ownMs,
+        entryCount: row.entryCount,
+        members: [...row.members.entries()]
+          .map(([id, totalMsForMember]) => ({ id, totalMs: totalMsForMember }))
+          .sort((a, b) => b.totalMs - a.totalMs),
+      };
+    })
+    .sort((a, b) => b.rollupMs - a.rollupMs || a.ticketNumber - b.ticketNumber);
+
+  const members = [...memberMap.values()].sort((a, b) => b.totalMs - a.totalMs);
+
+  return {
+    node: {
+      id: subtree.root.id,
+      ticketNumber: subtree.root.ticketNumber,
+      title: subtree.root.title,
+      type: subtree.root.type as TicketType,
+    },
+    window: { start: start.toISOString(), end: end.toISOString(), label },
+    totalMs,
+    autoMs,
+    manualMs,
+    entryCount: entries.length,
+    members,
+    rows,
+    entries,
+  };
+}
+
+export type NodeRollupResponse = Pick<
+  HierarchyReportData,
+  'node' | 'window' | 'totalMs' | 'autoMs' | 'manualMs' | 'entryCount'
+>;
+
+export type NodeBreakdownResponse = Pick<
+  HierarchyReportData,
+  'node' | 'window' | 'totalMs' | 'autoMs' | 'manualMs' | 'entryCount' | 'members' | 'rows'
+>;
+
+export type NodeEntriesResponse = Pick<HierarchyReportData, 'node' | 'window' | 'entries'>;
+
+/** CR-04: windowed roll-up total for a node + its whole live subtree. */
+export async function getNodeTimeRollup(args: HierarchyReportArgs): Promise<NodeRollupResponse> {
+  const report = await buildHierarchyReport(args);
+  if (!report) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${args.nodeId}' not found`);
+  }
+  const { node, window, totalMs, autoMs, manualMs, entryCount } = report;
+  return { node, window, totalMs, autoMs, manualMs, entryCount };
+}
+
+/**
+ * CR-05: per-ticket rows (own + folded descendant time) and the per-member
+ * summary for a node's subtree, plus the same filters the UI exposes.
+ */
+export async function getNodeTimeBreakdown(
+  args: HierarchyReportArgs,
+): Promise<NodeBreakdownResponse> {
+  const report = await buildHierarchyReport(args);
+  if (!report) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${args.nodeId}' not found`);
+  }
+  return {
+    node: report.node,
+    window: report.window,
+    totalMs: report.totalMs,
+    autoMs: report.autoMs,
+    manualMs: report.manualMs,
+    entryCount: report.entryCount,
+    members: report.members,
+    rows: report.rows,
+  };
+}
+
+/** CR-05.2: raw entries behind the breakdown (optionally scoped to one ticket). */
+export async function getNodeTimeEntries(
+  args: HierarchyReportArgs & { ticketId?: string | null },
+): Promise<NodeEntriesResponse> {
+  const report = await buildHierarchyReport(args);
+  if (!report) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${args.nodeId}' not found`);
+  }
+  let entries = report.entries;
+  if (args.ticketId) {
+    const scoped = await loadSubtree(args.projectId, args.ticketId);
+    const scopeIds = new Set(scoped?.nodes.map((n) => n.id) ?? []);
+    entries = report.entries.filter((entry) => scopeIds.has(entry.ticketId));
+  }
+  return { node: report.node, window: report.window, entries };
+}
+
+/**
+ * FR-04.2: all-time tracked total for a node + subtree (running timers = 0,
+ * soft-deleted descendants excluded). Used by the ticket-detail header; kept
+ * window-free because the detail badge is "tracked so far", not a report.
+ */
+export async function getNodeTrackedTotalMs(args: {
+  projectId: string;
+  nodeId: string;
+}): Promise<{ totalMs: number; descendantCount: number }> {
+  const subtree = await loadSubtree(args.projectId, args.nodeId);
+  if (!subtree) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${args.nodeId}' not found`);
+  }
+  const rows = await loadSubtreeEntries({
+    projectId: args.projectId,
+    subtreeIds: subtree.nodes.map((n) => n.id),
+    start: new Date(0),
+    end: new Date('2999-12-31T00:00:00.000Z'),
+  });
+  const totalMs = rows.reduce((sum, row) => sum + effectiveDurationMs(row), 0);
+  return { totalMs, descendantCount: subtree.nodes.length - 1 };
+}
+
+/** Light displayId → live ticket id resolution for the hierarchy endpoints. */
+export async function resolveLiveTicketByNumber(
+  projectId: string,
+  ticketNumber: number,
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(
+      and(
+        eq(tickets.projectId, projectId),
+        eq(tickets.ticketNumber, ticketNumber),
+        isNull(tickets.deletedAt),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }

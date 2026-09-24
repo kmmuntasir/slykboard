@@ -100,6 +100,8 @@ vi.mock('../services/labelService', () => ({
 vi.mock('../services/reportService', () => ({
   getTimeReport: vi.fn(),
   getTicketSummary: vi.fn(),
+  // CR-04/CR-05: ticket-detail reads enrich with the subtree tracked roll-up.
+  getNodeTrackedTotalMs: vi.fn(),
 }));
 vi.mock('../services/userService', () => ({
   findUserByEmail: vi.fn(),
@@ -266,6 +268,10 @@ function applyHandlerDefaults() {
   vi.mocked(labelService.deleteLabel).mockResolvedValue({ id: LABEL_ID } as never);
   vi.mocked(reportService.getTimeReport).mockResolvedValue({} as never);
   vi.mocked(reportService.getTicketSummary).mockResolvedValue({} as never);
+  vi.mocked(reportService.getNodeTrackedTotalMs).mockResolvedValue({
+    totalMs: 0,
+    descendantCount: 0,
+  } as never);
   vi.mocked(timerService.startTimer).mockResolvedValue({ entry: {}, serverNow: 'now' } as never);
   vi.mocked(timerService.stopTimer).mockResolvedValue({} as never);
   vi.mocked(timerService.getTimeEntries).mockResolvedValue({} as never);

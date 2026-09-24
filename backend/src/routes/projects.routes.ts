@@ -9,6 +9,7 @@ import { requireProjectMember } from '../middleware/requireProjectMember';
 import { requireProjectAdmin } from '../middleware/requireProjectAdmin';
 import * as projectService from '../services/projectService';
 import * as boardService from '../services/boardService';
+import * as reportService from '../services/reportService';
 import * as ticketService from '../services/ticketService';
 import {
   createProjectBodySchema,
@@ -108,7 +109,20 @@ projectsRouter.get(
     if (!ticket) {
       throw new AppError(ErrorCode.NOT_FOUND, 'Ticket not found');
     }
-    res.json(success(ticket));
+    // CR-04 FR-04.2: all-time tracked roll-up for the node + its live subtree
+    // (running timers = 0). Kept out of the hot getTicket path so the resolver
+    // middleware doesn't pay for it.
+    const tracked = await reportService.getNodeTrackedTotalMs({
+      projectId: ticket.projectId,
+      nodeId: ticket.id,
+    });
+    res.json(
+      success({
+        ...ticket,
+        trackedTotalMs: tracked.totalMs,
+        descendantCount: tracked.descendantCount,
+      }),
+    );
   },
 );
 
