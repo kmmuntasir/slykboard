@@ -252,7 +252,25 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
 
     // The modal shell is always rendered while open; only the body branches on
     // the query state (loading / error / absent / resolved).
+    // CR-12 FR-12.3: tracked total beside the title. On a parent this is the
+    // CR-04 subtree roll-up, labelled so the number isn't misread.
+    const isRollup = (ticket?.descendantCount ?? 0) > 0;
     const modalTitle = ticket ? formatTicketId(slug, ticket.ticketNumber) : 'Loading ticket…';
+    // CR-12 FR-12.3: the tracked total sits BESIDE the title without joining the
+    // dialog's accessible name (Modal.headerAdornment).
+    const trackedAdornment =
+        ticket && typeof ticket.trackedTotalMs === 'number' ? (
+            <span
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground"
+                aria-label={`Tracked time ${formatDuration(ticket.trackedTotalMs)}${
+                    isRollup ? ' including sub-tickets' : ''
+                }`}
+            >
+                <Clock size={12} aria-hidden="true" />
+                {formatDuration(ticket.trackedTotalMs)}
+                {isRollup && <span className="font-normal">incl. sub-tickets</span>}
+            </span>
+        ) : null;
 
     let modalBody: React.ReactNode;
     // DEL-01: pinned-footer node. Set only in the resolved branch; left
@@ -509,6 +527,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                 onEsc={requestClose}
                 titleId="ticket-detail-title"
                 title={modalTitle}
+                headerAdornment={trackedAdornment}
                 blockBackdropClose={isDirty}
                 size="full"
                 footer={modalFooter}
@@ -640,14 +659,6 @@ function HierarchyPanel({ slug, ticket, lastColumnId }: HierarchyPanelProps) {
                     </span>{' '}
                     <span className="text-xs uppercase tracking-wide">{parent.type}</span>{' '}
                     <span className="text-foreground">{parent.title}</span>
-                </p>
-            )}
-            {typeof ticket.trackedTotalMs === 'number' && (ticket.descendantCount ?? 0) > 0 && (
-                <p className="text-sm text-muted-foreground">
-                    Tracked (incl. sub-tickets):{' '}
-                    <span className="font-mono tabular-nums text-foreground">
-                        {formatDuration(ticket.trackedTotalMs)}
-                    </span>
                 </p>
             )}
             {children.length > 0 && (

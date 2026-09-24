@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// CR-12: TicketCard ticks the live badge against the server clock; the
+// offset hook is stubbed (its own tests cover the offset math).
+vi.mock('@/hooks/useServerTime', () => ({
+    useServerTime: () => ({ offset: 0 }),
+}));
 import { createElement, type ReactNode } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -158,6 +164,8 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
         epic: null,
         childCount: 0,
         childDoneCount: 0,
+        trackedTotalMs: 0,
+        runningTimer: null,
         createdAt: '2026-06-01T00:00:00.000Z',
         updatedAt: '2026-06-02T00:00:00.000Z',
         ...overrides,
@@ -270,8 +278,11 @@ describe('TicketDetailModal', () => {
         // content (portalled, interaction-gated); assert dateTime is preserved.
         expect(times[0]!.getAttribute('title')).toBeNull();
         expect(times[1]!.getAttribute('title')).toBeNull();
-        // Each <time> is preceded by a Clock (lucide) icon.
-        expect(document.querySelectorAll('svg.lucide-clock').length).toBe(2);
+        // Each <time> is preceded by a Clock (lucide) icon. The CR-12 tracked
+        // badge adds a third clock elsewhere in the header, so scope the count
+        // to the timestamp row that owns the two <time> elements.
+        const timestampRow = times[0]!.closest('span, div')!;
+        expect(timestampRow.parentElement!.querySelectorAll('svg.lucide-clock').length).toBe(2);
     });
 
     it('renders Created by Unknown and Unassigned avatar when creator is null', async () => {

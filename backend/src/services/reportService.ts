@@ -268,8 +268,14 @@ export interface NodeBreakdownRow {
   type: TicketType;
   /** Time tracked on this ticket itself. */
   ownMs: number;
+  /** CR-11: source split of ownMs (timer vs manual). */
+  ownAutoMs: number;
+  ownManualMs: number;
   /** This ticket's own time plus its descendants' time (subtree fold). */
   rollupMs: number;
+  /** CR-11: source split of rollupMs. */
+  rollupAutoMs: number;
+  rollupManualMs: number;
   entryCount: number;
   members: Array<{ id: string; totalMs: number }>;
 }
@@ -465,7 +471,13 @@ async function buildHierarchyReport(
   const memberMap = new Map<string, NodeMemberTotal>();
   const rowMap = new Map<
     string,
-    { ownMs: number; entryCount: number; members: Map<string, number> }
+    {
+      ownMs: number;
+      ownAutoMs: number;
+      ownManualMs: number;
+      entryCount: number;
+      members: Map<string, number>;
+    }
   >();
   const entries: NodeTimeEntryRow[] = [];
 
@@ -496,8 +508,16 @@ async function buildHierarchyReport(
       memberMap.set(raw.userId, existing);
     }
 
-    const row = rowMap.get(raw.ticketId) ?? { ownMs: 0, entryCount: 0, members: new Map() };
+    const row = rowMap.get(raw.ticketId) ?? {
+      ownMs: 0,
+      ownAutoMs: 0,
+      ownManualMs: 0,
+      entryCount: 0,
+      members: new Map(),
+    };
     row.ownMs += ms;
+    if (isManual) row.ownManualMs += ms;
+    else row.ownAutoMs += ms;
     row.entryCount += 1;
     if (raw.userId) row.members.set(raw.userId, (row.members.get(raw.userId) ?? 0) + ms);
     rowMap.set(raw.ticketId, row);
@@ -521,15 +541,22 @@ async function buildHierarchyReport(
     });
   }
 
-  // Fold each ticket's own time up its ancestor chain (depth ≤ 3), so a row's
-  // rollupMs includes its descendants — the CR-04 total, decomposed.
+  // Fold each ticket's own time (and its source split) up the ancestor chain
+  // (depth ≤ 3), so a row's rollup includes its descendants — the CR-04 total,
+  // decomposed (CR-11: the split rides along).
   const rollupById = new Map<string, number>();
+  const rollupAutoById = new Map<string, number>();
+  const rollupManualById = new Map<string, number>();
   for (const [ticketId, row] of rowMap) {
     rollupById.set(ticketId, (rollupById.get(ticketId) ?? 0) + row.ownMs);
+    rollupAutoById.set(ticketId, (rollupAutoById.get(ticketId) ?? 0) + row.ownAutoMs);
+    rollupManualById.set(ticketId, (rollupManualById.get(ticketId) ?? 0) + row.ownManualMs);
     let parentId = metaById.get(ticketId)?.parentId ?? null;
     let guard = 0;
     while (parentId !== null && guard < HIERARCHY_MAX_DEPTH + 1) {
       rollupById.set(parentId, (rollupById.get(parentId) ?? 0) + row.ownMs);
+      rollupAutoById.set(parentId, (rollupAutoById.get(parentId) ?? 0) + row.ownAutoMs);
+      rollupManualById.set(parentId, (rollupManualById.get(parentId) ?? 0) + row.ownManualMs);
       parentId = metaById.get(parentId)?.parentId ?? null;
       guard += 1;
     }
@@ -544,7 +571,11 @@ async function buildHierarchyReport(
         title: meta.title,
         type: meta.type as TicketType,
         ownMs: row.ownMs,
+        ownAutoMs: row.ownAutoMs,
+        ownManualMs: row.ownManualMs,
         rollupMs: rollupById.get(ticketId) ?? row.ownMs,
+        rollupAutoMs: rollupAutoById.get(ticketId) ?? row.ownAutoMs,
+        rollupManualMs: rollupManualById.get(ticketId) ?? row.ownManualMs,
         entryCount: row.entryCount,
         members: [...row.members.entries()]
           .map(([id, totalMsForMember]) => ({ id, totalMs: totalMsForMember }))

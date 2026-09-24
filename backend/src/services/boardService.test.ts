@@ -13,6 +13,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const bag = vi.hoisted(() => ({
   dbSelectOrderBy: vi.fn(),
+  // CR-12: the two board aggregates (per-ticket closed totals, running timers).
+  dbSelectGroupBy: vi.fn(),
+  dbSelectRunning: vi.fn(),
   getProjectBySlug: vi.fn(),
   loggerWarn: vi.fn(),
   // F14: hydrateLabelsForTickets mock (from ./labelService)
@@ -27,6 +30,10 @@ vi.mock('../db/client', () => {
         leftJoin: () => chain,
         where: () => chain,
         orderBy: () => bag.dbSelectOrderBy(),
+        // CR-12 aggregates terminate at groupBy / the promise itself.
+        groupBy: () => bag.dbSelectGroupBy(),
+        then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+          Promise.resolve(bag.dbSelectRunning()).then(resolve, reject),
       };
       return chain;
     }),
@@ -58,6 +65,11 @@ import type { ChecklistItem } from '../db/schema';
 
 function resetBag() {
   bag.dbSelectOrderBy.mockReset();
+  bag.dbSelectGroupBy.mockReset();
+  bag.dbSelectRunning.mockReset();
+  // Default aggregates: nothing tracked, nothing running.
+  bag.dbSelectGroupBy.mockResolvedValue([]);
+  bag.dbSelectRunning.mockResolvedValue([]);
   bag.getProjectBySlug.mockReset();
   bag.loggerWarn.mockReset();
   bag.hydrateLabels = new Map();
@@ -482,6 +494,76 @@ describe('boardService getBoard', () => {
       const result = await getBoard('SLYK');
 
       expect(result.columns[0]!.tickets[0]!.checklist).toEqual([]);
+    });
+  });
+
+  // ---- CR-12: per-ticket tracked totals + running-timer state ---------------
+
+  describe('CR-12 tracked total + running timer', () => {
+    it('attaches trackedTotalMs from the aggregate (missing ticket → 0)', async () => {
+      bag.getProjectBySlug.mockResolvedValue(makeProject([{ id: 'c1', name: 'To Do' }]));
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+        makeTicket({ id: 't2', ticketNumber: 2, statusColumn: 'c1', position: 20 }),
+      ]);
+      bag.dbSelectGroupBy.mockResolvedValue([{ ticketId: 't1', ms: 7_200_000 }]);
+
+      const result = await getBoard('SLYK');
+      expect(result.columns[0]!.tickets[0]!.trackedTotalMs).toBe(7_200_000);
+      expect(result.columns[0]!.tickets[1]!.trackedTotalMs).toBe(0);
+    });
+
+    it('clamps negative aggregates to 0', async () => {
+      bag.getProjectBySlug.mockResolvedValue(makeProject([{ id: 'c1', name: 'To Do' }]));
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ]);
+      bag.dbSelectGroupBy.mockResolvedValue([{ ticketId: 't1', ms: -5 }]);
+
+      const result = await getBoard('SLYK');
+      expect(result.columns[0]!.tickets[0]!.trackedTotalMs).toBe(0);
+    });
+
+    it('exposes the running timer (any member) for the live badge', async () => {
+      bag.getProjectBySlug.mockResolvedValue(makeProject([{ id: 'c1', name: 'To Do' }]));
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ]);
+      const start = new Date('2026-09-20T10:00:00.000Z');
+      bag.dbSelectRunning.mockResolvedValue([{ ticketId: 't1', userId: 'u9', startTime: start }]);
+
+      const result = await getBoard('SLYK');
+      expect(result.columns[0]!.tickets[0]!.runningTimer).toEqual({
+        userId: 'u9',
+        startTime: start,
+      });
+    });
+
+    it('skips running rows without a user (deleted user FK → NULL)', async () => {
+      bag.getProjectBySlug.mockResolvedValue(makeProject([{ id: 'c1', name: 'To Do' }]));
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ]);
+      bag.dbSelectRunning.mockResolvedValue([
+        { ticketId: 't1', userId: null, startTime: new Date() },
+      ]);
+
+      const result = await getBoard('SLYK');
+      expect(result.columns[0]!.tickets[0]!.runningTimer).toBeNull();
+    });
+
+    it('keeps the FIRST running timer when a ticket somehow has two', async () => {
+      bag.getProjectBySlug.mockResolvedValue(makeProject([{ id: 'c1', name: 'To Do' }]));
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({ id: 't1', ticketNumber: 1, statusColumn: 'c1', position: 10 }),
+      ]);
+      bag.dbSelectRunning.mockResolvedValue([
+        { ticketId: 't1', userId: 'u1', startTime: new Date('2026-09-20T10:00:00.000Z') },
+        { ticketId: 't1', userId: 'u2', startTime: new Date('2026-09-20T11:00:00.000Z') },
+      ]);
+
+      const result = await getBoard('SLYK');
+      expect(result.columns[0]!.tickets[0]!.runningTimer?.userId).toBe('u1');
     });
   });
 });

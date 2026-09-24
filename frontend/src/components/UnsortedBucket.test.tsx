@@ -1,4 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, vi, it, expect } from 'vitest';
+
+// CR-12: TicketCard ticks the live badge against the server clock; the
+// offset hook is stubbed (its own tests cover the offset math).
+vi.mock('@/hooks/useServerTime', () => ({
+    useServerTime: () => ({ offset: 0 }),
+}));
+
 import { screen } from '@testing-library/react';
 import { UnsortedBucket } from './UnsortedBucket';
 import { renderInDnd } from '@/test/dndWrapper';
@@ -26,6 +33,8 @@ describe('UnsortedBucket', () => {
             epic: null,
             childCount: 0,
             childDoneCount: 0,
+            trackedTotalMs: 0,
+            runningTimer: null,
             createdAt: '2026-06-01T00:00:00.000Z',
             updatedAt: '2026-06-01T00:00:00.000Z',
         };

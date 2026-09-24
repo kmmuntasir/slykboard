@@ -1,3 +1,9 @@
+// CR-12: TicketCard ticks the live badge against the server clock; the
+// offset hook is stubbed (its own tests cover the offset math).
+vi.mock('@/hooks/useServerTime', () => ({
+    useServerTime: () => ({ offset: 0 }),
+}));
+
 import { describe, it, expect, vi } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import { TicketCard } from './TicketCard';
@@ -31,6 +37,8 @@ describe('TicketCard', () => {
         epic: null,
         childCount: 0,
         childDoneCount: 0,
+        trackedTotalMs: 0,
+        runningTimer: null,
         createdAt: '2026-06-01T00:00:00.000Z',
         updatedAt: '2026-06-01T00:00:00.000Z',
     };
@@ -200,5 +208,51 @@ describe('TicketCard', () => {
             />,
         );
         expect(screen.queryByTitle('Nested under: Parent')).not.toBeInTheDocument();
+    });
+
+    // ---- CR-12: tracked-total badge + live running state ---------------------
+
+    it('CR-12: renders the tracked total badge when time exists', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{ ...baseTicket, trackedTotalMs: 3 * 3_600_000 + 20 * 60_000 }}
+                projectSlug="SLYK"
+                index={0}
+            />,
+        );
+        expect(screen.getByText('Tracked time')).toBeInTheDocument();
+        expect(screen.getByText('3h 20m')).toBeInTheDocument();
+    });
+
+    it('CR-12: hides the badge when nothing is tracked and nothing runs', () => {
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
+        expect(screen.queryByText('Tracked time')).not.toBeInTheDocument();
+    });
+
+    it('CR-12: shows a pulsing badge with the running elapsed time', () => {
+        const started = new Date(Date.now() - 90_000).toISOString();
+        const { container } = renderInDnd(
+            <TicketCard
+                ticket={{ ...baseTicket, runningTimer: { userId: 'u9', startTime: started } }}
+                projectSlug="SLYK"
+                index={0}
+            />,
+        );
+        expect(screen.getByText('running')).toBeInTheDocument();
+        expect(screen.getByText('1m 30s')).toBeInTheDocument();
+        expect(container.querySelector('svg.animate-pulse')).not.toBeNull();
+    });
+
+    it('CR-12: the live badge is present even with zero tracked total', () => {
+        const started = new Date(Date.now() - 30_000).toISOString();
+        renderInDnd(
+            <TicketCard
+                ticket={{ ...baseTicket, runningTimer: { userId: 'u9', startTime: started } }}
+                projectSlug="SLYK"
+                index={0}
+            />,
+        );
+        expect(screen.getByText('running')).toBeInTheDocument();
+        expect(screen.getByText('30s')).toBeInTheDocument();
     });
 });

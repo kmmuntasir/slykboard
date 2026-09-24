@@ -1,6 +1,6 @@
-import { and, asc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
-import { tickets, users, ticketLabels } from '../db/schema';
+import { tickets, users, ticketLabels, timeEntries } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { logger } from '../config/logger';
@@ -46,6 +46,12 @@ export interface BoardTicket {
   creatorId: string;
   createdAt: Date;
   updatedAt: Date;
+  // CR-12: closed-entry total for THIS ticket (own time only — the subtree
+  // roll-up rides the detail payload) plus the live timer state, if any member
+  // has a running timer on it. Running time is excluded from the total; the
+  // client ticks it from runningStartTime with the server-time offset.
+  trackedTotalMs: number;
+  runningTimer: { userId: string; startTime: Date } | null;
   // CR-03: hierarchy context.
   type: TicketType;
   parentId: string | null;
@@ -165,6 +171,47 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
   // Tickets with no label rows default to [] at the read site.
   const labelMap = await hydrateLabelsForTickets(rows.map((r) => r.id));
 
+  // CR-12 FR-12.4: per-ticket closed-time totals in ONE aggregate query (no
+  // N+1), plus the set of tickets with a running timer (any member) for the
+  // live badge. Manual entries carry minutes; timer rows use wall-clock.
+  const rowIds = rows.map((r) => r.id);
+  const trackedByTicket = new Map<string, number>();
+  const runningByTicket = new Map<string, { userId: string; startTime: Date }>();
+  if (rowIds.length > 0) {
+    const totals = await db
+      .select({
+        ticketId: timeEntries.ticketId,
+        ms: sql<number>`coalesce(
+          sum(
+            case when ${timeEntries.manualEntryMinutes} is not null
+              then ${timeEntries.manualEntryMinutes} * 60000
+              else extract(epoch from (${timeEntries.endTime} - ${timeEntries.startTime})) * 1000
+            end
+          ), 0
+        )`,
+      })
+      .from(timeEntries)
+      .where(and(inArray(timeEntries.ticketId, rowIds), isNotNull(timeEntries.endTime)))
+      .groupBy(timeEntries.ticketId);
+    for (const t of totals) {
+      trackedByTicket.set(t.ticketId, Math.max(0, Math.round(Number(t.ms))));
+    }
+
+    const running = await db
+      .select({
+        ticketId: timeEntries.ticketId,
+        userId: timeEntries.userId,
+        startTime: timeEntries.startTime,
+      })
+      .from(timeEntries)
+      .where(and(inArray(timeEntries.ticketId, rowIds), isNull(timeEntries.endTime)));
+    for (const r of running) {
+      if (r.userId !== null && !runningByTicket.has(r.ticketId)) {
+        runningByTicket.set(r.ticketId, { userId: r.userId, startTime: r.startTime });
+      }
+    }
+  }
+
   const allTickets: BoardTicket[] = rows.map((r) => ({
     id: r.id,
     ticketNumber: r.ticketNumber,
@@ -187,6 +234,8 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
     creatorId: r.creatorId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    trackedTotalMs: trackedByTicket.get(r.id) ?? 0,
+    runningTimer: runningByTicket.get(r.id) ?? null,
     type: r.type as TicketType,
     parentId: r.parentId,
     parent: null, // resolved below (needs the full-row map)

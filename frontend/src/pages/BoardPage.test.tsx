@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// CR-12: TicketCard ticks the live badge against the server clock; the
+// offset hook is stubbed (its own tests cover the offset math).
+vi.mock('@/hooks/useServerTime', () => ({
+    useServerTime: () => ({ offset: 0 }),
+}));
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -105,6 +111,8 @@ const ticket101: Ticket = {
     epic: null,
     childCount: 0,
     childDoneCount: 0,
+    trackedTotalMs: 0,
+    runningTimer: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -395,6 +403,8 @@ describe('BoardPage — CR-03 hierarchy', () => {
         type: 'EPIC' as const,
         childCount: 2,
         childDoneCount: 1,
+        trackedTotalMs: 0,
+        runningTimer: null,
     };
     const story = {
         ...ticket101,

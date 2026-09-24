@@ -104,6 +104,9 @@ export function NodeBreakdownTable({
                             </button>
                         </th>
                         <th scope="col" className="px-4 py-2 text-right font-medium">
+                            Split
+                        </th>
+                        <th scope="col" className="px-4 py-2 text-right font-medium">
                             Entries
                         </th>
                     </tr>
@@ -146,6 +149,20 @@ export function NodeBreakdownTable({
                                 <td className="px-4 py-2 text-right font-medium tabular-nums">
                                     {formatDuration(row.rollupMs)}
                                 </td>
+                                {/* CR-11: aggregates that mix sources show the
+                                    split (tracked column = rollup split). */}
+                                <td className="px-4 py-2 text-right text-xs tabular-nums text-muted-foreground">
+                                    {row.rollupAutoMs > 0 && (
+                                        <span className="block">
+                                            {formatDuration(row.rollupAutoMs)} auto
+                                        </span>
+                                    )}
+                                    {row.rollupManualMs > 0 && (
+                                        <span className="block">
+                                            {formatDuration(row.rollupManualMs)} manual
+                                        </span>
+                                    )}
+                                </td>
                                 <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
                                     {row.entryCount}
                                 </td>
@@ -153,7 +170,7 @@ export function NodeBreakdownTable({
                             ...(expanded
                                 ? [
                                       <tr key={`${row.id}-entries`} className="bg-muted/10">
-                                          <td colSpan={5} className="px-6 py-3">
+                                          <td colSpan={6} className="px-6 py-3">
                                               {rowEntries === undefined || isEntriesLoading ? (
                                                   <p
                                                       className="text-sm text-muted-foreground"

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v5 — CR-01 … CR-05 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v6 — CR-01 … CR-06, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -403,7 +403,12 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"A single tracking duration should show whether it was Auto tracked or Manually Input Tracked"_
 
-**Status:** Partially implemented — extend to all new surfaces.
+**Status:** **DONE — implemented 2026-09-25.**
+
+**Implementation notes (2026-09-25)**
+
+- The ticket Time Log already labeled each entry; the new surfaces now do too: roll-up summaries show the auto/manual split, member rows read "1h 20m auto · 30m manual", the CR-05 breakdown carries `ownAutoMs/ownManualMs/rollupAutoMs/rollupManualMs` with a Split column, and expanded entries carry Auto/Manual chips.
+- Entries gained the `adjusted` + `adjustmentReason` fields ahead of CR-14 (always false/null today), so the UI contract is stable when adjustments land.
 
 **Requirement:** Everywhere a tracking duration is displayed, it is labeled as auto-tracked (timer) or manually logged.
 
@@ -424,7 +429,14 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Time Tracking summary beside the Ticket Title and Board view"_
 
-**Status:** New feature.
+**Status:** **DONE — implemented 2026-09-25.**
+
+**Implementation notes (2026-09-25)**
+
+- Board payload gained `trackedTotalMs` (closed entries, this ticket only) and `runningTimer` (userId + startTime) from two batched aggregates — no N+1 (FR-12.4). Effective duration stays server-authoritative; CR-14 folds in via the same SQL.
+- `TicketCard` shows a clock badge (hidden at zero with no running timer) that turns emerald + pulsing when ANY member has a timer running, with the live elapsed ticking against the server clock (lazy-seeded keyed sub-component; persisted totals untouched).
+- `Modal` gained a `headerAdornment` slot so the detail modal can render the tracked total beside the title WITHOUT changing the dialog's accessible name; parents read "incl. sub-tickets" (the CR-04 roll-up).
+- Tests: 5 new boardService aggregate cases + 4 card badge cases + detail/modal adjustments; suites green (backend 918, frontend 1114).
 
 **Requirement:** The total tracked time of a ticket is visible at a glance — beside the title in the ticket detail view and on the board card.
 
@@ -591,7 +603,7 @@ What exists today (verified against the code, not the PRD):
 
 | Phase | CRs | Rationale |
 | --- | --- | --- |
-| 1 — Quick wins | CR-01 ✅ (done 2026-09-25), CR-02 ✅ (verified 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget), CR-10, CR-11, CR-12 | Small, independent, high client visibility; unblock daily usage. |
+| 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-11 ✅, CR-12 ✅ (all done 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget), CR-10 | Small, independent, high client visibility; unblock daily usage. |
 | 2 — Time integrity & forensics | CR-14, CR-08 | Make recorded time trustworthy and explainable before building more reporting on it. |
 | 3 — Hierarchy & reports | CR-03 ✅, CR-04 ✅, CR-05 ✅ (all done 2026-09-25), CR-06 | Largest chunk; CR-03/04/05 shipped; CR-06 remains. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |

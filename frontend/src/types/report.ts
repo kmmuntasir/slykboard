@@ -74,7 +74,11 @@ export interface NodeBreakdownRow {
   title: string;
   type: TicketType;
   ownMs: number; // tracked on this ticket itself
+  ownAutoMs: number; // CR-11: source split of ownMs
+  ownManualMs: number;
   rollupMs: number; // this ticket + its descendants (subtree fold)
+  rollupAutoMs: number; // CR-11: source split of rollupMs
+  rollupManualMs: number;
   entryCount: number;
   members: Array<{ id: string; totalMs: number }>;
 }

@@ -16,7 +16,11 @@ const rows: NodeBreakdownRow[] = [
         title: 'Checkout story',
         type: 'STORY',
         ownMs: 30 * 60_000,
+        ownAutoMs: 0,
+        ownManualMs: 30 * 60_000,
         rollupMs: 3 * HOUR + 30 * 60_000,
+        rollupAutoMs: 3 * HOUR,
+        rollupManualMs: 30 * 60_000,
         entryCount: 2,
         members: [{ id: 'u1', totalMs: HOUR }],
     },
@@ -26,7 +30,11 @@ const rows: NodeBreakdownRow[] = [
         title: 'Hook subtask',
         type: 'SUBTASK',
         ownMs: 3 * HOUR,
+        ownAutoMs: 3 * HOUR,
+        ownManualMs: 0,
         rollupMs: 3 * HOUR,
+        rollupAutoMs: 3 * HOUR,
+        rollupManualMs: 0,
         entryCount: 1,
         members: [],
     },
@@ -165,5 +173,19 @@ describe('NodeBreakdownTable (CR-05)', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Own/ }));
         const dataRows = screen.getAllByRole('row').slice(1);
         expect(dataRows[0]!.textContent).toContain('Hook subtask');
+    });
+
+    it('CR-11: shows the auto/manual split beside the tracked total', () => {
+        render(
+            <NodeBreakdownTable
+                projectSlug="SLYK"
+                rows={rows}
+                expandedId={null}
+                onToggleRow={vi.fn()}
+            />,
+        );
+        // Both rows carry a 3h auto portion (story folds the subtask's time).
+        expect(screen.getAllByText('3h 0m auto').length).toBe(2);
+        expect(screen.getByText('30m 0s manual')).toBeInTheDocument();
     });
 });

@@ -36,7 +36,12 @@ interface ModalProps {
     /** Intercept Esc (e.g. dirty-confirm). Falls back to onClose. */
     onEsc?: () => void;
     titleId: string;
-    title: string;
+    /** Rendered as the dialog heading. */
+    title: ReactNode;
+    /** Optional adornment rendered next to the heading but OUTSIDE it, so the
+     *  dialog's accessible name stays exactly the title text (CR-12 tracked
+     *  badge on the ticket detail modal). */
+    headerAdornment?: ReactNode;
     children: ReactNode;
     /** When true, a backdrop click does NOT close (e.g. dirty form). */
     blockBackdropClose?: boolean;
@@ -56,6 +61,7 @@ export function Modal({
     onEsc,
     titleId,
     title,
+    headerAdornment,
     children,
     blockBackdropClose,
     size = 'md',
@@ -96,9 +102,12 @@ export function Modal({
                         hasFooter ? 'shrink-0 px-6 pt-6 pb-4' : 'mb-4',
                     )}
                 >
-                    <h2 id={titleId} className="text-lg font-semibold">
-                        {title}
-                    </h2>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h2 id={titleId} className="text-lg font-semibold">
+                            {title}
+                        </h2>
+                        {headerAdornment}
+                    </div>
                     <button
                         type="button"
                         onClick={onClose}

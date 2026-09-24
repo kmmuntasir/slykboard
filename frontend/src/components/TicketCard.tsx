@@ -1,6 +1,8 @@
-import { type CSSProperties } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Lock } from 'lucide-react';
+import { Clock, Lock } from 'lucide-react';
+import { useServerTime } from '@/hooks/useServerTime';
+import { formatDuration } from '@/utils/formatDuration';
 import type { Ticket } from '@/types/ticket';
 import { AssigneeAvatar } from './AssigneeAvatar';
 import { LabelChip } from './LabelChip';
@@ -18,8 +20,31 @@ interface TicketCardProps {
     isNested?: boolean;
 }
 
+/**
+ * CR-12 FR-12.2: the ticking live-elapsed readout. Mounted ONLY while a timer
+ * runs and keyed by its start time, so a new session re-initializes the clock.
+ * State is seeded lazily (server-corrected) and refreshed by a 1s interval —
+ * never read from the device clock at paint time.
+ */
+function RunningElapsed({ startTime, offset }: { startTime: number; offset: number }) {
+    const [now, setNow] = useState(() => Date.now() + offset);
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now() + offset), 1000);
+        return () => clearInterval(timer);
+    }, [offset]);
+    return <>{formatDuration(Math.max(0, now - startTime))}</>;
+}
+
 export function TicketCard({ ticket, projectSlug, index, onEdit, isNested }: TicketCardProps) {
     const ticketId = formatTicketId(projectSlug, ticket.ticketNumber, { padded: true }); // REQ-3.1, F12 D2, F30 D1
+    // CR-12: closed-entry total + the live running timer (any member). The
+    // live value ticks against the SERVER clock (useServerTime offset), never
+    // the device clock — persisted totals stay authoritative.
+    const { trackedTotalMs, runningTimer } = ticket;
+    const { offset } = useServerTime();
+    const runningStart = runningTimer ? Date.parse(runningTimer.startTime) : null;
+    const isRunning = runningStart !== null;
+    const showBadge = (trackedTotalMs ?? 0) > 0 || isRunning;
     // F15: defend against a stale board cache / a raw create response inserted
     // optimistically (missing labels/assignee/checklist joins) — never crash the
     // whole column on an undefined field.
@@ -54,6 +79,42 @@ export function TicketCard({ ticket, projectSlug, index, onEdit, isNested }: Tic
                         </div>
                     </header>
                     <h4 className="font-medium leading-snug">{ticket.title}</h4>
+
+                    {/* CR-12 FR-12.1/FR-12.2: tracked total badge; pulses + ticks
+                        live while anyone has a timer running on the ticket. */}
+                    {showBadge && (
+                        <div>
+                            <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
+                                    isRunning
+                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-muted text-muted-foreground'
+                                }`}
+                            >
+                                <Clock
+                                    size={12}
+                                    aria-hidden="true"
+                                    className={isRunning ? 'animate-pulse' : undefined}
+                                />
+                                {/* Content-based labeling: read linearly as
+                                    "Tracked time 3h 20m running + 1m 30s". */}
+                                <span className="sr-only">Tracked time</span>
+                                {formatDuration(trackedTotalMs ?? 0)}
+                                {isRunning && runningTimer && (
+                                    <span className="font-normal">
+                                        <span className="sr-only">running</span>+
+                                        <span>
+                                            <RunningElapsed
+                                                key={runningTimer.startTime}
+                                                startTime={runningStart ?? 0}
+                                                offset={offset}
+                                            />
+                                        </span>
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    )}
 
                     {/* CR-03: epic chip (descendants of an epic) + parent chip on
                         subtasks whose parent lives in another column. */}

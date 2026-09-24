@@ -86,11 +86,15 @@ export interface Ticket {
   epic: { id: string; ticketNumber: number; title: string } | null;
   childCount: number;
   childDoneCount: number;
-  // CR-04: all-time tracked roll-up for the node + its live subtree. Present
-  // only on detail reads (the backend enriches those responses); absent on
-  // board payloads.
-  trackedTotalMs?: number;
+  // CR-12 / CR-04: closed-entry tracked total, all-time, running timers
+  // excluded. Scope depends on the payload: BOARD = this ticket only; DETAIL =
+  // the node plus its live subtree (with `descendantCount` telling the UI
+  // whether the number is a roll-up worth labelling).
+  trackedTotalMs: number;
   descendantCount?: number;
+  // CR-12: set when any member currently has a running timer on this ticket
+  // (board payloads only) so the card can show a live badge.
+  runningTimer: { userId: string; startTime: string } | null;
   createdAt: string; // ISO
   updatedAt: string;
   deletedAt?: string | null; // F17: soft-delete tombstone (absent on board payload; set on detail for soft-deleted)
