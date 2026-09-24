@@ -29,4 +29,16 @@ describe('GET /api/health', () => {
     expect(res.body.status).toBe('ok');
     expect(res.body.data).toBeUndefined();
   });
+
+  it('serves a Google-OAuth-compatible CSP (GSI script + popup opener)', async () => {
+    const res = await request(app).get('/api/health');
+    const csp = String(res.headers['content-security-policy'] ?? '');
+    // GSI client is injected at runtime by @react-oauth/google — without this
+    // the Sign in button renders dead (script blocked → handler never arms).
+    expect(csp).toContain('https://accounts.google.com');
+    // The F33 inline theme bootstrap must stay runnable under script-src.
+    expect(csp).toContain('sha256-');
+    // The default same-origin COOP severs the OAuth popup's window.opener.
+    expect(res.headers['cross-origin-opener-policy']).toContain('same-origin-allow-popups');
+  });
 });

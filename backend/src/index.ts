@@ -1,4 +1,6 @@
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
+import fs from 'node:fs';
 import cors from 'cors';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -26,7 +28,33 @@ const app: Express = express();
 
 // --- Global middleware (order matters — see F03 §4 lifecycle) ---
 // 1. Security headers (first so every response incl. errors gets them).
-app.use(helmet());
+// CSP allowlist is the minimum the Google auth-code flow needs:
+// - script-src: GSI client (injected at runtime by @react-oauth/google) +
+//   sha256 hash of the inline F33 no-flash theme bootstrap in index.html.
+// - frame-src: Google's OAuth popup renders inside accounts.google.com.
+// - connect-src: GSI + token endpoints + same-origin API (fetch).
+// - img-src: Google avatar URLs (picture claim) on top of Helmet's default.
+// COOP: same-origin-allow-popups — the default same-origin severs the OAuth
+// popup's window.opener, so the auth code could never come back.
+const THEME_BOOTSTRAP_HASH = "'sha256-5srVpAcbvoOecEtYF3yyGd0suFsBwVnX/Vd6pBwFiBk='";
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'script-src': ["'self'", 'https://accounts.google.com', THEME_BOOTSTRAP_HASH],
+        'frame-src': ["'self'", 'https://accounts.google.com'],
+        'connect-src': [
+          "'self'",
+          'https://accounts.google.com',
+          'https://oauth2.googleapis.com',
+        ],
+        'img-src': ["'self'", 'data:', 'https://lh3.googleusercontent.com'],
+      },
+    },
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  }),
+);
 // 2. CORS — locked to FRONTEND_URL (D8). credentials:true enables future HttpOnly cookies.
 app.use(
   cors({
@@ -81,6 +109,25 @@ app.use('/api/time', timeRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/labels', labelsRouter);
 app.use('/api/comments', commentsRouter);
+
+// Single-port deploy (on-prem LXC): when FRONTEND_DIST points at the built
+// Vite bundle, serve it as static files with an SPA fallback. API routes
+// above take precedence; the fallback sits BEFORE notFound so only
+// non-API misses resolve to index.html (client-side routes).
+if (env.frontendDist) {
+  const distDir = path.resolve(env.frontendDist);
+  if (fs.existsSync(path.join(distDir, 'index.html'))) {
+    app.use(express.static(distDir, { index: false }));
+    app.get(/^(?!\/api).*/, (_req, res) => {
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+  } else {
+    logger.warn(
+      { distDir },
+      '[slykboard-backend] FRONTEND_DIST has no index.html — serving API only',
+    );
+  }
+}
 
 // --- Error sink (MUST be last) ---
 app.use(notFound);

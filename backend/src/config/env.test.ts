@@ -87,6 +87,30 @@ describe('loadConfig', () => {
       field: 'jwtSecret',
       value: 'x'.repeat(32),
     },
+    {
+      name: 'frontendDist undefined when unset',
+      input: { ...validBase },
+      field: 'frontendDist',
+      value: undefined,
+    },
+    {
+      name: 'accepts FRONTEND_DIST when set',
+      input: { ...validBase, FRONTEND_DIST: '/opt/slykboard/frontend/dist' },
+      field: 'frontendDist',
+      value: '/opt/slykboard/frontend/dist',
+    },
+    {
+      name: 'trims FRONTEND_DIST whitespace, empty becomes undefined',
+      input: { ...validBase, FRONTEND_DIST: '   ' },
+      field: 'frontendDist',
+      value: undefined,
+    },
+    {
+      name: 'exposes F05 JWT signing key',
+      input: { ...validBase },
+      field: 'jwtSecret',
+      value: 'x'.repeat(32),
+    },
   ];
 
   cases.forEach(({ name, input, expectThrow, field, value }) => {

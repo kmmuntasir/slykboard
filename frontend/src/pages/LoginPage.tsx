@@ -67,7 +67,7 @@ export function LoginPage() {
             <button
                 type="button"
                 onClick={() => handleLogin()}
-                className="rounded bg-primary px-6 py-3 text-sm font-medium text-background"
+                className="cursor-pointer rounded bg-primary px-6 py-3 text-sm font-medium text-background"
             >
                 Sign in with Google
             </button>

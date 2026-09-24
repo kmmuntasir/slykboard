@@ -4,6 +4,7 @@ export interface Config {
   port: number;
   frontendUrl: string;
   frontendUrls: string[];
+  frontendDist?: string;
   nodeEnv: string;
   databaseUrl: string;
   directDatabaseUrl: string;
@@ -71,6 +72,7 @@ export function loadConfig(envSource: NodeJS.ProcessEnv = process.env): Config {
     directDatabaseUrl: envSource.DIRECT_DATABASE_URL?.trim() || envSource.DATABASE_URL,
     runMigrationsOnStart:
       parseBooleanFlag(envSource.RUN_MIGRATIONS_ON_START) ?? nodeEnv === 'production',
+    frontendDist: envSource.FRONTEND_DIST?.trim() || undefined,
   };
 }
 
