@@ -1,5 +1,6 @@
 import { apiFetch } from './client';
 import type {
+  ColumnTimeReport,
   NodeBreakdownResponse,
   NodeEntriesResponse,
   NodeRollupResponse,
@@ -80,5 +81,26 @@ export async function fetchNodeEntries(
   if (q.ticket) params.set('ticket', q.ticket);
   return apiFetch<NodeEntriesResponse>(
     `/projects/${projectSlug}/reports/time/entries?${params.toString()}`,
+  );
+}
+
+// CR-08: per-column residence + tracked time for one ticket. `period` omitted
+// returns the ticket's whole lifetime; `member`/`source` narrow tracked only.
+export async function fetchColumnTimeReport(
+  projectSlug: string,
+  q: {
+    ticket: string;
+    period?: 'weekly' | 'monthly' | null;
+    member?: string | null;
+    source?: 'auto' | 'manual' | null;
+  },
+): Promise<ColumnTimeReport> {
+  const params = new URLSearchParams();
+  params.set('ticket', q.ticket);
+  if (q.period) params.set('period', q.period);
+  if (q.member) params.set('member', q.member);
+  if (q.source) params.set('source', q.source);
+  return apiFetch<ColumnTimeReport>(
+    `/projects/${projectSlug}/reports/column-time?${params.toString()}`,
   );
 }

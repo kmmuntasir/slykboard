@@ -129,3 +129,29 @@ export interface NodeEntriesResponse {
   window: { start: string; end: string; label: string };
   entries: NodeTimeEntry[];
 }
+
+// CR-08: per-column time for a single ticket.
+export interface ColumnTimeRow {
+  columnId: string;
+  columnName: string;
+  residenceMs: number;
+  trackedMs: number;
+  visits: number;
+  sharePct: number;
+}
+
+export interface ColumnTimeReport {
+  ticket: {
+    id: string;
+    ticketNumber: number;
+    title: string;
+    type: TicketType;
+    statusColumn: string;
+    deletedAt: string | null;
+  };
+  columns: ColumnTimeRow[];
+  totalResidenceMs: number;
+  totalTrackedMs: number;
+  window: { start: string; end: string; label: string } | null;
+  filters: { memberId: string | null; source: 'auto' | 'manual' | null };
+}

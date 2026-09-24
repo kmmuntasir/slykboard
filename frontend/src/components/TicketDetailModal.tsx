@@ -14,7 +14,7 @@ import { formatDate } from '@/utils/formatDate';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import { formatDuration } from '@/utils/formatDuration';
 import { useRequirePlatformAdmin } from '@/hooks/useRequirePlatformAdmin';
-import { useCurrentProjectMembership } from '@/hooks/useProjectMembers';
+import { useCurrentProjectMembership, useProjectMembers } from '@/hooks/useProjectMembers';
 import { useDeleteTicket } from '@/hooks/useDeleteTicket';
 import { useTicketForm, type TicketFormValues } from '@/hooks/useTicketForm';
 import type { UpdateTicketDto } from '@/types/ticket';
@@ -26,6 +26,7 @@ import { ConfirmDiscardDialog } from './ConfirmDiscardDialog';
 import { DeleteTicketConfirm } from './DeleteTicketConfirm';
 import { ActivityFeed } from './ActivityFeed';
 import { CommentsSection } from './CommentsSection';
+import { ColumnTimePanel } from './ColumnTimePanel';
 import { TimerHeroCard } from './TimerHeroCard';
 import { TimeLog } from './TimeLog';
 import { ManualEntryForm } from './ManualEntryForm';
@@ -94,6 +95,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
 
     const isPlatformAdmin = useRequirePlatformAdmin();
     const { isProjectAdmin } = useCurrentProjectMembership(slug);
+    // CR-08: the roster feeds the column-time member filter.
+    const projectMembers = useProjectMembers(slug);
     // Widened gate: platform-OR-project admin can delete (was platform-only).
     const canDelete = isPlatformAdmin || isProjectAdmin;
 
@@ -422,6 +425,15 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                             board?.columns.filter((c) => !c.isUnsorted).at(-1)
                                                 ?.id ?? null
                                         }
+                                    />
+                                    {/* CR-08: per-column residence + tracked time. */}
+                                    <ColumnTimePanel
+                                        projectSlug={slug}
+                                        ticket={ticket}
+                                        members={(projectMembers.data ?? []).map((m) => ({
+                                            id: m.userId,
+                                            fullName: m.fullName,
+                                        }))}
                                     />
                                     <StatusField
                                         projectSlug={slug}

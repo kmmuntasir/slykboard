@@ -119,6 +119,8 @@ vi.mock('@/hooks/useRequirePlatformAdmin', () => ({
 vi.mock('@/hooks/useProjectMembers', () => ({
     // Default: not a project admin (the platform-admin mock alone gates delete).
     useCurrentProjectMembership: vi.fn(() => ({ membership: undefined, isProjectAdmin: false })),
+    // CR-08: the roster feeds the column-time member filter.
+    useProjectMembers: vi.fn(() => ({ data: [] as unknown[] })),
 }));
 vi.mock('@/hooks/useDeleteTicket', () => ({
     useDeleteTicket: vi.fn(() => ({

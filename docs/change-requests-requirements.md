@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v8 — CR-01 … CR-06, CR-10, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v9 — CR-01 … CR-06, CR-08, CR-10, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -297,7 +297,15 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Column-wise Time Tracking for Individual Task or Subtask, sortable and filterable (we need to know how long this ticket was in ToDo, then how long it was in 'In Progress', etc)"_
 
-**Status:** New feature. Both metrics confirmed by client (2026-09-25).
+**Status:** New feature. Both metrics confirmed by client (2026-09-25). **DONE — implemented 2026-09-25.**
+
+**Implementation notes (2026-09-25)**
+
+- New `columnTimeService.getColumnTimeReport` derives residence intervals from the ticket's own transition history (the first `STATUS_CHANGED` row's `oldValue` recovers the original column; the open interval runs to `now`, or to `deletedAt` for a deleted ticket), then attributes tracked time to the same intervals: timer entries are split proportionally across every column they overlap, manual entries go to the column occupied at the entry instant. Unknown/legacy column ids render as "Archived column".
+- Window (`?period=&offset=`), member and source filters apply: residence is wall-clock and therefore member-independent (only tracked time narrows) — asserted in tests. Effective duration comes from the shared `effectiveDurationMs` (CR-14 folds in there). Endpoint: `GET /:slug/reports/column-time?ticket=SLYK-42&period&offset&member&source`; omitted period = the ticket's whole lifetime.
+- Frontend: `ColumnTimePanel` in the ticket-detail Metadata tab — per-column residence (with share %), tracked time, visit count, sortable headers, and window/member/source filters fed by the project roster.
+- Legacy-ticket robustness (FR-08.4) falls out of the interval model: a ticket whose history predates activity logging simply has one interval from `createdAt`.
+- Tests: 6 real-DB integration cases (per-column order, visits across returns, overlap split, member filter, running timers excluded, 404) + 4 component cases; suites green (backend 944, frontend 1127).
 
 **Requirement:** For any ticket (task or subtask), show per board column both (a) how long the ticket **resided** there (wall-clock, derived from status-transition history) and (b) how much **tracked working time** overlaps that column — in a sortable, filterable table.
 
@@ -620,7 +628,7 @@ What exists today (verified against the code, not the PRD):
 | Phase | CRs | Rationale |
 | --- | --- | --- |
 | 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-10 ✅, CR-11 ✅, CR-12 ✅ (all done 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget) | Small, independent, high client visibility; unblock daily usage. |
-| 2 — Time integrity & forensics | CR-14, CR-08 | Make recorded time trustworthy and explainable before building more reporting on it. |
+| 2 — Time integrity & forensics | CR-08 ✅ (done 2026-09-25), CR-14 | Make recorded time trustworthy and explainable before building more reporting on it. |
 | 3 — Hierarchy & reports | CR-03 ✅, CR-04 ✅, CR-05 ✅ (all done 2026-09-25), CR-06 | Largest chunk; CR-03/04/05 shipped; CR-06 remains. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |
 

@@ -7,6 +7,7 @@ import { success } from '../utils/envelope';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import * as reportService from '../services/reportService';
+import * as columnTimeService from '../services/columnTimeService';
 import { slugParamSchema } from './projects.schema';
 import { parseTicketDisplayId } from '../utils/parseTicketDisplayId';
 
@@ -198,5 +199,34 @@ projectReportsRouter.get(
         }),
       ),
     );
+  },
+);
+
+// ----------------------------------------------------------------------------
+// CR-08: per-column residence + tracked time for one ticket.
+// `ticket` addresses the subject by display id; `period`/`offset` clip the
+// window (omitted = the ticket's whole lifetime); `member`/`source` filter the
+// TRACKED metric only — residence is member-independent wall-clock.
+// ----------------------------------------------------------------------------
+projectReportsRouter.get(
+  '/:slug/reports/column-time',
+  authenticate,
+  validateRequest({ params: slugParamSchema }),
+  requireProjectMember(),
+  async (req, res) => {
+    const parsed = hierarchyQuerySchema.parse(req.query ?? {});
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const ticketRef = typeof q.ticket === 'string' ? q.ticket : '';
+    const ticketId = await resolveNode(req.project!, ticketRef);
+    const report = await columnTimeService.getColumnTimeReport({
+      projectId: req.project!.id,
+      ticketId,
+      // period omitted = lifetime view
+      period: q.period === 'weekly' || q.period === 'monthly' ? q.period : null,
+      offset: parsed.offset ?? 0,
+      memberId: parsed.member ?? null,
+      source: parsed.source ?? null,
+    });
+    res.json(success(report));
   },
 );
