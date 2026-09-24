@@ -16,6 +16,9 @@ interface TicketCardProps {
     projectSlug: string;
     index: number;
     onEdit?: (displayId: string) => void;
+    /** Id of the project's last column — a ticket there counts as resolved, so
+     *  it is never "overdue" (CR-10 FR-10.6). */
+    lastColumnId?: string;
     /** CR-03: indent subtasks whose parent card sits in the same column. */
     isNested?: boolean;
 }
@@ -26,6 +29,27 @@ interface TicketCardProps {
  * State is seeded lazily (server-corrected) and refreshed by a 1s interval —
  * never read from the device clock at paint time.
  */
+/** CR-10 FR-10.6: due-date chip. Lazily seeds the clock, then ticks so a
+ *  ticket that passes its deadline flips to Overdue without a refetch. */
+function OverdueBadge({ endDate }: { endDate: string }) {
+    // Seed lazily (allowed in a state initializer) and refresh once a minute so
+    // a ticket that passes its deadline flips without a board refetch.
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(timer);
+    }, []);
+    if (Date.parse(endDate) >= now) return null;
+    return (
+        <span
+            className="rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive"
+            aria-label="Overdue"
+        >
+            Overdue
+        </span>
+    );
+}
+
 function RunningElapsed({ startTime, offset }: { startTime: number; offset: number }) {
     const [now, setNow] = useState(() => Date.now() + offset);
     useEffect(() => {
@@ -35,7 +59,21 @@ function RunningElapsed({ startTime, offset }: { startTime: number; offset: numb
     return <>{formatDuration(Math.max(0, now - startTime))}</>;
 }
 
-export function TicketCard({ ticket, projectSlug, index, onEdit, isNested }: TicketCardProps) {
+export function TicketCard({
+    ticket,
+    projectSlug,
+    index,
+    onEdit,
+    isNested,
+    lastColumnId,
+}: TicketCardProps) {
+    // CR-10 FR-10.6: overdue = endDate (the due date) has passed AND the ticket
+    // is not in the last column. The clock read happens inside the keyed child
+    // so this component stays render-pure.
+    const isOverdue =
+        lastColumnId !== undefined && ticket.statusColumn !== lastColumnId
+            ? { endDate: ticket.endDate }
+            : null;
     const ticketId = formatTicketId(projectSlug, ticket.ticketNumber, { padded: true }); // REQ-3.1, F12 D2, F30 D1
     // CR-12: closed-entry total + the live running timer (any member). The
     // live value ticks against the SERVER clock (useServerTime offset), never
@@ -78,7 +116,10 @@ export function TicketCard({ ticket, projectSlug, index, onEdit, isNested }: Tic
                             <PriorityBadge priority={ticket.priority} />
                         </div>
                     </header>
-                    <h4 className="font-medium leading-snug">{ticket.title}</h4>
+                    <h4 className="flex flex-wrap items-center gap-2 font-medium leading-snug">
+                        <span>{ticket.title}</span>
+                        {isOverdue && <OverdueBadge endDate={isOverdue.endDate} />}
+                    </h4>
 
                     {/* CR-12 FR-12.1/FR-12.2: tracked total badge; pulses + ticks
                         live while anyone has a timer running on the ticket. */}

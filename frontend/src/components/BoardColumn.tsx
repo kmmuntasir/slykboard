@@ -9,6 +9,8 @@ interface BoardColumnProps {
     projectSlug: string;
     isUnsorted?: boolean;
     onEdit?: (displayId: string) => void;
+    /** CR-10: last column id for the overdue signal. */
+    lastColumnId?: string;
 }
 
 export function BoardColumn({
@@ -18,6 +20,7 @@ export function BoardColumn({
     projectSlug,
     isUnsorted,
     onEdit,
+    lastColumnId,
 }: BoardColumnProps) {
     return (
         <section
@@ -58,6 +61,7 @@ export function BoardColumn({
                                         projectSlug={projectSlug}
                                         index={index}
                                         onEdit={onEdit}
+                                        lastColumnId={lastColumnId}
                                         // CR-03: indent subtasks whose parent
                                         // card sits in this same column.
                                         isNested={

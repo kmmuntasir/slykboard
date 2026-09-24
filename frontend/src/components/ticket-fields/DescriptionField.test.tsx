@@ -38,7 +38,8 @@ const DEFAULT_VALUES: TicketFormValues = {
     type: 'TASK' as const,
     parentId: null,
     statusColumn: 'TODO',
-    dueDate: null,
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2026-01-08T00:00:00.000Z',
 };
 
 /**

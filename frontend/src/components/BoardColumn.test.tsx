@@ -25,6 +25,8 @@ function makeTicket(id: string, ticketNumber: number, position: number): Ticket 
         assignee: null,
         creator: null,
         creatorId: 'c1',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
         type: 'TASK',
         parentId: null,
         parent: null,

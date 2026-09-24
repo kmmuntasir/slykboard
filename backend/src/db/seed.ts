@@ -81,6 +81,14 @@ export async function seedBoard(): Promise<void> {
   await db.delete(tickets).where(eq(tickets.projectId, project!.id));
 
   const now = new Date();
+  // CR-10: seeded tickets carry the required description + Start/End window
+  // (End one day out) so the dev board renders against the new contract.
+  const endOfWindow = new Date(now.getTime() + 24 * 3_600_000);
+  const requiredFields = {
+    description: 'Seeded ticket for local development.',
+    startDate: now,
+    endDate: endOfWindow,
+  };
   const inserted = await db
     .insert(tickets)
     .values([
@@ -92,6 +100,7 @@ export async function seedBoard(): Promise<void> {
         position: 10,
         assigneeId: user!.id,
         creatorId: user!.id,
+        ...requiredFields,
         priority: 'HIGH',
         createdAt: now,
         updatedAt: now,
@@ -104,6 +113,7 @@ export async function seedBoard(): Promise<void> {
         position: 20,
         assigneeId: null,
         creatorId: user!.id,
+        ...requiredFields,
         priority: 'MEDIUM',
         createdAt: now,
         updatedAt: now,
@@ -116,6 +126,7 @@ export async function seedBoard(): Promise<void> {
         position: 30,
         assigneeId: user!.id,
         creatorId: user!.id,
+        ...requiredFields,
         priority: 'LOW',
         createdAt: now,
         updatedAt: now,

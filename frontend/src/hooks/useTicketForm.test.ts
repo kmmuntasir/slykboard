@@ -16,7 +16,9 @@ const validWith = (description: string) => ({
   labelIds: [],
   checklist: [],
   statusColumn: 'todo',
-  dueDate: null,
+  // CR-10: required window (end after start).
+  startDate: '2026-01-01T00:00:00.000Z',
+  endDate: '2026-01-08T00:00:00.000Z',
   // CR-03: hierarchy fields (subtask-needs-parent is validated separately).
   type: 'TASK' as const,
   parentId: null,

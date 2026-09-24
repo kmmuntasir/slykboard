@@ -10,6 +10,29 @@ export const ticketIdParam = z.object({
 
 const priorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']);
 
+// CR-10: required schedule window shared by create + PATCH. Both dates are
+// required (no defaults) and end must be strictly after start. A small helper
+// keeps the two refinements identical.
+const startEndFields = {
+  startDate: z.string().datetime(),
+  endDate: z.string().datetime(),
+};
+
+function assertWindowOrder(
+  startDate: string | undefined,
+  endDate: string | undefined,
+  ctx: z.RefinementCtx,
+): void {
+  if (!startDate || !endDate) return;
+  if (new Date(endDate).getTime() <= new Date(startDate).getTime()) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'End date must be after the start date',
+      path: ['endDate'],
+    });
+  }
+}
+
 // F13: merged PATCH body — F11 move fields (preserved) + F13 attribute fields.
 // Any non-empty subset is accepted. superRefine enforces two invariants:
 //   1) body is non-empty (at least one field set)
@@ -32,13 +55,17 @@ export const checklistItemSchema = z.object({
 
 const attributeFields = {
   title: z.string().min(1).max(200).optional(),
-  description: z.string().max(TICKET_DESCRIPTION_MAX_LENGTH).nullable().optional(),
+  // CR-10: required field — editable but never cleared (null rejected).
+  description: z.string().max(TICKET_DESCRIPTION_MAX_LENGTH).optional(),
   priority: priorityEnum.optional(),
   assigneeId: z.uuid().nullable().optional(),
   labelIds: z.array(z.string().uuid()).optional(), // F14: replace ticket's label set
   checklist: z.array(checklistItemSchema).max(50).optional(), // F15: replace checklist array
-  // T1: optional due date (ISO 8601 datetime). null clears it; absent = untouched.
-  dueDate: z.string().datetime().nullable().optional(),
+  // CR-10: schedule window on PATCH. Optional per-patch (a move-only or
+  // attribute-only patch doesn't resend them) but NOT nullable — a required
+  // field may be changed, never cleared. endDate is the due date.
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
   // CR-03: hierarchy fields. type change is validated against the current
   // parent AND live children in the service; parentId null = detach to root
   // (rejected for SUBTASK by the service).
@@ -65,6 +92,7 @@ export const updateTicketBody = z
         path: [hasStatus ? 'position' : 'statusColumn'],
       });
     }
+    assertWindowOrder(body.startDate, body.endDate, ctx);
   });
 
 export type TicketIdParam = z.infer<typeof ticketIdParam>;

@@ -102,6 +102,13 @@ describe('CreateTicketModal', () => {
         mutateAsync.mockResolvedValueOnce({});
         render(<CreateTicketModal open={true} onClose={onClose} slug="SLYK" columnId="TODO" />);
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My ticket' } });
+        // CR-10: create requires an explicit description, priority and End date.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
+        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'details' } });
+        fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'MEDIUM' } });
+        fireEvent.change(screen.getByLabelText('End date'), {
+            target: { value: '2027-02-01T12:00' },
+        });
         fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
         await waitFor(() => {
             expect(mutateAsync).toHaveBeenCalledTimes(1);
@@ -111,6 +118,9 @@ describe('CreateTicketModal', () => {
                 title: 'My ticket',
                 statusColumn: 'TODO',
                 priority: 'MEDIUM',
+                description: 'details',
+                startDate: expect.any(String),
+                endDate: expect.any(String),
             }),
         );
         await waitFor(() => expect(onClose).toHaveBeenCalled());

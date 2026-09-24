@@ -195,12 +195,15 @@ export async function recomputeAncestorColumns(
 // F15: `checklist` replaces the ticket's checklist JSONB array (full-array replace).
 export type TicketPatch = {
   title?: string;
-  description?: string | null;
+  // CR-10: description is required — it can be edited but never cleared.
+  description?: string;
   priority?: Priority;
   assigneeId?: string | null;
   labelIds?: string[];
   checklist?: ChecklistItem[];
-  dueDate?: string | null;
+  // CR-10: schedule window edits. Both are required and may not be cleared.
+  startDate?: string;
+  endDate?: string;
   type?: TicketType; // CR-03: hierarchy type change (validated against parent AND children)
   parentId?: string | null; // CR-03: re-parent (null = detach to root; SUBTASK cannot detach)
 };
@@ -368,13 +371,18 @@ export interface CreateTicketInput {
   slug: string;
   creatorId: string;
   title: string;
-  description?: string;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
+  // CR-10: description + priority are REQUIRED (the route schema enforces
+  // presence; the service trusts the validated body).
+  description: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
   labelIds?: string[];
   assigneeId?: string;
-  statusColumn?: string; // optional; defaults to project.columns[0].id
+  statusColumn: string;
   checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
-  dueDate?: string | null; // T1: optional due date (ISO 8601); null = none
+  // CR-10: required schedule window (ISO 8601). endDate is the due date and
+  // must be after startDate (validated in the route schema).
+  startDate: string;
+  endDate: string;
   type?: TicketType; // CR-03: hierarchy type; defaults to TASK (DB default)
   parentId?: string | null; // CR-03: optional parent (required for SUBTASK)
 }
@@ -421,18 +429,17 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         projectId: project.id,
         ticketNumber,
         title: input.title,
-        // DEL-01 T2: sanitize the description on the create path too (mirrors
-        // the edit path). `input.description` is `string | undefined`; pass it
-        // through only when present so an undefined create body is left as-is.
-        description:
-          input.description === undefined ? undefined : sanitizeDescription(input.description),
+        // DEL-01 T2 / CR-10: sanitize the description on the create path too
+        // (mirrors the edit path). Required since CR-10, so it is always written.
+        description: sanitizeDescription(input.description),
         statusColumn: resolvedColumn,
         position,
         creatorId: input.creatorId,
         assigneeId: input.assigneeId,
         priority: input.priority,
         checklist: input.checklist,
-        dueDate: input.dueDate ? new Date(input.dueDate) : null,
+        startDate: new Date(input.startDate),
+        endDate: new Date(input.endDate),
         type,
         parentId,
       })
@@ -707,8 +714,7 @@ export async function updateTicket(args: {
       updateSet.title = patch.title;
     }
     if (patch.description !== undefined) {
-      updateSet.description =
-        patch.description === null ? null : sanitizeDescription(patch.description);
+      updateSet.description = sanitizeDescription(patch.description);
     }
     if (patch.priority !== undefined) {
       updateSet.priority = patch.priority;
@@ -719,8 +725,11 @@ export async function updateTicket(args: {
     if (patch.checklist !== undefined) {
       updateSet.checklist = patch.checklist;
     }
-    if (patch.dueDate !== undefined) {
-      updateSet.dueDate = patch.dueDate === null ? null : new Date(patch.dueDate);
+    if (patch.startDate !== undefined) {
+      updateSet.startDate = new Date(patch.startDate);
+    }
+    if (patch.endDate !== undefined) {
+      updateSet.endDate = new Date(patch.endDate);
     }
     if (patch.type !== undefined) {
       updateSet.type = patch.type;

@@ -35,6 +35,8 @@ function makeTicket(
     assignee: null,
     creator: null,
     creatorId: 'u1',
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2027-01-08T00:00:00.000Z',
     type: 'TASK' as const,
     parentId: null,
     parent: null,

@@ -40,6 +40,9 @@ export interface BoardTicket {
   statusColumn: string;
   position: number;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
+  // CR-10: schedule window (endDate is the due date → overdue signal).
+  startDate: Date;
+  endDate: Date;
   labels: HydratedLabel[];
   checklist: ChecklistItem[];
   assignee: BoardAssignee | null;
@@ -151,6 +154,8 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
       statusColumn: tickets.statusColumn,
       position: tickets.position,
       priority: tickets.priority,
+      startDate: tickets.startDate,
+      endDate: tickets.endDate,
       checklist: tickets.checklist,
       assigneeId: tickets.assigneeId,
       creatorId: tickets.creatorId,
@@ -219,6 +224,8 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
     statusColumn: r.statusColumn,
     position: r.position,
     priority: r.priority,
+    startDate: r.startDate,
+    endDate: r.endDate,
     checklist: r.checklist ?? [],
     labels: labelMap.get(r.id) ?? [],
     assignee:

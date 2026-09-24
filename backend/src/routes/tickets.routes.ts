@@ -126,7 +126,8 @@ ticketsRouter.patch(
       body.assigneeId !== undefined ||
       body.labelIds !== undefined ||
       body.checklist !== undefined ||
-      body.dueDate !== undefined ||
+      body.startDate !== undefined ||
+      body.endDate !== undefined ||
       body.type !== undefined ||
       body.parentId !== undefined;
 
@@ -140,7 +141,8 @@ ticketsRouter.patch(
           assigneeId: body.assigneeId,
           labelIds: body.labelIds,
           checklist: body.checklist,
-          dueDate: body.dueDate,
+          startDate: body.startDate,
+          endDate: body.endDate,
           type: body.type,
           parentId: body.parentId,
         },

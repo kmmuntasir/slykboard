@@ -509,6 +509,11 @@ describe('ticketService createTicket (F12)', () => {
       slug: 'ghost',
       creatorId: 'u1',
       title: 'T',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
@@ -523,6 +528,11 @@ describe('ticketService createTicket (F12)', () => {
       slug: 'SLYK',
       creatorId: 'u1',
       title: 'T',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
@@ -536,7 +546,16 @@ describe('ticketService createTicket (F12)', () => {
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
     expect(bag.lastInsert).not.toBeNull();
     expect(bag.lastInsert!.statusColumn).toBe('c1');
@@ -549,7 +568,11 @@ describe('ticketService createTicket (F12)', () => {
       slug: 'SLYK',
       creatorId: 'u1',
       title: 'T',
-      statusColumn: 'ghost',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'ghost-column',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(AppError);
@@ -564,6 +587,10 @@ describe('ticketService createTicket (F12)', () => {
       slug: 'SLYK',
       creatorId: 'u1',
       title: 'T',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
       statusColumn: UNSORTED_BUCKET_ID,
     }).catch((e) => e);
 
@@ -578,7 +605,16 @@ describe('ticketService createTicket (F12)', () => {
     bag.maxRow = [{ maxPos: null }]; // empty column -> max(position) is null
     bag.insertReturn = [makeTicket({ id: 't-new', position: POSITION_GAP })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'First' });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'First',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
     expect(bag.lastInsert!.position).toBe(POSITION_GAP); // 0 + 65536
   });
@@ -589,7 +625,16 @@ describe('ticketService createTicket (F12)', () => {
     bag.maxRow = [{ maxPos: 131072 }]; // 2 * GAP existing max
     bag.insertReturn = [makeTicket({ id: 't-new', position: 131072 + POSITION_GAP })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'Third' });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'Third',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
     expect(bag.lastInsert!.position).toBe(131072 + POSITION_GAP); // 196608
   });
@@ -608,7 +653,16 @@ describe('ticketService createTicket (F12)', () => {
       }),
     ];
 
-    const result = await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'Seventh' });
+    const result = await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'Seventh',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
     expect(result.ticketNumber).toBe(7);
     expect(result.creatorId).toBe('u1');
@@ -625,6 +679,10 @@ describe('ticketService createTicket (F12)', () => {
       creatorId: 'u1',
       title: 'New',
       description: 'raw',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
     });
 
     expect(bag.sanitizeMock).toHaveBeenCalledTimes(1);
@@ -633,41 +691,73 @@ describe('ticketService createTicket (F12)', () => {
     expect(bag.lastInsert!.description).toBe('<clean>raw</clean>');
   });
 
-  it('DEL-01 T2: undefined description does NOT invoke sanitizer and does NOT throw', async () => {
+  it('CR-10: the required description is always sanitized on create', async () => {
     bag.getProjectBySlug.mockResolvedValue(makeProject());
     bag.seqRow = [{ nextNumber: 1 }];
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'No desc' });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'No desc',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
-    expect(bag.sanitizeMock).not.toHaveBeenCalled();
+    expect(bag.sanitizeMock).toHaveBeenCalledWith('Fixture description');
     expect(bag.lastInsert).not.toBeNull();
-    expect(bag.lastInsert!.description).toBeUndefined();
+    expect(bag.lastInsert!.description).toBe('<clean>Fixture description</clean>');
   });
 
-  it('T1: inserts dueDate as a Date parsed from the ISO input', async () => {
+  it('CR-10: inserts the schedule window as Dates parsed from the ISO input', async () => {
     bag.getProjectBySlug.mockResolvedValue(makeProject());
     bag.seqRow = [{ nextNumber: 1 }];
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', position: POSITION_GAP })];
 
+    const start = '2026-01-01T00:00:00.000Z';
     const due = '2026-12-31T23:59:59.000Z';
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'Due', dueDate: due });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'Due',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: start,
+      endDate: due,
+    });
 
-    expect(bag.lastInsert!.dueDate).toBeInstanceOf(Date);
-    expect((bag.lastInsert!.dueDate as Date).toISOString()).toBe(due);
+    expect(bag.lastInsert!.startDate).toBeInstanceOf(Date);
+    expect((bag.lastInsert!.startDate as Date).toISOString()).toBe(start);
+    expect(bag.lastInsert!.endDate).toBeInstanceOf(Date);
+    expect((bag.lastInsert!.endDate as Date).toISOString()).toBe(due);
   });
 
-  it('T1: inserts dueDate: null when input.dueDate is absent', async () => {
+  it('CR-10: inserts the required schedule window when the input carries it', async () => {
     bag.getProjectBySlug.mockResolvedValue(makeProject());
     bag.seqRow = [{ nextNumber: 1 }];
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', position: POSITION_GAP })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'No due' });
+    const start = '2026-01-01T00:00:00.000Z';
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'Windowed',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: start,
+      endDate: '2026-12-31T23:59:59.000Z',
+    });
 
-    expect(bag.lastInsert!.dueDate).toBeNull();
+    expect((bag.lastInsert!.startDate as Date).toISOString()).toBe(start);
+    expect((bag.lastInsert!.endDate as Date).toISOString()).toBe('2026-12-31T23:59:59.000Z');
   });
 });
 
@@ -808,48 +898,34 @@ describe('ticketService updateTicket (F13 T6)', () => {
     expect(bag.updateSets[0]!.description).toBe('<clean>raw</clean>');
   });
 
-  it('description: null patch sets description to null and does NOT invoke sanitizer', async () => {
-    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, description: '<p>x</p>' })]);
-    bag.updateReturn = [makeTicket({ id: TICKET_ID, description: null })];
+  it('CR-10: description edits are sanitized and can never be cleared', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, description: 'old' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, description: '<clean>new</clean>' })];
 
-    await updateTicket({
+    const { new: updated } = await updateTicket({
       ticketId: TICKET_ID,
-      patch: { description: null },
+      patch: { description: 'new' },
       actingUserId: 'u1',
     });
 
-    expect(bag.sanitizeMock).not.toHaveBeenCalled();
-    expect(bag.updateSets[0]!.description).toBeNull();
+    expect(bag.sanitizeMock).toHaveBeenCalledWith('new');
+    expect(updated.description).toBe('<clean>new</clean>');
   });
-
-  it('T1: dueDate patch writes a Date parsed from the ISO input', async () => {
-    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, dueDate: null })]);
+  it('CR-10: schedule-window patch writes Dates parsed from the ISO input', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID })]);
     bag.updateReturn = [makeTicket({ id: TICKET_ID })];
-
+    const start = '2026-01-01T00:00:00.000Z';
     const due = '2026-12-31T23:59:59.000Z';
     await updateTicket({
       ticketId: TICKET_ID,
-      patch: { dueDate: due },
+      patch: { startDate: start, endDate: due },
       actingUserId: 'u1',
     });
 
-    expect(bag.updateSets[0]!.dueDate).toBeInstanceOf(Date);
-    expect((bag.updateSets[0]!.dueDate as Date).toISOString()).toBe(due);
-  });
-
-  it('T1: dueDate: null patch clears dueDate (sets null, no Date parse)', async () => {
-    bag.loadTicketFinal.mockResolvedValue([
-      makeTicket({ id: TICKET_ID, dueDate: new Date('2026-12-31T23:59:59.000Z') }),
-    ]);
-    bag.updateReturn = [makeTicket({ id: TICKET_ID, dueDate: null })];
-
-    await updateTicket({
-      ticketId: TICKET_ID,
-      patch: { dueDate: null },
-      actingUserId: 'u1',
-    });
-
-    expect(bag.updateSets[0]!.dueDate).toBeNull();
+    expect(bag.updateSets[0]!.startDate).toBeInstanceOf(Date);
+    expect((bag.updateSets[0]!.startDate as Date).toISOString()).toBe(start);
+    expect(bag.updateSets[0]!.endDate).toBeInstanceOf(Date);
+    expect((bag.updateSets[0]!.endDate as Date).toISOString()).toBe(due);
   });
 
   it('T1: absent dueDate in patch leaves dueDate out of the update set', async () => {
@@ -1032,6 +1108,11 @@ describe('ticketService createTicket label linking (F14)', () => {
       slug: 'SLYK',
       creatorId: 'u1',
       title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
       labelIds: ['l1', 'l2'],
     });
 
@@ -1049,7 +1130,16 @@ describe('ticketService createTicket label linking (F14)', () => {
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1 })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New' });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
     expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
   });
@@ -1061,7 +1151,17 @@ describe('ticketService createTicket label linking (F14)', () => {
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
     const checklist = [{ id: '11111111-1111-4111-8111-111111111111', text: 'Design', done: false }];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New', checklist });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+      checklist,
+    });
 
     expect(bag.lastInsert).not.toBeNull();
     expect(bag.lastInsert!.checklist).toEqual(checklist);
@@ -1073,7 +1173,17 @@ describe('ticketService createTicket label linking (F14)', () => {
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'New', labelIds: [] });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+      labelIds: [],
+    });
 
     expect(bag.replaceTicketLabels).not.toHaveBeenCalled();
   });
@@ -1141,7 +1251,16 @@ describe('ticketService createTicket activity capture (F18)', () => {
     bag.maxRow = [{ maxPos: null }];
     bag.insertReturn = [makeTicket({ id: 't-new', ticketNumber: 1, statusColumn: 'c1' })];
 
-    await createTicket({ slug: 'SLYK', creatorId: 'u-creator', title: 'New' });
+    await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u-creator',
+      title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    });
 
     // Same-txn: the activity insert was performed on the tx mock (txn ran once).
     expect(bag.txnInvoked).toHaveBeenCalledTimes(1);
@@ -1161,7 +1280,18 @@ describe('ticketService createTicket activity capture (F18)', () => {
     // insert returning [] -> createTicket throws on `inserted!` before recordActivity.
     bag.insertReturn = [];
 
-    await expect(createTicket({ slug: 'SLYK', creatorId: 'u1', title: 'X' })).rejects.toThrow();
+    await expect(
+      createTicket({
+        slug: 'SLYK',
+        creatorId: 'u1',
+        title: 'X',
+        description: 'Fixture description',
+        priority: 'MEDIUM' as const,
+        statusColumn: 'c1',
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+    ).rejects.toThrow();
 
     // The CREATED row was written on the tx but the txn rejected; in a real pg
     // txn the rollback discards it. Here we assert the callback did not complete

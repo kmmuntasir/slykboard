@@ -7,7 +7,7 @@ export { StatusField } from './StatusField';
 export type { StatusFieldProps } from './StatusField';
 export { PriorityField } from './PriorityField';
 export { AssigneeField } from './AssigneeField';
-export { DueDateField } from './DueDateField';
+export { StartEndDateFields } from './StartEndDateFields';
 export { LabelsField } from './LabelsField';
 export { ChecklistField } from './ChecklistField';
 // CR-03: hierarchy fields.

@@ -34,6 +34,8 @@ function makeTicket(
     assignee: null,
     creator: null,
     creatorId: 'u1',
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2027-01-08T00:00:00.000Z',
     type: 'TASK' as const,
     parentId: null,
     parent: null,
@@ -104,7 +106,13 @@ describe('useCreateTicket', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ title: 'New ticket' });
+      await result.current.mutateAsync({
+        title: 'New ticket',
+        description: 'Fixture',
+        priority: 'MEDIUM',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
+      });
     });
 
     // onSuccess appended the server-created ticket to column c1.
@@ -132,7 +140,13 @@ describe('useCreateTicket', () => {
 
     await act(async () => {
       try {
-        await result.current.mutateAsync({ title: 'New ticket' });
+        await result.current.mutateAsync({
+          title: 'New ticket',
+          description: 'Fixture',
+          priority: 'MEDIUM',
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2027-01-08T00:00:00.000Z',
+        });
       } catch {
         // Swallow mutation rejection; we assert the rollback below.
       }
@@ -166,7 +180,13 @@ describe('useCreateTicket', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ title: 'New ticket' });
+      await result.current.mutateAsync({
+        title: 'New ticket',
+        description: 'Fixture',
+        priority: 'MEDIUM',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
+      });
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: boardKeys.all });
@@ -185,9 +205,22 @@ describe('useCreateTicket', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ title: 'New ticket' });
+      await result.current.mutateAsync({
+        title: 'New ticket',
+        description: 'Fixture',
+        priority: 'MEDIUM',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
+      });
     });
 
-    expect(createTicket).toHaveBeenCalledWith(SLUG, { title: 'New ticket' });
+    expect(createTicket).toHaveBeenCalledWith(
+      SLUG,
+      expect.objectContaining({
+        title: 'New ticket',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
+      }),
+    );
   });
 });

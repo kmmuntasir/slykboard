@@ -24,7 +24,9 @@ export interface CreateTicketDto {
   assigneeId?: string;
   statusColumn?: string;
   checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
-  dueDate?: string | null; // DEL-01: nullable ISO datetime at create
+  // CR-10: required schedule window at create (endDate is the due date).
+  startDate: string;
+  endDate: string;
   type?: TicketType; // CR-03: hierarchy type (default TASK)
   parentId?: string | null; // CR-03: parent ticket (required for SUBTASK)
 }

@@ -157,6 +157,8 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
         assignee: null,
         creator: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
         creatorId: 'u1',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
         type: 'TASK' as const,
         parentId: null,
         parent: null,
@@ -591,7 +593,7 @@ describe('TicketDetailModal', () => {
         expect(within(metadata).getByLabelText('Status')).toBeInTheDocument();
         expect(within(metadata).getByLabelText('Priority')).toBeInTheDocument();
         expect(within(metadata).getByLabelText('Assignee')).toBeInTheDocument();
-        expect(within(metadata).getByLabelText('Due date')).toBeInTheDocument();
+        expect(within(metadata).getByLabelText('End date')).toBeInTheDocument();
         expect(within(metadata).getByLabelText('Labels')).toBeInTheDocument();
         // Checklist editor renders (ChecklistField owns its label row).
         expect(within(metadata).getByText(/checklist/i)).toBeInTheDocument();

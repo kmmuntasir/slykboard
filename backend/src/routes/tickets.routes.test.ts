@@ -848,19 +848,71 @@ describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
   });
 });
 
-describe('PATCH /api/tickets/:ticketId dueDate (T1)', () => {
-  it('200 sets dueDate via updateTicket (ISO datetime)', async () => {
+describe('PATCH /api/tickets/:ticketId schedule window (CR-10)', () => {
+  it('200 sets startDate + endDate via updateTicket (ISO datetimes)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    const due = '2026-12-31T23:59:59.000Z';
     mockedUpdateTicket.mockResolvedValue({
-      old: makeTicketRow({ dueDate: null }),
-      new: makeTicketRow({ dueDate: new Date(due) }),
+      old: makeTicketRow({}),
+      new: makeTicketRow({}),
     } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ dueDate: due });
+      .send({ startDate: '2026-01-01T00:00:00.000Z', endDate: '2026-12-31T23:59:59.000Z' });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({
+          startDate: '2026-01-01T00:00:00.000Z',
+          endDate: '2026-12-31T23:59:59.000Z',
+        }),
+      }),
+    );
+  });
+
+  it('400 VALIDATION_FAILED when endDate is null (a required field cannot be cleared)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ endDate: null });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED when endDate is not after startDate', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ startDate: '2026-12-31T00:00:00.000Z', endDate: '2026-01-01T00:00:00.000Z' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
+  it('200 replaces the label set via updateTicket', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow(),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        labelIds: ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'],
+      });
 
     expect(res.status).toBe(200);
     expect(mockedUpdateTicket).toHaveBeenCalledWith({
@@ -870,46 +922,176 @@ describe('PATCH /api/tickets/:ticketId dueDate (T1)', () => {
         description: undefined,
         priority: undefined,
         assigneeId: undefined,
-        labelIds: undefined,
+        labelIds: ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'],
         checklist: undefined,
-        dueDate: due,
       },
       actingUserId: 'u1',
     });
     expect(mockedMoveTicket).not.toHaveBeenCalled();
   });
 
-  it('200 clears dueDate with null (clear)', async () => {
+  it('400 VALIDATION_FAILED for non-uuid labelId', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ labelIds: ['not-a-uuid'] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED for empty labelIds array is NOT raised (empty set clears)', async () => {
+    // Empty array is a valid patch (clears labels) — should reach the service.
     mockedFindVersion.mockResolvedValue(0);
     mockedUpdateTicket.mockResolvedValue({
-      old: makeTicketRow({ dueDate: new Date('2026-12-31T23:59:59.000Z') }),
-      new: makeTicketRow({ dueDate: null }),
+      old: makeTicketRow(),
+      new: makeTicketRow(),
     } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ dueDate: null });
+      .send({ labelIds: [] });
 
     expect(res.status).toBe(200);
     expect(mockedUpdateTicket).toHaveBeenCalledWith(
       expect.objectContaining({
-        patch: expect.objectContaining({ dueDate: null }),
+        patch: expect.objectContaining({ labelIds: [] }),
       }),
     );
   });
+});
 
-  it('400 VALIDATION_FAILED for non-ISO dueDate', async () => {
+describe('PATCH /api/tickets/:ticketId checklist (F15)', () => {
+  const item = { id: '11111111-1111-4111-8111-111111111111', text: 'Build it', done: false };
+  const checklist = [item];
+
+  it('200 replaces the checklist via updateTicket (member role — no admin gate, REQ-3.3)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow({ checklist }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ checklist });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.checklist).toEqual(checklist);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith({
+      ticketId: VALID_TICKET_ID,
+      patch: {
+        title: undefined,
+        description: undefined,
+        priority: undefined,
+        assigneeId: undefined,
+        labelIds: undefined,
+        checklist,
+      },
+      actingUserId: 'u1',
+    });
+    expect(mockedMoveTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED for non-uuid item id', async () => {
     mockedFindVersion.mockResolvedValue(0);
 
     const res = await request(app)
       .patch(`/api/tickets/${VALID_TICKET_ID}`)
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ dueDate: '2026/12/31 23:59:59' });
+      .send({ checklist: [{ id: 'not-a-uuid', text: 'x', done: false }] });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED for empty item text', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: '', done: false }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED for text over 200 chars', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        checklist: [
+          { id: '11111111-1111-4111-8111-111111111111', text: 'x'.repeat(201), done: false },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED for more than 50 items', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const tooMany = Array.from({ length: 51 }, (_, i) => ({
+      id: `11111111-1111-4111-8111-${String(i).padStart(12, '1')}`,
+      text: `item ${i}`,
+      done: false,
+    }));
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ checklist: tooMany });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED for non-boolean done', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        checklist: [{ id: '11111111-1111-4111-8111-111111111111', text: 'x', done: 'yes' }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('200 empty [] checklist clears all items (no min count)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow(),
+      new: makeTicketRow({ checklist: [] }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ checklist: [] });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: expect.objectContaining({ checklist: [] }) }),
+    );
   });
 });
 

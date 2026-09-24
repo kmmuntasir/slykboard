@@ -128,6 +128,9 @@ export function BoardPage() {
                     (epicFilter === null || ticket.epic?.id === epicFilter),
             ),
         }));
+    const lastColumnId = board
+        ? (board.columns.filter((column) => !column.isUnsorted).at(-1)?.id ?? undefined)
+        : undefined;
     const filteredColumns = board
         ? applyHierarchyFilters(board.columns).filter(
               // Drop columns that ended up empty ONLY due to filters when any
@@ -213,6 +216,7 @@ export function BoardPage() {
                                     tickets={column.tickets}
                                     projectSlug={board.project.slug}
                                     onEdit={handleEdit}
+                                    lastColumnId={lastColumnId}
                                 />
                             ),
                         )}

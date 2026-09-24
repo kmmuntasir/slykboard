@@ -381,7 +381,15 @@ const ROWS: Row[] = [
     method: 'post',
     path: `/api/projects/${SLUG}/tickets`,
     allowed: MEMBER_PLUS,
-    body: { title: 'T' },
+    // CR-10: create requires description, status, priority, and the window.
+    body: {
+      title: 'T',
+      description: 'Fixture description',
+      priority: 'MEDIUM',
+      statusColumn: 'c1',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-01-02T00:00:00.000Z',
+    },
     successStatus: 201,
   },
   {

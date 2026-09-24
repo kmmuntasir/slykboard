@@ -76,8 +76,10 @@ export interface Ticket {
   assignee: Assignee | null;
   creator: Creator | null; // F16: resolved creator (null if user deleted)
   creatorId: string;
-  // DEL-01: nullable due date (full ISO datetime; null = no due date).
-  dueDate?: string | null;
+  // CR-10: required schedule window (full ISO datetimes). endDate is the due
+  // date — overdue signals derive from it.
+  startDate: string;
+  endDate: string;
   // CR-03: hierarchy context.
   type: TicketType;
   parentId: string | null;
@@ -107,7 +109,8 @@ export interface UpdateTicketDto {
   assigneeId?: string | null;
   labelIds?: string[]; // F14: replace a ticket's label set
   checklist?: ChecklistItem[]; // F15: replace the checklist array (full-array replace)
-  dueDate?: string | null; // DEL-01: nullable ISO datetime; backend z.string().datetime().nullable().optional()
+  startDate?: string; // CR-10: required field, editable but never cleared
+  endDate?: string;
   type?: TicketType; // CR-03: hierarchy type change
   parentId?: string | null; // CR-03: re-parent (null = detach; SUBTASK cannot)
 }

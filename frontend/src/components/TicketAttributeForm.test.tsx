@@ -97,6 +97,9 @@ const baseDefaults = {
     checklist: [],
     type: 'TASK' as const,
     parentId: null,
+    // CR-10: required schedule window on every form.
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2026-01-08T00:00:00.000Z',
 };
 
 describe('TicketAttributeForm', () => {
@@ -131,6 +134,8 @@ describe('TicketAttributeForm', () => {
             checklist: [],
             type: 'TASK' as const,
             parentId: null,
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-01-08T00:00:00.000Z',
         };
         render(
             <TicketAttributeForm
@@ -254,9 +259,10 @@ describe('TicketAttributeForm', () => {
             checklist: [],
             type: 'TASK' as const,
             parentId: null,
-            // DEL-01 T6: the form now carries statusColumn + dueDate (merged defaults).
+            // CR-10: the form carries statusColumn + the required window.
             statusColumn: '',
-            dueDate: null,
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-01-08T00:00:00.000Z',
         });
     });
 
@@ -296,6 +302,10 @@ describe('TicketAttributeForm', () => {
             />,
         );
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New bug' } });
+        // CR-10: create mode requires a description — reveal the read-first
+        // editor and fill it before submitting.
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
+        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'details' } });
         fireEvent.click(screen.getByRole('button', { name: 'Select bug' }));
         fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
         await waitFor(() => {
@@ -303,16 +313,17 @@ describe('TicketAttributeForm', () => {
         });
         expect(onSubmit).toHaveBeenCalledWith({
             title: 'New bug',
-            description: '',
+            description: 'details',
             priority: 'MEDIUM',
             assigneeId: null,
             labelIds: ['11111111-1111-1111-1111-111111111111'],
             checklist: [],
             type: 'TASK' as const,
             parentId: null,
-            // DEL-01 T6: the form now carries statusColumn + dueDate (merged defaults).
+            // CR-10: the form carries statusColumn + the required window.
             statusColumn: '',
-            dueDate: null,
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-01-08T00:00:00.000Z',
         });
     });
 

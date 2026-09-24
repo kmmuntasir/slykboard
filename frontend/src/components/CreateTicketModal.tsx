@@ -16,14 +16,18 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
     const handleSubmit = async (values: UpdateTicketDto) => {
         await createTicket.mutateAsync({
             title: values.title as string,
-            description: values.description ?? undefined,
-            priority: values.priority,
+            // CR-10: description, priority and the window are required — the
+            // mode-aware form schema blocks submit until they are set.
+            description: values.description as string,
+            priority: values.priority!,
             assigneeId: values.assigneeId ?? undefined,
             labelIds: values.labelIds,
             statusColumn: columnId,
             checklist: values.checklist,
             type: values.type,
             parentId: values.parentId,
+            startDate: values.startDate!,
+            endDate: values.endDate!,
         });
         onClose();
     };
@@ -43,7 +47,8 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
                 defaultValues={{
                     title: '',
                     description: '',
-                    priority: 'MEDIUM',
+                    // CR-10: no priority default — the user picks explicitly.
+                    priority: null,
                     assigneeId: null,
                     labelIds: [],
                     // F15: checklist is edit-only at runtime; present for the shared schema.
@@ -51,6 +56,9 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
                     // CR-03: hierarchy defaults — a plain root TASK.
                     type: 'TASK',
                     parentId: null,
+                    // CR-10: Start defaults to "right now"; End must be picked.
+                    startDate: new Date().toISOString(),
+                    endDate: null,
                 }}
                 onSubmit={handleSubmit}
                 onCancel={onClose}

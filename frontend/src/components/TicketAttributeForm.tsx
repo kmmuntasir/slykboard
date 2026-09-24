@@ -9,7 +9,7 @@ import { AssigneeField } from './ticket-fields/AssigneeField';
 import { LabelsField } from './ticket-fields/LabelsField';
 import { ChecklistField } from './ticket-fields/ChecklistField';
 import { StatusField } from './ticket-fields/StatusField';
-import { DueDateField } from './ticket-fields/DueDateField';
+import { StartEndDateFields } from './ticket-fields/StartEndDateFields';
 import { TypeField } from './ticket-fields/TypeField';
 import { ParentField } from './ticket-fields/ParentField';
 import { useTicketForm, type TicketFormValues } from '@/hooks/useTicketForm';
@@ -23,10 +23,8 @@ import type { UpdateTicketDto } from '@/types/ticket';
 // The defaultValues prop widens statusColumn/dueDate to optional so existing
 // callers (CreateTicketModal, TicketDetailModal) keep their unchanged props
 // contract — they're merged with sane defaults here.
-export type TicketAttributeFormDefaultValues = Partial<
-    Pick<TicketFormValues, 'statusColumn' | 'dueDate'>
-> &
-    Omit<TicketFormValues, 'statusColumn' | 'dueDate'>;
+export type TicketAttributeFormDefaultValues = Partial<Pick<TicketFormValues, 'statusColumn'>> &
+    Omit<TicketFormValues, 'statusColumn'>;
 
 interface TicketAttributeFormProps {
     mode: 'create' | 'edit';
@@ -50,11 +48,14 @@ export function TicketAttributeForm({
     const methods = useTicketForm({
         defaultValues: {
             statusColumn: '',
-            dueDate: null,
             ...defaultValues,
         },
         onSubmit: (values) => onSubmit(values as UpdateTicketDto),
         onDirtyChange,
+        // CR-10: the CREATE flow is strict (description + explicit priority);
+        // the EDIT flow (modal) seeds stored values and stays lenient.
+        requireDescription: mode === 'create',
+        requirePriority: mode === 'create',
     });
 
     const { handleSubmit, formState } = methods;
@@ -90,7 +91,7 @@ export function TicketAttributeForm({
                         <ParentField projectSlug={projectSlug} readOnly={readOnly} />
                         <PriorityField />
                         <AssigneeField projectSlug={projectSlug} />
-                        <DueDateField />
+                        <StartEndDateFields readOnly={readOnly} />
                         <LabelsField projectSlug={projectSlug} />
                         <ChecklistField />
                     </div>

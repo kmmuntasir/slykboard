@@ -51,9 +51,13 @@ function create(
     slug,
     creatorId: userId,
     title: args.title,
+    description: 'Fixture description',
+    priority: 'MEDIUM',
+    statusColumn: args.statusColumn ?? C1,
+    startDate: new Date().toISOString(),
+    endDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
     type: args.type,
     parentId: args.parentId ?? null,
-    statusColumn: args.statusColumn,
   });
 }
 

@@ -37,7 +37,7 @@ import {
     StatusField,
     PriorityField,
     AssigneeField,
-    DueDateField,
+    StartEndDateFields,
     LabelsField,
     ChecklistField,
     TypeField,
@@ -140,11 +140,12 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         const dto: UpdateTicketDto = {
             title: values.title,
             description: values.description,
-            priority: values.priority,
+            priority: values.priority ?? undefined,
             assigneeId: values.assigneeId,
             labelIds: values.labelIds,
             checklist: values.checklist,
-            dueDate: values.dueDate ?? null,
+            startDate: values.startDate ?? undefined,
+            endDate: values.endDate ?? undefined,
             type: values.type,
             parentId: values.parentId,
         };
@@ -191,7 +192,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             labelIds: ticket.labels.map((l) => l.id),
             checklist: ticket.checklist,
             statusColumn: ticket.statusColumn,
-            dueDate: ticket.dueDate ?? null,
+            startDate: ticket.startDate,
+            endDate: ticket.endDate,
             type: ticket.type,
             parentId: ticket.parentId,
         });
@@ -439,7 +441,7 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                     <ParentField projectSlug={slug} />
                                     <PriorityField />
                                     <AssigneeField projectSlug={slug} />
-                                    <DueDateField />
+                                    <StartEndDateFields />
                                     <LabelsField projectSlug={slug} />
                                     <ChecklistField />
                                 </TabsContent>
@@ -563,7 +565,8 @@ const EMPTY_DEFAULT_VALUES: TicketFormValues = {
     labelIds: [],
     checklist: [],
     statusColumn: '',
-    dueDate: null,
+    startDate: null,
+    endDate: null,
     type: 'TASK',
     parentId: null,
 };

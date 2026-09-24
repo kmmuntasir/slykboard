@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v7 — CR-01 … CR-06, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v8 — CR-01 … CR-06, CR-10, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -368,7 +368,16 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Ticket Constraints: Required (no Default value): Title, Description, Status, Priority, Due Date (Alternative needed: Start Date and End Date). Optional: Labels, Checklist."_
 
-**Status:** Change to existing validation/schema.
+**Status:** **DONE — implemented 2026-09-25.**
+
+**Implementation notes (2026-09-25)**
+
+- Migration `0004_cr10_required_fields.sql` (backfill runs before every constraint): `end_date` added and backfilled from `due_date`/`created_at`, legacy NULL descriptions set to `''`, `description` and `priority` constraints tightened (the MEDIUM default is dropped), `due_date` renamed to `start_date`, then `start_date` + `end_date` set NOT NULL. Applied to the dev and test databases.
+- API: create requires `title`, `description` (non-empty), `statusColumn`, `priority`, `startDate`, `endDate`, with `endDate > startDate` enforced by a shared schema refinement. PATCH accepts the window as optional-but-not-nullable (a move-only patch doesn't resend it) and rejects an inverted window; description can be edited but never cleared (empty legacy strings stay editable).
+- Frontend: `StartEndDateFields` (native datetime-local) replaces `DueDateField` on create + edit; Start pre-fills with "right now" and End must be picked; the form schema is mode-aware (`makeTicketFormSchema`) so CREATE requires a description + an explicit priority (no MEDIUM default) while EDIT tolerates legacy blanks. `PrioritySelect` renders a "not set" state for null.
+- FR-10.6 overdue chip: cards past their `endDate` show an Overdue badge, except in the project's last column; it self-refreshes each minute.
+- OQ-10b: the backfill used the more truthful reading (start = created_at, end = due_date when it is after creation, else created_at) rather than both = created_at — flagged here for client review.
+- Tests: 9 route cases for the required-field matrix + 7 form-contract cases + 3 card overdue cases; suites green (backend 938, frontend 1123).
 
 **Requirement:** At ticket creation, Title, Description, Status, Priority, and a date (Due Date, or the Start/End pair — see decision below) are mandatory with **no defaults**. Labels and Checklist remain optional.
 
@@ -610,7 +619,7 @@ What exists today (verified against the code, not the PRD):
 
 | Phase | CRs | Rationale |
 | --- | --- | --- |
-| 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-11 ✅, CR-12 ✅ (all done 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget), CR-10 | Small, independent, high client visibility; unblock daily usage. |
+| 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-10 ✅, CR-11 ✅, CR-12 ✅ (all done 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget) | Small, independent, high client visibility; unblock daily usage. |
 | 2 — Time integrity & forensics | CR-14, CR-08 | Make recorded time trustworthy and explainable before building more reporting on it. |
 | 3 — Hierarchy & reports | CR-03 ✅, CR-04 ✅, CR-05 ✅ (all done 2026-09-25), CR-06 | Largest chunk; CR-03/04/05 shipped; CR-06 remains. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |
@@ -631,6 +640,7 @@ What exists today (verified against the code, not the PRD):
 | OQ-03e | CR-03 | Intermediate parents (Story/Task with children) auto-progress exactly like Epics. |
 | OQ-04a | CR-04 | Roll-ups ship with the auto/manual split (proposed default applied at implementation). |
 | OQ-06a/b | CR-06 | Weekly/monthly windows kept and no CSV export in this CR (proposed defaults applied). |
+| OQ-10b | CR-10 | Backfill applied: start = created_at, end = due_date (floored at created_at) — awaiting client review. |
 | Feature | CR-02 | Existing label flow confirmed sufficient; no work needed. |
 | OQ-08a | CR-08 | Show tracked working time per column alongside wall-clock residence. |
 | OQ-09a | CR-09 | Keep auto-stop; add explicit confirmation naming the currently tracked task. |
@@ -643,6 +653,5 @@ What exists today (verified against the code, not the PRD):
 
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
-| OQ-10b | CR-10 | Backfill values for existing tickets? | Mechanical + review |
 | OQ-14b | CR-14 | Flag adjusted totals in reports? | Yes |
 | OQ-14c | CR-14 | Single overwrite vs adjustment ledger? | Single overwrite |

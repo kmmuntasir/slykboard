@@ -18,7 +18,9 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     assignee: null,
     creator: null,
     creatorId: 'user-1',
-    dueDate: null,
+    // CR-10: required schedule window (endDate is the due date).
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2027-01-08T00:00:00.000Z',
     type: 'TASK',
     parentId: null,
     parent: null,

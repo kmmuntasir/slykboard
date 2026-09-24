@@ -167,22 +167,31 @@ export const tickets = pgTable(
       .references(() => projects.id),
     ticketNumber: integer('ticket_number').notNull(),
     title: text('title').notNull(),
-    description: text('description'),
+    // CR-10: description is REQUIRED (no default); empty strings are allowed so
+    // legacy rows stay editable — the create path enforces non-empty.
+    description: text('description').notNull(),
     statusColumn: text('status_column').notNull(),
     position: doublePrecision('position').notNull().default(0),
     assigneeId: uuid('assignee_id').references(() => users.id),
     creatorId: uuid('creator_id')
       .notNull()
       .references(() => users.id),
-    priority: priorityEnum('priority').default('MEDIUM').notNull(),
+    // CR-10: the MEDIUM default is dropped — the create path must carry an
+    // explicit priority (existing rows are backfilled by the migration).
+    priority: priorityEnum('priority').notNull(),
     // CR-03: hierarchy type + optional parent (self-FK). Rank rules are enforced
     // in ticketService (assertHierarchyRules) — a DB CHECK across rows isn't
     // practical; the service runs inside the mutation transaction.
     type: ticketTypeEnum('type').default('TASK').notNull(),
     parentId: uuid('parent_id').references((): AnyPgColumn => tickets.id),
-    // T1: optional due date. Nullable — NULL (default) = no due date set.
-    // timestamptz to match createdAt/updatedAt convention.
-    dueDate: timestamp('due_date', { withTimezone: true, mode: 'date' }),
+    // CR-10: required schedule window (replaces the optional due_date). endDate
+    // is the due date — overdue signals derive from it. Both are NOT NULL in the
+    // DB; the create path requires them and validates endDate > startDate.
+    // CR-10: required schedule window (replaces the optional due_date). endDate
+    // is the due date — overdue signals derive from it. Both are NOT NULL in the
+    // DB; the create path requires them and validates endDate > startDate.
+    startDate: timestamp('start_date', { withTimezone: true, mode: 'date' }).notNull(),
+    endDate: timestamp('end_date', { withTimezone: true, mode: 'date' }).notNull(),
     // F15 D1: checklist JSONB array of {id, text, done}. Defaults to [] so a new
     // ticket starts empty (createTicket needs no checklist arg). Copy the
     // projects.columns jsonb $type idiom (schema.ts:66).

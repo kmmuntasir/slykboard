@@ -30,6 +30,8 @@ describe('TicketCard', () => {
         assignee: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
         creator: null,
         creatorId: 'c1',
+        startDate: '2026-01-01T00:00:00.000Z',
+        endDate: '2027-01-08T00:00:00.000Z',
         type: 'TASK' as const,
         parentId: null,
         parent: null,
@@ -254,5 +256,46 @@ describe('TicketCard', () => {
         );
         expect(screen.getByText('running')).toBeInTheDocument();
         expect(screen.getByText('30s')).toBeInTheDocument();
+    });
+
+    // ---- CR-10: overdue signal ----------------------------------------------
+
+    it('CR-10: marks a past-due ticket Overdue', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{
+                    ...baseTicket,
+                    startDate: '2026-01-01T00:00:00.000Z',
+                    endDate: '2026-02-01T00:00:00.000Z',
+                }}
+                projectSlug="SLYK"
+                index={0}
+                lastColumnId="DONE"
+            />,
+        );
+        expect(screen.getByLabelText('Overdue')).toBeInTheDocument();
+    });
+
+    it('CR-10: a past-due ticket in the last column is NOT overdue (resolved)', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{
+                    ...baseTicket,
+                    statusColumn: 'DONE',
+                    endDate: '2026-02-01T00:00:00.000Z',
+                }}
+                projectSlug="SLYK"
+                index={0}
+                lastColumnId="DONE"
+            />,
+        );
+        expect(screen.queryByLabelText('Overdue')).not.toBeInTheDocument();
+    });
+
+    it('CR-10: a future-due ticket is not overdue', () => {
+        renderInDnd(
+            <TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} lastColumnId="DONE" />,
+        );
+        expect(screen.queryByLabelText('Overdue')).not.toBeInTheDocument();
     });
 });

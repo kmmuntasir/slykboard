@@ -380,6 +380,18 @@ describe('GET /:slug/board (F09)', () => {
 });
 
 describe('POST /:slug/tickets (F12)', () => {
+  // CR-10: create requires title, description, status, priority, and the
+  // Start/End window — every valid request spreads this base payload.
+  const required = {
+    description: 'Fixture description',
+    priority: 'MEDIUM',
+    statusColumn: 'c1',
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2026-01-02T00:00:00.000Z',
+  } as const;
+  const startIso = '2026-01-01T00:00:00.000Z';
+  const due = '2026-12-31T23:59:59.000Z';
+
   const ticketPayload = {
     id: 't1',
     ticketNumber: 1,
@@ -397,7 +409,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New' });
+      .send({ ...required, title: 'New' });
     expect(res.status).toBe(201);
     expect(res.body.data.ticketNumber).toBe(1);
     expect(res.body.data.title).toBe('New');
@@ -411,12 +423,18 @@ describe('POST /:slug/tickets (F12)', () => {
     await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New' });
-    expect(mockedCreateTicket).toHaveBeenCalledWith({
-      slug: 'SLYK',
-      creatorId: 'u1',
-      title: 'New',
-    });
+      .send({ ...required, title: 'New' });
+    expect(mockedCreateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'SLYK',
+        creatorId: 'u1',
+        title: 'New',
+        description: required.description,
+        priority: required.priority,
+        startDate: required.startDate,
+        endDate: required.endDate,
+      }),
+    );
   });
 
   it('returns 404 NOT_FOUND on unknown slug (service throws)', async () => {
@@ -427,7 +445,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New' });
+      .send({ ...required, title: 'New' });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
@@ -465,10 +483,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({
-        title: 'X',
-        description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH),
-      });
+      .send({ ...required, title: 'X', description: 'x'.repeat(TICKET_DESCRIPTION_MAX_LENGTH) });
     expect(res.status).toBe(201);
   });
 
@@ -477,7 +492,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'X', priority: 'BOGUS' });
+      .send({ ...required, title: 'X', priority: 'BOGUS' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
@@ -487,13 +502,20 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/slyk/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New' });
+      .send({ ...required, title: 'New' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
   it('returns 401 UNAUTHENTICATED without Bearer (createTicket NOT called)', async () => {
-    const res = await request(app).post('/api/projects/SLYK/tickets').send({ title: 'New' });
+    const res = await request(app).post('/api/projects/SLYK/tickets').send({
+      title: 'New',
+      description: 'Fixture description',
+      priority: 'MEDIUM',
+      statusColumn: 'c1',
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2026-01-02T00:00:00.000Z',
+    });
     expect(res.status).toBe(401);
     expect(mockedCreateTicket).not.toHaveBeenCalled();
   });
@@ -506,7 +528,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New' });
+      .send({ ...required, title: 'New' });
     expect(res.status).toBe(201);
   });
 
@@ -518,7 +540,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(true)}`)
-      .send({ title: 'New' });
+      .send({ ...required, title: 'New' });
     expect(res.status).toBe(201);
   });
 
@@ -530,13 +552,13 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New' });
+      .send({ ...required, title: 'New' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
   });
 
-  // T1: dueDate on create flows through to createTicket.
-  it('passes dueDate through to createTicket (ISO datetime)', async () => {
+  // CR-10: the schedule window flows through to createTicket.
+  it('passes the schedule window through to createTicket (ISO datetimes)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedCreateTicket.mockResolvedValue(
       ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
@@ -545,13 +567,10 @@ describe('POST /:slug/tickets (F12)', () => {
     await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New', dueDate: due });
-    expect(mockedCreateTicket).toHaveBeenCalledWith({
-      slug: 'SLYK',
-      creatorId: 'u1',
-      title: 'New',
-      dueDate: due,
-    });
+      .send({ ...required, title: 'New', startDate: startIso, endDate: due });
+    expect(mockedCreateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({ startDate: startIso, endDate: due }),
+    );
   });
 
   it('passes type + parentId through to createTicket (CR-03)', async () => {
@@ -563,11 +582,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({
-        title: 'Hierarchy ticket',
-        type: 'EPIC',
-        parentId: null,
-      });
+      .send({ ...required, title: 'Hierarchy ticket', type: 'EPIC', parentId: null });
 
     expect(res.status).toBe(201);
     expect(mockedCreateTicket).toHaveBeenCalledWith(
@@ -587,23 +602,11 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'T', type: 'THEME' });
+      .send({ ...required, title: 'T', type: 'THEME' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedCreateTicket).not.toHaveBeenCalled();
-  });
-
-  it('passes dueDate: null through to createTicket (no due date)', async () => {
-    mockedFindVersion.mockResolvedValue(0);
-    mockedCreateTicket.mockResolvedValue(
-      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
-    );
-    await request(app)
-      .post('/api/projects/SLYK/tickets')
-      .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New', dueDate: null });
-    expect(mockedCreateTicket).toHaveBeenCalledWith(expect.objectContaining({ dueDate: null }));
   });
 
   it('returns 400 VALIDATION_FAILED for non-ISO dueDate (createTicket NOT called)', async () => {
@@ -611,7 +614,7 @@ describe('POST /:slug/tickets (F12)', () => {
     const res = await request(app)
       .post('/api/projects/SLYK/tickets')
       .set('Authorization', `Bearer ${await tokenFor(false)}`)
-      .send({ title: 'New', dueDate: 'not-a-date' });
+      .send({ ...required, title: 'New', startDate: 'not-a-date', endDate: due });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedCreateTicket).not.toHaveBeenCalled();
@@ -1155,5 +1158,73 @@ describe('PATCH /api/projects/:slug/columns (CR-01)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// CR-10: required fields on create — no defaults anywhere.
+describe('POST /:slug/tickets required fields (CR-10)', () => {
+  beforeEach(() => {
+    mockedGetBySlug.mockResolvedValue(projectRow as never);
+  });
+
+  const valid = {
+    title: 'Complete ticket',
+    description: 'Details',
+    priority: 'MEDIUM',
+    statusColumn: 'c1',
+    startDate: '2026-01-01T00:00:00.000Z',
+    endDate: '2026-01-08T00:00:00.000Z',
+  };
+
+  it('201 for a fully specified create', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue({
+      id: 'ticket-1',
+      ticketNumber: 1,
+      title: valid.title,
+    } as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>);
+
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send(valid);
+
+    expect(res.status).toBe(201);
+    expect(mockedCreateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Details',
+        priority: 'MEDIUM',
+        statusColumn: 'c1',
+        startDate: valid.startDate,
+        endDate: valid.endDate,
+      }),
+    );
+  });
+
+  const incomplete: Array<{ name: string; body: Record<string, unknown> }> = [
+    { name: 'missing description', body: { ...valid, description: undefined } },
+    { name: 'empty description', body: { ...valid, description: '' } },
+    { name: 'missing priority', body: { ...valid, priority: undefined } },
+    { name: 'missing statusColumn', body: { ...valid, statusColumn: undefined } },
+    { name: 'missing startDate', body: { ...valid, startDate: undefined } },
+    { name: 'missing endDate', body: { ...valid, endDate: undefined } },
+    { name: 'end before start', body: { ...valid, startDate: '2026-02-01T00:00:00.000Z' } },
+    { name: 'end equal to start', body: { ...valid, endDate: valid.startDate } },
+    { name: 'non-ISO start', body: { ...valid, startDate: 'tomorrow' } },
+  ];
+
+  incomplete.forEach(({ name, body }) => {
+    it(`400 VALIDATION_FAILED — ${name} (createTicket NOT called)`, async () => {
+      mockedFindVersion.mockResolvedValue(0);
+
+      const res = await request(app)
+        .post('/api/projects/SLYK/tickets')
+        .set('Authorization', `Bearer ${await tokenFor(false)}`)
+        .send(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+      expect(mockedCreateTicket).not.toHaveBeenCalled();
+    });
   });
 });

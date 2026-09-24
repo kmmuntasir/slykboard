@@ -68,23 +68,36 @@ export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 // against the project's columns in the service (needs the project to be loaded first).
 // F14: labelIds widened to uuid().array() (label catalog IDs, not free-text).
 // Renamed labels -> labelIds for symmetry with updateTicketBody + createTicket input.
-export const createTicketBody = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().max(TICKET_DESCRIPTION_MAX_LENGTH).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']).optional(),
-  labelIds: z.array(z.string().uuid()).optional(),
-  assigneeId: z.uuid().optional(),
-  statusColumn: z.string().min(1).optional(),
-  // T1: optional due date (ISO 8601 datetime). null/absent = no due date.
-  dueDate: z.string().datetime().nullable().optional(),
-  // F15: optional checklist at create time. Defaults to [] via the DB column
-  // when omitted; validated with the same sub-schema as the PATCH path.
-  checklist: z.array(checklistItemSchema).max(50).optional(),
-  // CR-03: hierarchy fields. Rank rules + subtask-needs-parent are enforced in
-  // ticketService (assertHierarchyRules) inside the creation transaction.
-  type: z.enum(['EPIC', 'STORY', 'TASK', 'SUBTASK']).optional(),
-  parentId: z.string().uuid().nullable().optional(),
-});
+// CR-10: every create input is REQUIRED with no server default — title,
+// description (non-empty), status, priority, and the Start/End window. The
+// window rule (end after start) is enforced by the schema superRefine below.
+export const createTicketBody = z
+  .object({
+    title: z.string().min(1).max(200),
+    description: z.string().min(1, 'Description is required').max(TICKET_DESCRIPTION_MAX_LENGTH),
+    priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
+    labelIds: z.array(z.string().uuid()).optional(),
+    assigneeId: z.uuid().optional(),
+    statusColumn: z.string().min(1),
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+    // F15: optional checklist at create time. Defaults to [] via the DB column
+    // when omitted; validated with the same sub-schema as the PATCH path.
+    checklist: z.array(checklistItemSchema).max(50).optional(),
+    // CR-03: hierarchy fields. Rank rules + subtask-needs-parent are enforced in
+    // ticketService (assertHierarchyRules) inside the creation transaction.
+    type: z.enum(['EPIC', 'STORY', 'TASK', 'SUBTASK']).optional(),
+    parentId: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (new Date(body.endDate).getTime() <= new Date(body.startDate).getTime()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'End date must be after the start date',
+        path: ['endDate'],
+      });
+    }
+  });
 
 export type CreateTicketBody = z.infer<typeof createTicketBody>;
 
