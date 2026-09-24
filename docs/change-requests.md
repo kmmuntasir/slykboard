@@ -1,0 +1,23 @@
+- Project Admin should be add/modify columns or column order for his project.
+- Project Admin needs to be able to add label for his project.
+- Epic/Story/Task/Subtask needed
+- Time Tracking Report for Entire Epic/Story/Task is needed
+- Individual Breakdown of Time Tracking for an Epic/Story/Task
+- Member-wise Time Tracking Report with Breakdown
+- Member-wise Comparative Time Tracking chart (segmented bar chart) - We need to dicsuss this - deferred.
+- Column-wise Time Tracking for Individual Task or Subtask, sortable and filterable (we need to know how long this ticket was in ToDo, then how long it was in "In Progress", etc)
+- A Member should be able to track time for one ticket only at once - in the whole platform.
+- Ticket Constraints:
+	Required (no Default value):
+		- Title
+		- Description
+		- Status
+		- Priority
+		- Due Date (Alternative needed: Start Date and End Date)
+	Optional:
+		- Labels
+		- Checklist
+- A single tracking duration should show whether it was Auto tracked or Manually Input Tracked
+- Time Tracking summary beside the Ticket Title and Board view
+- Recurring Tasks - need to think about the business logic and decide (Examples: Weekly bKash Lunch Booking [every Thursday 6 pm a PX member needs to send this booking email], Daily Expenses Record [every day a PX member need to finish the daily expenses record at 7 pm])
+- Manual adjustment of auto-tracked time (need to be recorded) [Example: A member starts a task, works for 30 minutes, then for an extreme urgency, he has to leave the desk. He comes back 2 hours later, and then he stops the timer. It shows 2 hours and 30 minutes. He should be perform a manual adjustment - increase or decrease - with a mandatory "Reason" text field]
