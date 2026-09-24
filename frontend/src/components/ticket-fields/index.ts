@@ -10,3 +10,6 @@ export { AssigneeField } from './AssigneeField';
 export { DueDateField } from './DueDateField';
 export { LabelsField } from './LabelsField';
 export { ChecklistField } from './ChecklistField';
+// CR-03: hierarchy fields.
+export { TypeField } from './TypeField';
+export { ParentField } from './ParentField';

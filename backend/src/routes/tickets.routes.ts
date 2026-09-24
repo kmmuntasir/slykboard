@@ -114,7 +114,9 @@ ticketsRouter.patch(
       body.assigneeId !== undefined ||
       body.labelIds !== undefined ||
       body.checklist !== undefined ||
-      body.dueDate !== undefined;
+      body.dueDate !== undefined ||
+      body.type !== undefined ||
+      body.parentId !== undefined;
 
     if (hasAttributeFields) {
       const { new: updated } = await ticketService.updateTicket({
@@ -127,6 +129,8 @@ ticketsRouter.patch(
           labelIds: body.labelIds,
           checklist: body.checklist,
           dueDate: body.dueDate,
+          type: body.type,
+          parentId: body.parentId,
         },
         actingUserId: req.user!.id,
       });
@@ -168,7 +172,9 @@ ticketsRouter.delete(
   requireProjectAdmin(),
   async (req, res) => {
     const { ticketId } = req.params as TicketIdParam;
-    await ticketService.deleteTicket(ticketId);
+    // CR-03: actingUserId lets the delete-driven recompute attribute the parent
+    // chain's auto-moves to the deleting admin.
+    await ticketService.deleteTicket(ticketId, req.user!.id);
     res.status(204).end();
   },
 );

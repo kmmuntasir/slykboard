@@ -34,7 +34,9 @@ const membershipMock = vi.hoisted(() => ({
 vi.mock('../db/client', () => ({
   db: {
     transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({}),
-    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(projectRows.rows) }) }) }),
+    select: () => ({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve(projectRows.rows) }) }),
+    }),
   },
 }));
 vi.mock('../services/membershipService', () => ({
@@ -92,9 +94,7 @@ beforeEach(() => {
   mockedGetTicket.mockResolvedValue(makeTicketRow() as never);
   membershipMock.isProjectMember.mockResolvedValue(true);
   membershipMock.getMemberRole.mockResolvedValue('MEMBER');
-  projectRows.rows = [
-    { id: '22222222-2222-4222-8222-222222222222', slug: 'SLYK', name: 'Slyk' },
-  ];
+  projectRows.rows = [{ id: '22222222-2222-4222-8222-222222222222', slug: 'SLYK', name: 'Slyk' }];
 });
 
 function tokenFor(isPlatformAdmin: boolean) {
@@ -384,6 +384,58 @@ describe('PATCH /api/tickets/:ticketId attributes (F13)', () => {
       actingUserId: 'u1',
     });
     expect(mockedMoveTicket).not.toHaveBeenCalled();
+  });
+
+  // CR-03: hierarchy fields ride the attribute patch.
+  it('200 passes type + parentId through to updateTicket (CR-03)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow({}),
+      new: makeTicketRow({}),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ type: 'STORY', parentId: '22222222-2222-4222-8222-222222222222' });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticketId: VALID_TICKET_ID,
+        patch: expect.objectContaining({
+          type: 'STORY',
+          parentId: '22222222-2222-4222-8222-222222222222',
+        }),
+        actingUserId: 'u1',
+      }),
+    );
+  });
+
+  it('400 VALIDATION_FAILED on invalid type enum (CR-03)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ type: 'THEME' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
+  });
+
+  it('400 VALIDATION_FAILED on non-uuid parentId (CR-03)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ parentId: 'not-a-uuid' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).not.toHaveBeenCalled();
   });
 
   it('200 description is sanitized in response (service strips <script>)', async () => {
@@ -860,7 +912,7 @@ describe('PATCH /api/tickets/:ticketId dueDate (T1)', () => {
 describe('DELETE /api/tickets/:ticketId (F17)', () => {
   it('204 soft-deletes ticket when ADMIN', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedDeleteTicket.mockResolvedValue(undefined);
+    mockedDeleteTicket.mockResolvedValue({ deletedCount: 1 });
 
     const res = await request(app)
       .delete(`/api/tickets/${VALID_TICKET_ID}`)
@@ -868,21 +920,22 @@ describe('DELETE /api/tickets/:ticketId (F17)', () => {
 
     expect(res.status).toBe(204);
     expect(res.body).toEqual({});
-    expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID);
+    // CR-03: the acting user id rides along for the delete-driven recompute.
+    expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID, 'u1');
   });
 
   it('204 soft-deletes ticket when PROJECT_ADMIN (resolved decision: PA OR Project Admin)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     // Non-PA caller whose project membership tier is PROJECT_ADMIN.
     membershipMock.getMemberRole.mockResolvedValue('PROJECT_ADMIN');
-    mockedDeleteTicket.mockResolvedValue(undefined);
+    mockedDeleteTicket.mockResolvedValue({ deletedCount: 1 });
 
     const res = await request(app)
       .delete(`/api/tickets/${VALID_TICKET_ID}`)
       .set('Authorization', `Bearer ${await tokenFor(false)}`);
 
     expect(res.status).toBe(204);
-    expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID);
+    expect(mockedDeleteTicket).toHaveBeenCalledWith(VALID_TICKET_ID, 'u1');
   });
 
   it('401 without token', async () => {

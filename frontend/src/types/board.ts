@@ -13,9 +13,19 @@ export interface BoardColumn {
   tickets: Ticket[];
 }
 
+// CR-03 FR-03.8: epic roll-up row for the Epics view.
+export interface EpicSummary {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  descendantCount: number;
+  doneDescendantCount: number;
+}
+
 export interface BoardPayload {
   project: { id: string; name: string; slug: string };
   columns: BoardColumn[];
+  epics: EpicSummary[];
 }
 
 // Re-export for ergonomics (BoardColumn already overlaps Column id/name).

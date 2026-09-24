@@ -9,38 +9,41 @@ import { ticketFormSchema, TICKET_DESCRIPTION_MAX_LENGTH } from './useTicketForm
 
 /** A complete, valid `TicketFormValues` object with a variable description. */
 const validWith = (description: string) => ({
-    title: 'Valid title',
-    description,
-    priority: 'MEDIUM' as const,
-    assigneeId: null,
-    labelIds: [],
-    checklist: [],
-    statusColumn: 'todo',
-    dueDate: null,
+  title: 'Valid title',
+  description,
+  priority: 'MEDIUM' as const,
+  assigneeId: null,
+  labelIds: [],
+  checklist: [],
+  statusColumn: 'todo',
+  dueDate: null,
+  // CR-03: hierarchy fields (subtask-needs-parent is validated separately).
+  type: 'TASK' as const,
+  parentId: null,
 });
 
 describe.each([
-    { chars: TICKET_DESCRIPTION_MAX_LENGTH + 1, accepted: false },
-    { chars: TICKET_DESCRIPTION_MAX_LENGTH, accepted: true },
+  { chars: TICKET_DESCRIPTION_MAX_LENGTH + 1, accepted: false },
+  { chars: TICKET_DESCRIPTION_MAX_LENGTH, accepted: true },
 ])('ticketFormSchema description length (chars=$chars)', ({ chars, accepted }) => {
-    const description = 'x'.repeat(chars);
+  const description = 'x'.repeat(chars);
 
-    it(accepted ? 'accepts at the limit' : 'rejects over the limit', () => {
-        const result = ticketFormSchema.safeParse(validWith(description));
+  it(accepted ? 'accepts at the limit' : 'rejects over the limit', () => {
+    const result = ticketFormSchema.safeParse(validWith(description));
 
-        if (accepted) {
-            expect(result.success).toBe(true);
-            return;
-        }
+    if (accepted) {
+      expect(result.success).toBe(true);
+      return;
+    }
 
-        expect(result.success).toBe(false);
-        if (!result.success) {
-            const message = result.error.issues
-                .find((issue) => issue.path.join('.') === 'description')
-                ?.message;
-            expect(message).toContain(
-                `Description must be ${TICKET_DESCRIPTION_MAX_LENGTH} chars or fewer`,
-            );
-        }
-    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const message = result.error.issues.find(
+        (issue) => issue.path.join('.') === 'description',
+      )?.message;
+      expect(message).toContain(
+        `Description must be ${TICKET_DESCRIPTION_MAX_LENGTH} chars or fewer`,
+      );
+    }
+  });
 });

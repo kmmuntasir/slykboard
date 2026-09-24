@@ -35,6 +35,8 @@ const DEFAULT_VALUES: TicketFormValues = {
     assigneeId: null,
     labelIds: [],
     checklist: [],
+    type: 'TASK' as const,
+    parentId: null,
     statusColumn: 'TODO',
     dueDate: null,
 };
@@ -163,9 +165,7 @@ describe('DescriptionField (DEL-02 read-first / edit-on-demand)', () => {
         // Editor is already shown because the parent drove `isEditing` true.
         expect(screen.getByLabelText('Description')).toBeInTheDocument();
         // No Edit button while editing.
-        expect(
-            screen.queryByRole('button', { name: 'Edit description' }),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Edit description' })).not.toBeInTheDocument();
     });
 
     // (g) Regression: when editing, the RichTextEditor MUST NOT be a descendant

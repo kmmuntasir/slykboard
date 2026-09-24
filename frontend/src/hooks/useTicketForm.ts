@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { TICKET_TYPE_RANK, type TicketType } from '@/types/ticket';
 
 // DEL-01 T6: shared React Hook Form instance for the ticket attributes form.
 // Owns the single RHF setup (zodResolver + schema + defaultValues + dirty-hoist)
@@ -16,62 +17,89 @@ import { z } from 'zod';
 // DEL-03 T2: unified description length ceiling (10_000) shared by create + edit.
 export const TICKET_DESCRIPTION_MAX_LENGTH = 10_000;
 
-export const ticketFormSchema = z.object({
+export const ticketFormSchema = z
+  .object({
     title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 chars or fewer'),
-    description: z.string().max(
+    description: z
+      .string()
+      .max(
         TICKET_DESCRIPTION_MAX_LENGTH,
         `Description must be ${TICKET_DESCRIPTION_MAX_LENGTH} chars or fewer`,
-    ),
+      ),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
     assigneeId: z.string().uuid().nullable(),
     labelIds: z.array(z.string().uuid()).default([]),
     checklist: z
-        .array(
-            z.object({
-                id: z.string().uuid(),
-                text: z.string().min(1).max(200),
-                done: z.boolean(),
-            }),
-        )
-        .max(50)
-        .default([]),
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          text: z.string().min(1).max(200),
+          done: z.boolean(),
+        }),
+      )
+      .max(50)
+      .default([]),
     // DEL-01: status bound to the project's columns (expose-only; routed via
     // moveTicket in the edit modal, persisted directly at create).
     statusColumn: z.string(),
     // DEL-01: nullable ISO datetime (backend z.string().datetime().nullable()).
     dueDate: z.string().datetime().nullable().optional(),
-});
+    // CR-03: hierarchy fields. Rank rules are enforced server-side; the form
+    // only guards the structural invariant (subtask needs a parent).
+    type: z.enum(['EPIC', 'STORY', 'TASK', 'SUBTASK']),
+    parentId: z.string().uuid().nullable(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.type === 'SUBTASK' && !values.parentId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A subtask must have a parent ticket',
+        path: ['parentId'],
+      });
+    }
+  });
 
 export type TicketFormValues = z.infer<typeof ticketFormSchema>;
 
 export interface UseTicketFormArgs {
-    defaultValues: TicketFormValues;
-    /**
-     * Submit handler. Hosts bind it via the returned `methods.handleSubmit(onSubmit)`
-     * so the RHF validation gate (zodResolver) runs before values reach the host.
-     * Kept in the signature so the host passes it once and threads it into
-     * handleSubmit at the <form> site.
-     */
-    onSubmit: (values: TicketFormValues) => void | Promise<void>;
-    /** F16: surface dirty state to the host so it can guard close/navigation. */
-    onDirtyChange?: (dirty: boolean) => void;
+  defaultValues: TicketFormValues;
+  /**
+   * Submit handler. Hosts bind it via the returned `methods.handleSubmit(onSubmit)`
+   * so the RHF validation gate (zodResolver) runs before values reach the host.
+   * Kept in the signature so the host passes it once and threads it into
+   * handleSubmit at the <form> site.
+   */
+  onSubmit: (values: TicketFormValues) => void | Promise<void>;
+  /** F16: surface dirty state to the host so it can guard close/navigation. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function useTicketForm({
-    defaultValues,
-    onDirtyChange,
+  defaultValues,
+  onDirtyChange,
 }: UseTicketFormArgs): UseFormReturn<TicketFormValues> {
-    const methods = useForm<TicketFormValues>({
-        // zod@3.25 output widened; resolver lib expects narrower shape. Cast bridges gap.
-        resolver: zodResolver(ticketFormSchema as never),
-        defaultValues,
-    });
+  const methods = useForm<TicketFormValues>({
+    // zod@3.25 output widened; resolver lib expects narrower shape. Cast bridges gap.
+    resolver: zodResolver(ticketFormSchema as never),
+    defaultValues,
+  });
 
-    // F16: hoist dirty state so the host can guard close/navigation.
-    const isDirty = methods.formState.isDirty;
-    useEffect(() => {
-        onDirtyChange?.(isDirty);
-    }, [isDirty, onDirtyChange]);
+  // F16: hoist dirty state so the host can guard close/navigation.
+  const isDirty = methods.formState.isDirty;
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
-    return methods;
+  return methods;
+}
+
+// CR-03: eligible parents for a ticket of the given type — every live ticket
+// in the project whose type STRICTLY outranks it (rank rule mirror). Exported
+// for the ParentField select and for testability.
+export function eligibleParents(
+  allTickets: ReadonlyArray<{ id: string; title: string; ticketNumber: number; type: TicketType }>,
+  type: TicketType,
+): Array<{ id: string; title: string; ticketNumber: number; type: TicketType }> {
+  const rank = TICKET_TYPE_RANK[type];
+  return allTickets.filter((candidate) => TICKET_TYPE_RANK[candidate.type] > rank);
 }

@@ -67,6 +67,14 @@ vi.mock('./LabelMultiSelect', () => ({
 // implementation detail of the field (it owns useProject). Stub it here so the
 // form test stays focused on the create/edit contract; the field's data path
 // is covered by its own tests.
+
+// CR-03: ParentField owns its board fetch (like StatusField) — stubbed here so
+// the form test stays focused on the create/edit contract.
+vi.mock('./ticket-fields/ParentField', () => ({
+    ParentField: ({ projectSlug }: { projectSlug: string }) => (
+        <div aria-label="Parent" data-testid={`parent-field-${projectSlug}`} />
+    ),
+}));
 vi.mock('./ticket-fields/StatusField', () => ({
     StatusField: ({ projectSlug }: { projectSlug: string }) => (
         <select aria-label="Status" data-testid={`status-field-${projectSlug}`}>
@@ -87,6 +95,8 @@ const baseDefaults = {
     assigneeId: null,
     labelIds: [] as string[],
     checklist: [],
+    type: 'TASK' as const,
+    parentId: null,
 };
 
 describe('TicketAttributeForm', () => {
@@ -119,6 +129,8 @@ describe('TicketAttributeForm', () => {
             assigneeId: '11111111-1111-1111-1111-111111111111',
             labelIds: ['22222222-2222-2222-2222-222222222222'],
             checklist: [],
+            type: 'TASK' as const,
+            parentId: null,
         };
         render(
             <TicketAttributeForm
@@ -201,7 +213,9 @@ describe('TicketAttributeForm', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
         await waitFor(() => {
-            expect(screen.getByText('Description must be 10000 chars or fewer')).toBeInTheDocument();
+            expect(
+                screen.getByText('Description must be 10000 chars or fewer'),
+            ).toBeInTheDocument();
         });
         expect(onSubmit).not.toHaveBeenCalled();
     });
@@ -238,6 +252,8 @@ describe('TicketAttributeForm', () => {
             assigneeId: '11111111-1111-1111-1111-111111111111',
             labelIds: [],
             checklist: [],
+            type: 'TASK' as const,
+            parentId: null,
             // DEL-01 T6: the form now carries statusColumn + dueDate (merged defaults).
             statusColumn: '',
             dueDate: null,
@@ -292,6 +308,8 @@ describe('TicketAttributeForm', () => {
             assigneeId: null,
             labelIds: ['11111111-1111-1111-1111-111111111111'],
             checklist: [],
+            type: 'TASK' as const,
+            parentId: null,
             // DEL-01 T6: the form now carries statusColumn + dueDate (merged defaults).
             statusColumn: '',
             dueDate: null,
@@ -493,8 +511,12 @@ describe('F44 two-column layout', () => {
             if (submitLabel) {
                 expect(screen.getByRole('button', { name: submitLabel })).toBeInTheDocument();
             } else {
-                expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
-                expect(screen.queryByRole('button', { name: 'Create ticket' })).not.toBeInTheDocument();
+                expect(
+                    screen.queryByRole('button', { name: 'Save changes' }),
+                ).not.toBeInTheDocument();
+                expect(
+                    screen.queryByRole('button', { name: 'Create ticket' }),
+                ).not.toBeInTheDocument();
             }
 
             // (7) Cancel/Close sits OUTSIDE the disabled <fieldset> and stays

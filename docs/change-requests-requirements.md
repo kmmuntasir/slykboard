@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v3 — client answers incorporated (2026-09-25); implementation tracking started (CR-01 done). Remaining open questions in §6.2 |
+| **Document Status** | Draft v4 — CR-01, CR-02, CR-03 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -74,7 +74,7 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Project Admin needs to be able to add label for his project."_
 
-**Status:** Already implemented — needs client verification.
+**Status:** **DONE — verified with client 2026-09-25.** The existing implementation fully satisfies this CR (label CRUD is Project-Admin-gated in API + Project Settings UI); no work was needed. OQ-02a closed: nothing beyond the existing flow was requested.
 
 **Requirement:** A Project Admin must be able to add labels to their project.
 
@@ -99,7 +99,15 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Epic/Story/Task/Subtask needed"_
 
-**Status:** New feature. Parenting, delete, and epic board behavior confirmed by client (2026-09-25).
+**Status:** New feature. **DONE — implemented 2026-09-25** (client-confirmed parenting, delete, and board behavior).
+
+**Implementation notes (2026-09-25)**
+
+- **Schema + migration `0003_cr03_ticket_hierarchy.sql`:** `TicketType` enum (`EPIC | STORY | TASK | SUBTASK`), `tickets.type` (default `TASK`, backfills existing rows), `tickets.parent_id` self-FK, indexes on `parent_id` and `(project_id, type)`, plus `PARENT_CHANGED` / `TYPE_CHANGED` activity actions.
+- **Services:** rank-ordered parenting enforced in `ticketService` (`assertHierarchyRules` — parent must outrank child, same project, live; subtask requires a parent; self-parent rejected; type changes additionally validated against live children). `recomputeAncestorColumns` walks the parent chain transactionally, deriving each ancestor's column from its least-progressed live child and logging `STATUS_CHANGED` per move. `deleteTicket` cascades the soft-delete through the subtree, closes timers on every affected ticket, and recomputes the orphaned chain. The board payload carries `type`, `parent`, `epic`, `childCount`, `childDoneCount`, and an `epics[]` roll-up list.
+- **Frontend:** all four types render as board cards (type badge, epic chip, subtask parent chip + same-column nesting, child-progress + derived-column lock); Type + Parent selectors on create and edit (parent options = strictly-higher-ranked tickets, subtask-parent enforced client- and server-side); type + epic board filters; a Board | Epics view with per-epic completion bars; cascade-delete confirmation lists the descendant tree and requires a second confirmation.
+- **Tests:** 6 real-DB integration cases (rank rules, auto-progression cascade, derived-move rejection, re-parent + both-chain recompute, cascade delete, hydration summaries) + pure `earliestChildColumn` unit tests + route validation/pass-through cases; frontend suites extended (hierarchy utils, card decorations, delete tree, type/parent fields, board guard/filters/epics view). Suites green: backend 896, frontend 1093.
+- **Deferred to CR-04/CR-05:** tracked-time roll-ups in the Hierarchy panel and the Epics table (the doc's FR-03.5 time component). Child completion progress (done/total) ships here.
 
 **Requirement:** Tickets gain a type and an optional parent, forming a rank-ordered work-breakdown structure: **Epic → Story → Task → Subtask**, where Epic, Story, and Task may all exist at root level.
 
@@ -117,28 +125,29 @@ What exists today (verified against the code, not the PRD):
 
 - FR-03.1: Any project member may create tickets of any type and set/choose the parent within the rules above (creation form shows allowed parents only).
 - FR-03.2: Re-parenting an existing ticket is allowed, subject to the same rules; invalid pairings (e.g., an epic under a story, a story under a task, a root-level subtask) are rejected with `VALIDATION_FAILED`.
-- FR-03.3: Board behavior by type:
-  - Epics render as ordinary board cards (visually distinct — e.g., bolder frame or badge), positioned in the column of their least-progressed child per FR-03.9; they cannot be dragged across columns.
-  - Stories, Tasks, and Subtasks render as board cards. A subtask card is visually nested/indented under its parent's card when both are in the same column (fallback: subtask chip naming the parent).
-  - Descendants carry a colored epic chip naming their top-level epic and remain filterable by epic.
+- FR-03.3: Board behavior by type (OQ-03d — ALL types are board cards):
+  - Every type renders as an ordinary board card. Non-TASK types carry a type badge; epics are visually distinct.
+  - A parent card (one with live children) shows child progress (done/total) and a derived-column lock hint; it cannot be dragged across columns (FR-03.10).
+  - Descendants carry a colored epic chip naming their top-level epic; subtasks show a parent chip and are indented under their parent's card when both sit in the same column.
+  - Children are filterable by type (Epic/Story/Task/Subtask) and by epic ("show only EPIC X's work").
 - FR-03.4: The board gains a filter: by type (Epic/Story/Task/Subtask) and by Epic ("show only EPIC X's work").
 - FR-03.5: Parent tickets show roll-ups: total tracked time (CR-04/05) and child completion progress (`done / total` children, plus checklist progress).
 - FR-03.6: Deleting a ticket that has live descendants is allowed but guarded: the confirmation modal first shows the full descendant tree (children, grandchildren, … — display ID, type, title, rendered as a tree) and requires an explicit second confirmation ("also delete these N tickets"). On confirm, the soft-delete cascades to the entire subtree and running timers on every affected ticket are stopped (reusing the existing stop-on-delete hook).
 - FR-03.7: Activity log records `PARENT_CHANGED` and `TYPE_CHANGED` actions (old/new values carry ticket references).
 - FR-03.8: Beyond board cards, epics are visible in a dedicated "Epics" list/view (e.g., a tab on the board or Reports page) showing each epic's children count, completion %, and tracked time.
-- FR-03.9: **Epic auto-progression (client-confirmed):** an Epic's `statusColumn` is system-maintained, never manually set. It always equals the earliest board column (per `Projects.columns` order) occupied by any of its live direct children:
-  - The epic advances as its least-progressed child advances, and moves backward if a child moves backward or a less-progressed child is added or re-parented in.
-  - Recomputed inside the same transaction as the triggering mutation: child created, child moved, child soft-deleted, child re-parented in or out.
-  - An epic with no live children retains its last computed column; a freshly created epic starts in the first column.
-  - Auto-moves are logged as ordinary `STATUS_CHANGED` activity rows on the epic, attributed to the user whose action triggered the recompute.
-- FR-03.10: Manual override is prohibited: API requests that set an epic's `statusColumn` are rejected with `VALIDATION_FAILED`, and the board disables cross-column drag for epic cards. Vertical (within-column) reordering of epic cards stays allowed.
+- FR-03.9: **Parent auto-progression (client-confirmed):** a ticket's `statusColumn` is system-maintained whenever it has at least one live child — Epics, Stories, AND Tasks alike (OQ-03e). It always equals the earliest board column (per `Projects.columns` order) occupied by any of its live direct children:
+  - The parent advances as its least-progressed child advances, and moves backward if a child moves backward or a less-progressed child is added or re-parented in.
+  - Recomputed inside the same transaction as the triggering mutation: child created, child moved, child soft-deleted, child re-parented in or out (re-parenting recomputes BOTH the old and the new parent chain).
+  - A childless parent (Story/Task with no live children — the common case) keeps its current column and is freely draggable again; a freshly created epic starts in the first column.
+  - Auto-moves are logged as ordinary `STATUS_CHANGED` activity rows on the parent, attributed to the user whose action triggered the recompute. The walk stops as soon as an ancestor's column is unchanged (higher ancestors cannot be affected).
+- FR-03.10: Manual override is prohibited for tickets WITH live children: API requests that set a derived `statusColumn` are rejected with `VALIDATION_FAILED`, and the board refuses cross-column drags with an explanatory toast. Vertical (within-column) reordering stays allowed for every ticket, and cross-column drags remain allowed for childless tickets.
 
 **Acceptance criteria**
 
 - I can create an Epic, add Stories/Tasks under it, add Subtasks under those, and the rules above reject every illegal shape.
 - Filtering the board by an epic shows only its descendants; each card carries the epic chip.
-- An epic with children in To Do, In Progress, and Done sits in To Do; moving the To Do child to Done advances the epic to In Progress; when every child is Done the epic is Done; dragging a child backward pulls the epic back.
-- Attempting to move an epic across columns — via drag or API — is rejected/disabled, while reordering it within its column works.
+- An epic with children in To Do, In Progress, and Done sits in To Do; moving the To Do child to Done advances the epic to In Progress; when every child is Done the epic is Done; dragging a child backward pulls the epic back. Stories and Tasks with children behave identically.
+- Attempting to move a parent with live children across columns — via drag or API — is rejected/disabled, while reordering it within its column works; a childless ticket moves freely again.
 - Soft-deleting a leaf ticket removes it (and only it) from the board; its parent's roll-ups update.
 - Soft-deleting a parent first shows the descendant-tree confirmation modal; on confirm the whole subtree disappears, all its running timers stop, and no orphaned children remain.
 - Time entered on any descendant is reflected in the ancestors' totals (see CR-04).
@@ -151,18 +160,20 @@ What exists today (verified against the code, not the PRD):
 - Equal-type parenting (Epic under Epic, Story under Story, Task under Task) is forbidden by the strict-rank rule — flagged for client veto if same-type nesting is ever needed.
 - Any ticket type — including an Epic — can be time-tracked like any other; its own entries count toward its roll-up.
 - "Least progressed" is measured by column order in `Projects.columns` (earliest index) — not by tracked time, checklists, or dates.
-- Only direct live children drive an epic's column; grandchild positions influence the epic only through their parent's own (manual) column.
+- Only direct live children drive a parent's column; grandchild positions influence the epic only through their intermediate parent's (derived) column.
+- Childless Story/Task cards (the common case) stay freely draggable — auto-progression only applies while a ticket has children.
 
 **Resolved decisions (client, 2026-09-25)**
 
 - Epic, Story, and Task may all be root level (OQ-03a, OQ-03b).
 - Parent delete is not blocked: tree-view confirm modal + cascade soft-delete to the whole subtree (OQ-03c).
 - Epics render as board cards and auto-progress: the epic's column always mirrors its least-progressed child.
+- Every type — Epic, Story, Task, Subtask — gets a board card (OQ-03d).
+- Intermediate parents (Story with Task children, Task with Subtasks) auto-progress exactly like Epics (OQ-03e).
 
 **Open questions**
 
-- OQ-03d: Do Subtasks need their own subtask cards on the board (proposed), or are they checklist-like items only visible inside the parent detail (Jira-style)?
-- OQ-03e: Should intermediate parents (a Story with Task children, a Task with Subtasks) auto-progress the same way as Epics, or is auto-progression exclusive to Epics? *(Proposed: exclusive to Epics, per the client's wording.)*
+- None.
 
 ---
 
@@ -569,9 +580,9 @@ What exists today (verified against the code, not the PRD):
 
 | Phase | CRs | Rationale |
 | --- | --- | --- |
-| 1 — Quick wins | CR-01 ✅ (done 2026-09-25), CR-02 (verify), CR-09 (confirm UX), CR-15 (timer widget), CR-10, CR-11, CR-12 | Small, independent, high client visibility; unblock daily usage. |
+| 1 — Quick wins | CR-01 ✅ (done 2026-09-25), CR-02 ✅ (verified 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget), CR-10, CR-11, CR-12 | Small, independent, high client visibility; unblock daily usage. |
 | 2 — Time integrity & forensics | CR-14, CR-08 | Make recorded time trustworthy and explainable before building more reporting on it. |
-| 3 — Hierarchy & reports | CR-03, CR-04, CR-05, CR-06 | Largest chunk; CR-03 unblocks 04/05 and enriches 06. |
+| 3 — Hierarchy & reports | CR-03 ✅ (done 2026-09-25), CR-04, CR-05, CR-06 | Largest chunk; CR-03 unblocks 04/05 and enriches 06. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |
 
 ## 6. Decisions & Remaining Open Questions
@@ -586,6 +597,9 @@ What exists today (verified against the code, not the PRD):
 | Feature | CR-15 | Top-bar timer indicator: pulsing while tracking; dropdown with stop and restart of the last tracked card. |
 | OQ-15a | CR-15 | Manual time entries do not update the "last tracked card". |
 | OQ-15b | CR-15 | Clicking the dropdown's card title navigates to that ticket. |
+| OQ-03d | CR-03 | Epic, Story, Task, and Subtask all render as board cards. |
+| OQ-03e | CR-03 | Intermediate parents (Story/Task with children) auto-progress exactly like Epics. |
+| Feature | CR-02 | Existing label flow confirmed sufficient; no work needed. |
 | OQ-08a | CR-08 | Show tracked working time per column alongside wall-clock residence. |
 | OQ-09a | CR-09 | Keep auto-stop; add explicit confirmation naming the currently tracked task. |
 | OQ-10a | CR-10 | Start + End dates; Start pre-filled "right now"; End manually picked. |
@@ -597,9 +611,6 @@ What exists today (verified against the code, not the PRD):
 
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
-| OQ-02a | CR-02 | Anything beyond the existing label flow? | Verify via demo |
-| OQ-03d | CR-03 | Subtasks as board cards or detail-only items? | Board cards |
-| OQ-03e | CR-03 | Do intermediate parents (Story/Task with children) auto-progress like Epics? | No — Epics only |
 | OQ-04a | CR-04 | Roll-up split auto vs manual? | Yes |
 | OQ-06a | CR-06 | Custom date ranges needed now? | No (follow-up) |
 | OQ-06b | CR-06 | CSV export needed now? | No (follow-up) |

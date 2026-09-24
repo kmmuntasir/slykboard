@@ -151,6 +151,13 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
         assignee: null,
         creator: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
         creatorId: 'u1',
+        type: 'TASK' as const,
+        parentId: null,
+        parent: null,
+        children: [],
+        epic: null,
+        childCount: 0,
+        childDoneCount: 0,
         createdAt: '2026-06-01T00:00:00.000Z',
         updatedAt: '2026-06-02T00:00:00.000Z',
         ...overrides,
@@ -178,11 +185,7 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
     return createElement(
         QueryClientProvider,
         { client },
-        createElement(
-            TooltipProvider,
-            null,
-            createElement(RouterProvider, { router }),
-        ),
+        createElement(TooltipProvider, null, createElement(RouterProvider, { router })),
     );
 }
 
@@ -826,12 +829,8 @@ describe('TicketDetailModal', () => {
             'active',
         );
         // The companion (non-soft-deleted) triggers are NOT disabled.
-        expect(screen.getByRole('tab', { name: /metadata/i })).not.toHaveAttribute(
-            'data-disabled',
-        );
-        expect(screen.getByRole('tab', { name: /activity/i })).not.toHaveAttribute(
-            'data-disabled',
-        );
+        expect(screen.getByRole('tab', { name: /metadata/i })).not.toHaveAttribute('data-disabled');
+        expect(screen.getByRole('tab', { name: /activity/i })).not.toHaveAttribute('data-disabled');
 
         // Time Tracking panel content: the timer/log/manual controls are all
         // gated behind !ticket.deletedAt, so they simply don't render anywhere

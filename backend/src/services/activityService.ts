@@ -16,7 +16,9 @@ export type EnrichedActionType =
   | 'LABELS_CHANGED'
   | 'CONTENT_UPDATED'
   | 'COMMENT_EDITED'
-  | 'COMMENT_DELETED';
+  | 'COMMENT_DELETED'
+  | 'PARENT_CHANGED'
+  | 'TYPE_CHANGED';
 
 export interface ActivityActor {
   id: string;

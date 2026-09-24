@@ -24,6 +24,13 @@ describe('TicketCard', () => {
         assignee: { id: 'u1', fullName: 'Ada Lovelace', avatarUrl: 'https://example.com/a.png' },
         creator: null,
         creatorId: 'c1',
+        type: 'TASK' as const,
+        parentId: null,
+        parent: null,
+        children: [],
+        epic: null,
+        childCount: 0,
+        childDoneCount: 0,
         createdAt: '2026-06-01T00:00:00.000Z',
         updatedAt: '2026-06-01T00:00:00.000Z',
     };
@@ -105,5 +112,93 @@ describe('TicketCard', () => {
         expect(card.className).toContain('border-border');
         expect(card.className).toContain('ring-');
         expect(card.className).toContain('bg-card');
+    });
+
+    // ---- CR-03: hierarchy decorations -------------------------------------
+
+    it('CR-03: renders no type badge for a plain TASK', () => {
+        renderInDnd(<TicketCard ticket={baseTicket} projectSlug="SLYK" index={0} />);
+        expect(screen.queryByText('Task')).not.toBeInTheDocument();
+    });
+
+    it.each([
+        ['EPIC', 'Epic'],
+        ['STORY', 'Story'],
+        ['SUBTASK', 'Subtask'],
+    ] as const)('CR-03: renders a %s type badge', (type, label) => {
+        renderInDnd(<TicketCard ticket={{ ...baseTicket, type }} projectSlug="SLYK" index={0} />);
+        expect(screen.getByText(label)).toBeInTheDocument();
+    });
+
+    it('CR-03: renders the epic chip for descendants of an epic (not for the epic itself)', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{
+                    ...baseTicket,
+                    type: 'STORY',
+                    epic: { id: 'e1', ticketNumber: 42, title: 'Payments epic' },
+                }}
+                projectSlug="SLYK"
+                index={0}
+            />,
+        );
+        expect(screen.getByText('Payments epic')).toBeInTheDocument();
+    });
+
+    it('CR-03: renders children progress + derived-column lock for parents', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{ ...baseTicket, type: 'EPIC', childCount: 3, childDoneCount: 2 }}
+                projectSlug="SLYK"
+                index={0}
+            />,
+        );
+        expect(screen.getByLabelText('Children progress 2 of 3 done')).toBeInTheDocument();
+    });
+
+    it('CR-03: shows the parent chip on a subtask whose parent is in another column', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{
+                    ...baseTicket,
+                    type: 'SUBTASK',
+                    parentId: 'p1',
+                    parent: {
+                        id: 'p1',
+                        ticketNumber: 7,
+                        title: 'Parent',
+                        type: 'TASK',
+                        statusColumn: 'DOING',
+                    },
+                }}
+                projectSlug="SLYK"
+                index={0}
+            />,
+        );
+        expect(screen.getByTitle('Nested under: Parent')).toBeInTheDocument();
+        expect(screen.getByText(/SLYK-007/)).toBeInTheDocument();
+    });
+
+    it('CR-03: hides the parent chip when the card is already nested under its parent (isNested)', () => {
+        renderInDnd(
+            <TicketCard
+                ticket={{
+                    ...baseTicket,
+                    type: 'SUBTASK',
+                    parentId: 'p1',
+                    parent: {
+                        id: 'p1',
+                        ticketNumber: 7,
+                        title: 'Parent',
+                        type: 'TASK',
+                        statusColumn: 'TODO',
+                    },
+                }}
+                projectSlug="SLYK"
+                index={0}
+                isNested
+            />,
+        );
+        expect(screen.queryByTitle('Nested under: Parent')).not.toBeInTheDocument();
     });
 });

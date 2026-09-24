@@ -39,6 +39,11 @@ const attributeFields = {
   checklist: z.array(checklistItemSchema).max(50).optional(), // F15: replace checklist array
   // T1: optional due date (ISO 8601 datetime). null clears it; absent = untouched.
   dueDate: z.string().datetime().nullable().optional(),
+  // CR-03: hierarchy fields. type change is validated against the current
+  // parent AND live children in the service; parentId null = detach to root
+  // (rejected for SUBTASK by the service).
+  type: z.enum(['EPIC', 'STORY', 'TASK', 'SUBTASK']).optional(),
+  parentId: z.string().uuid().nullable().optional(),
 };
 
 export const updateTicketBody = z

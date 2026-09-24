@@ -22,6 +22,8 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
             labelIds: values.labelIds,
             statusColumn: columnId,
             checklist: values.checklist,
+            type: values.type,
+            parentId: values.parentId,
         });
         onClose();
     };
@@ -46,6 +48,9 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
                     labelIds: [],
                     // F15: checklist is edit-only at runtime; present for the shared schema.
                     checklist: [],
+                    // CR-03: hierarchy defaults — a plain root TASK.
+                    type: 'TASK',
+                    parentId: null,
                 }}
                 onSubmit={handleSubmit}
                 onCancel={onClose}

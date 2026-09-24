@@ -41,12 +41,20 @@ const boardPayloadMock: BoardPayload = {
                     },
                     creator: null,
                     creatorId: 'u1',
+                    type: 'TASK' as const,
+                    parentId: null,
+                    parent: null,
+                    children: [],
+                    epic: null,
+                    childCount: 0,
+                    childDoneCount: 0,
                     createdAt: '2026-01-01T00:00:00.000Z',
                     updatedAt: '2026-01-01T00:00:00.000Z',
                 },
             ],
         },
     ],
+    epics: [],
 };
 
 function createWrapper(queryClient: QueryClient) {
@@ -149,6 +157,7 @@ describe('useBoard polling', () => {
         vi.mocked(fetchBoard).mockResolvedValue({
             project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
             columns: [],
+            epics: [],
         });
 
         renderHook(() => useBoard('SLYK'), {
@@ -174,6 +183,7 @@ describe('useBoard polling', () => {
         vi.mocked(fetchBoardFresh).mockResolvedValue({
             project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
             columns: [],
+            epics: [],
         });
 
         renderHook(() => useBoardFresh('SLYK'), {
@@ -190,6 +200,7 @@ describe('useBoard polling', () => {
         vi.mocked(fetchBoard).mockResolvedValue({
             project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
             columns: [],
+            epics: [],
         });
 
         const { rerender } = renderHook(() => useBoard('SLYK'), {
@@ -215,6 +226,7 @@ describe('useBoard polling', () => {
         vi.mocked(fetchBoard).mockResolvedValue({
             project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
             columns: [],
+            epics: [],
         });
 
         renderHook(() => useBoard('SLYK'), {
@@ -255,6 +267,13 @@ describe('useBoard polling', () => {
             assignee: null,
             creator: null,
             creatorId: 'u1',
+            type: 'TASK' as const,
+            parentId: null,
+            parent: null,
+            children: [],
+            epic: null,
+            childCount: 0,
+            childDoneCount: 0,
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
         };
@@ -262,6 +281,7 @@ describe('useBoard polling', () => {
         const first: BoardPayload = {
             project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
             columns: [{ id: 'c1', name: 'Todo', isUnsorted: false, tickets: [tA] }],
+            epics: [],
         };
         const second: BoardPayload = {
             project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
@@ -269,6 +289,7 @@ describe('useBoard polling', () => {
                 { id: 'c1', name: 'Todo', isUnsorted: false, tickets: [] },
                 { id: 'c2', name: 'Done', isUnsorted: false, tickets: [tA] },
             ],
+            epics: [],
         };
 
         vi.mocked(fetchBoard).mockResolvedValueOnce(first).mockResolvedValueOnce(second);

@@ -550,6 +550,46 @@ describe('POST /:slug/tickets (F12)', () => {
     });
   });
 
+  it('passes type + parentId through to createTicket (CR-03)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedCreateTicket.mockResolvedValue(
+      ticketPayload as unknown as Awaited<ReturnType<typeof ticketService.createTicket>>,
+    );
+
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({
+        title: 'Hierarchy ticket',
+        type: 'EPIC',
+        parentId: null,
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockedCreateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'SLYK',
+        creatorId: 'u1',
+        title: 'Hierarchy ticket',
+        type: 'EPIC',
+        parentId: null,
+      }),
+    );
+  });
+
+  it('returns 400 VALIDATION_FAILED on invalid ticket type (CR-03)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .post('/api/projects/SLYK/tickets')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ title: 'T', type: 'THEME' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedCreateTicket).not.toHaveBeenCalled();
+  });
+
   it('passes dueDate: null through to createTicket (no due date)', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedCreateTicket.mockResolvedValue(

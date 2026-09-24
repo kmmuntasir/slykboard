@@ -80,6 +80,10 @@ export const createTicketBody = z.object({
   // F15: optional checklist at create time. Defaults to [] via the DB column
   // when omitted; validated with the same sub-schema as the PATCH path.
   checklist: z.array(checklistItemSchema).max(50).optional(),
+  // CR-03: hierarchy fields. Rank rules + subtask-needs-parent are enforced in
+  // ticketService (assertHierarchyRules) inside the creation transaction.
+  type: z.enum(['EPIC', 'STORY', 'TASK', 'SUBTASK']).optional(),
+  parentId: z.string().uuid().nullable().optional(),
 });
 
 export type CreateTicketBody = z.infer<typeof createTicketBody>;

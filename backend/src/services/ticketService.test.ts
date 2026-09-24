@@ -21,6 +21,14 @@ const bag = vi.hoisted(() => ({
   // arg here so activity-capture tests assert exactly which rows were written.
   activityInserts: [] as Array<Record<string, unknown>>,
   getProjectBySlug: vi.fn(), // mocked ./projectService
+  // CR-03 mock slots (all default to benign empty/zero so pre-existing paths
+  // are unaffected until a test explicitly populates them):
+  countRows: [{ count: 0 }] as Array<Record<string, unknown>>, // countLiveChildren (bare db)
+  parentRows: [] as Array<Record<string, unknown>>, // hydrateTicketRow parent lookup (bare db)
+  childrenRows: [] as Array<Record<string, unknown>>, // hydrateTicketRow children lookup (bare db)
+  childColumnRows: [] as Array<Record<string, unknown>>, // recompute children select (tx)
+  childTypeRows: [] as Array<Record<string, unknown>>, // updateTicket type-change children (tx)
+  descendantRows: [] as Array<Record<string, unknown>>, // collectDescendantIds (tx)
   // F13 T6: updateTicket (bare db.update path, no txn)
   updateReturn: [] as Array<Record<string, unknown>>, // db.update().returning() result
   sanitizeMock: vi.fn(
@@ -43,6 +51,12 @@ vi.mock('../db/client', async () => {
   //    new-label-name diff select resolves to an array (default [] -> no-op diff).
   const buildTxSelectChain = (projection?: Record<string, unknown>) => {
     const isMaxSelect = !!projection && 'maxPos' in projection;
+    // CR-03 branch keys: EXACT projection shapes (the rebalance re-read uses
+    // {id, position} and must keep the default where→orderBy/limit chain).
+    const keys = projection ? Object.keys(projection) : [];
+    const isChildColumnSelect = keys.length === 1 && keys[0] === 'statusColumn';
+    const isChildTypeSelect = keys.length === 1 && keys[0] === 'type';
+    const isDescendantSelect = keys.length === 1 && keys[0] === 'id';
     const chain = {
       from: (table: unknown) => {
         if (table === projectSequences) {
@@ -51,6 +65,16 @@ vi.mock('../db/client', async () => {
         if (table === tickets) {
           if (isMaxSelect) {
             return { where: () => bag.maxRow };
+          }
+          // CR-03: awaited-directly selects (no limit/orderBy terminator).
+          if (isChildColumnSelect) {
+            return { where: () => Promise.resolve(bag.childColumnRows) };
+          }
+          if (isChildTypeSelect) {
+            return { where: () => Promise.resolve(bag.childTypeRows) };
+          }
+          if (isDescendantSelect) {
+            return { where: () => Promise.resolve(bag.descendantRows) };
           }
           return {
             where: () => ({ orderBy: () => bag.loadColumn(), limit: () => bag.loadTicketFinal() }),
@@ -71,10 +95,26 @@ vi.mock('../db/client', async () => {
     return chain;
   };
   const db = {
-    select: () => {
+    select: (projection?: Record<string, unknown>) => {
+      // CR-03: projection-keyed branches for the new bare-db reads.
+      const isCountSelect = !!projection && 'count' in projection;
+      const isRelationSelect = !!projection && 'ticketNumber' in projection && 'type' in projection;
       const chain = {
         from: (table: unknown) => {
           if (table === tickets) {
+            if (isCountSelect) {
+              // countLiveChildren: awaited directly after where().
+              return { where: () => Promise.resolve(bag.countRows) };
+            }
+            if (isRelationSelect) {
+              // hydrateTicketRow parent (where→limit) + children (where→orderBy).
+              return {
+                where: () => ({
+                  limit: () => Promise.resolve(bag.parentRows),
+                  orderBy: () => Promise.resolve(bag.childrenRows),
+                }),
+              };
+            }
             // F16: getTicket left-joins users twice before where/limit; moveTicket
             // calls where/limit directly. leftJoin is a no-op returning a fresh chain.
             const makeTicketChain = () => ({

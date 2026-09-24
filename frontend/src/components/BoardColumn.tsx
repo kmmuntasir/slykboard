@@ -58,6 +58,12 @@ export function BoardColumn({
                                         projectSlug={projectSlug}
                                         index={index}
                                         onEdit={onEdit}
+                                        // CR-03: indent subtasks whose parent
+                                        // card sits in this same column.
+                                        isNested={
+                                            ticket.parentId !== null &&
+                                            tickets.some((t) => t.id === ticket.parentId)
+                                        }
                                     />
                                 </li>
                             ))

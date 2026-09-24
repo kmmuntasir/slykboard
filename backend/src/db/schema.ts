@@ -13,6 +13,7 @@ import {
   index,
   primaryKey,
   boolean,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // F12 D2: ticket_number starts at 1 per project (Jira default). Zero-pad
@@ -104,10 +105,7 @@ export const projects = pgTable('Projects', {
 // SLYK-01 §Three-Tier Roles — project-scoped membership role enum.
 // PROJECT_ADMIN manages a project's settings & members; MEMBER is the default.
 // Distinct from the platform-admin boolean on users (global, in the JWT `pa` claim).
-export const projectMemberRoleEnum = pgEnum('ProjectMemberRole', [
-  'PROJECT_ADMIN',
-  'MEMBER',
-]);
+export const projectMemberRoleEnum = pgEnum('ProjectMemberRole', ['PROJECT_ADMIN', 'MEMBER']);
 
 // SLYK-01 — Project membership join. Composite PK (projectId, userId) enforces the
 // unique membership invariant. userId index backs the "list my projects" query.
@@ -149,6 +147,13 @@ export const projectSequences = pgTable('project_sequences', {
 // F09 D-Priority-Enum: SCREAMING_SNAKE per style guide. PRD REQ-3.2 Title-Case is UI-only.
 export const priorityEnum = pgEnum('Priority', ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']);
 
+// CR-03 (docs/change-requests-requirements.md): ticket hierarchy types.
+// Rank ordering EPIC(3) > STORY(2) > TASK(1) > SUBTASK(0) governs parenting:
+// a parent-child link is valid iff the parent's rank is strictly greater.
+// Backfill: existing rows default to 'TASK' (column added with DEFAULT).
+
+export const ticketTypeEnum = pgEnum('TicketType', ['EPIC', 'STORY', 'TASK', 'SUBTASK']);
+
 // F09 D-Tickets-Table: PRD §8.3 read-render slice. F12 owns creation.
 // statusColumn is text (references a Column.id in Projects.columns JSONB) —
 // no Columns table exists, so integrity is enforced at read time (D-Unsorted-Bucket).
@@ -170,6 +175,11 @@ export const tickets = pgTable(
       .notNull()
       .references(() => users.id),
     priority: priorityEnum('priority').default('MEDIUM').notNull(),
+    // CR-03: hierarchy type + optional parent (self-FK). Rank rules are enforced
+    // in ticketService (assertHierarchyRules) — a DB CHECK across rows isn't
+    // practical; the service runs inside the mutation transaction.
+    type: ticketTypeEnum('type').default('TASK').notNull(),
+    parentId: uuid('parent_id').references((): AnyPgColumn => tickets.id),
     // T1: optional due date. Nullable — NULL (default) = no due date set.
     // timestamptz to match createdAt/updatedAt convention.
     dueDate: timestamp('due_date', { withTimezone: true, mode: 'date' }),
@@ -194,6 +204,9 @@ export const tickets = pgTable(
       table.projectId,
       table.ticketNumber,
     ),
+    // CR-03: parent lookups (children of X) + per-project epic listings.
+    ticketsParentIdIdx: index('tickets_parent_id_idx').on(table.parentId),
+    ticketsProjectTypeIdx: index('tickets_project_type_idx').on(table.projectId, table.type),
   }),
 );
 
@@ -253,6 +266,9 @@ export const activityActionEnum = pgEnum('ActivityAction', [
   // SLYK-13: comment lifecycle events appended last.
   'COMMENT_EDITED',
   'COMMENT_DELETED',
+  // CR-03: hierarchy lifecycle events.
+  'PARENT_CHANGED',
+  'TYPE_CHANGED',
 ]);
 
 // PRD §8.5 — ActivityLogs. user_id nullable + ON DELETE SET NULL preserves audit

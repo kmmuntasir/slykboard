@@ -57,6 +57,14 @@ vi.mock('./LabelMultiSelect', () => ({
 // DEL-01 T6: StatusField owns its columns fetch (useProject); stub it here so
 // the create-modal test stays focused on the create contract. The field's data
 // path is covered by its own tests.
+
+// CR-03: ParentField owns its board fetch (like StatusField) — stubbed here so
+// the form test stays focused on the create/edit contract.
+vi.mock('./ticket-fields/ParentField', () => ({
+    ParentField: ({ projectSlug }: { projectSlug: string }) => (
+        <div aria-label="Parent" data-testid={`parent-field-${projectSlug}`} />
+    ),
+}));
 vi.mock('./ticket-fields/StatusField', () => ({
     StatusField: () => (
         <select aria-label="Status">

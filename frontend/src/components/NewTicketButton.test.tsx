@@ -67,6 +67,12 @@ vi.mock('@/hooks/useCreateTicket', () => ({
     useCreateTicket: () => ({ mutateAsync, mutate: mutateAsync }),
 }));
 
+// CR-03: ParentField owns its board fetch — stubbed so this button test needs
+// no QueryClientProvider (mirrors the CreateTicketModal field stubs).
+vi.mock('./ticket-fields/ParentField', () => ({
+    ParentField: () => <div aria-label="Parent" />,
+}));
+
 import { NewTicketButton } from './NewTicketButton';
 
 describe('NewTicketButton', () => {

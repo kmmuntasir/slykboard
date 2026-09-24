@@ -25,6 +25,7 @@ interface BoardMockValue {
 const { mockState } = vi.hoisted(() => ({
     mockState: {
         boardValue: { isLoading: false } as BoardMockValue,
+        moveMut: vi.fn() as ReturnType<typeof vi.fn>,
     },
 }));
 
@@ -36,7 +37,7 @@ vi.mock('@/hooks/useBoard', () => ({
 // useQueryClient(), so mock it here (these are static-render assertions, not
 // mutation-behavior tests — the mutation is unit-tested in useMoveTicket.test).
 vi.mock('@/hooks/useMoveTicket', () => ({
-    useMoveTicket: () => ({ mutate: vi.fn() }),
+    useMoveTicket: () => ({ mutate: mockState.moveMut }),
 }));
 
 // F12/T8 wires useCreateTicket(slug) into BoardPage; the real hook calls
@@ -60,6 +61,30 @@ vi.mock('@/components/BoardFilters', () => ({
     BoardFilters: () => null,
 }));
 
+// CR-03: capture BoardPage's DragDropContext onDragEnd so the derived-column
+// guard (cross-column drop of a parent is refused) can be driven with a
+// synthetic DropResult — jsdom cannot run pangea's pointer sensor.
+const { capturedOnDragEnd } = vi.hoisted(() => ({
+    capturedOnDragEnd: { current: null as null | ((r: unknown) => void) },
+}));
+vi.mock('@hello-pangea/dnd', async () => {
+    const actual = await vi.importActual<typeof import('@hello-pangea/dnd')>('@hello-pangea/dnd');
+    const RealDragDropContext = actual.DragDropContext;
+    return {
+        ...actual,
+        DragDropContext: ({
+            onDragEnd,
+            children,
+        }: {
+            onDragEnd: (r: unknown) => void;
+            children: React.ReactNode;
+        }) => {
+            capturedOnDragEnd.current = onDragEnd;
+            return RealDragDropContext({ onDragEnd, children });
+        },
+    };
+});
+
 const ticket101: Ticket = {
     id: 't101',
     ticketNumber: 101,
@@ -73,6 +98,13 @@ const ticket101: Ticket = {
     assignee: null,
     creator: null,
     creatorId: 'u1',
+    type: 'TASK',
+    parentId: null,
+    parent: null,
+    children: [],
+    epic: null,
+    childCount: 0,
+    childDoneCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -137,6 +169,7 @@ describe('BoardPage', () => {
             data: {
                 project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
                 columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [ticket101] }],
+                epics: [],
             },
             isLoading: false,
         };
@@ -157,6 +190,7 @@ describe('BoardPage', () => {
             data: {
                 project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
                 columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [ticket101] }],
+                epics: [],
             },
             isLoading: false,
         };
@@ -181,6 +215,7 @@ describe('BoardPage', () => {
                     { id: 'c1', name: 'To Do', isUnsorted: false, tickets: [ticket101] },
                     { id: 'c2', name: 'Done', isUnsorted: false, tickets: [] },
                 ],
+                epics: [],
             },
             isLoading: false,
         };
@@ -195,6 +230,7 @@ describe('BoardPage', () => {
             data: {
                 project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
                 columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [] }],
+                epics: [],
             },
             isLoading: false,
         };
@@ -216,6 +252,7 @@ describe('BoardPage', () => {
             data: {
                 project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
                 columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [] }],
+                epics: [],
             },
             isLoading: false,
         };
@@ -259,6 +296,7 @@ describe('BoardPage', () => {
                         tickets: [ticket101],
                     },
                 ],
+                epics: [],
             },
             isLoading: false,
         };
@@ -338,5 +376,130 @@ describe('TicketDetailRoute not-found', () => {
             await screen.findByRole('heading', { name: /ticket not found/i }),
         ).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /back to board/i })).toBeInTheDocument();
+    });
+});
+
+// ---- CR-03: hierarchy surface (filters, Epics view, derived-column guard) ----
+
+describe('BoardPage — CR-03 hierarchy', () => {
+    beforeEach(() => {
+        useBoardUiStore.getState().clearFilters();
+        vi.clearAllMocks();
+    });
+
+    const epic = {
+        ...ticket101,
+        id: 'e1',
+        ticketNumber: 200,
+        title: 'Payments epic',
+        type: 'EPIC' as const,
+        childCount: 2,
+        childDoneCount: 1,
+    };
+    const story = {
+        ...ticket101,
+        id: 's1',
+        ticketNumber: 201,
+        title: 'Checkout story',
+        type: 'STORY' as const,
+        parentId: 'e1',
+        epic: { id: 'e1', ticketNumber: 200, title: 'Payments epic' },
+    };
+
+    function boardWithHierarchy(): BoardPayload {
+        return {
+            project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
+            columns: [
+                { id: 'c1', name: 'To Do', isUnsorted: false, tickets: [epic, story] },
+                { id: 'c2', name: 'Done', isUnsorted: false, tickets: [] },
+            ],
+            epics: [
+                {
+                    id: 'e1',
+                    ticketNumber: 200,
+                    title: 'Payments epic',
+                    descendantCount: 2,
+                    doneDescendantCount: 1,
+                },
+            ],
+        };
+    }
+
+    it('CR-03: type filter narrows the board client-side', () => {
+        mockState.boardValue = { isLoading: false, data: boardWithHierarchy() };
+        useBoardUiStore.getState().setTypeFilter('EPIC');
+        renderBoard();
+
+        expect(screen.getByText('Payments epic')).toBeInTheDocument();
+        expect(screen.queryByText('Checkout story')).not.toBeInTheDocument();
+    });
+
+    it('CR-03: epic filter narrows to the epic subtree', () => {
+        mockState.boardValue = { isLoading: false, data: boardWithHierarchy() };
+        useBoardUiStore.getState().setEpicFilter('e1');
+        renderBoard();
+
+        expect(screen.getByText('Checkout story')).toBeInTheDocument();
+        expect(screen.getByText('Payments epic')).toBeInTheDocument();
+    });
+
+    it('CR-03: the Epics view lists epics with completion progress', () => {
+        mockState.boardValue = { isLoading: false, data: boardWithHierarchy() };
+        renderBoard();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Epics' }));
+        expect(screen.getByRole('table', { name: 'Epics' })).toBeInTheDocument();
+        expect(screen.getByText('Payments epic')).toBeInTheDocument();
+        expect(screen.getByText('1/2 (50%)')).toBeInTheDocument();
+    });
+
+    it('CR-03: cross-column drop of a parent with children is refused (no move mutation)', async () => {
+        mockState.moveMut.mockClear();
+        mockState.boardValue = { isLoading: false, data: boardWithHierarchy() };
+        renderBoard();
+
+        // Parent (childCount > 0) dropped on a different column.
+        await capturedOnDragEnd.current?.({
+            draggableId: 'e1',
+            source: { droppableId: 'c1', index: 0 },
+            destination: { droppableId: 'c2', index: 0 },
+            reason: 'DROP',
+            type: 'DEFAULT',
+            mode: 'FLUID',
+            combine: null,
+        });
+        expect(mockState.moveMut).not.toHaveBeenCalled();
+    });
+
+    it('CR-03: cross-column drop of a childless ticket is allowed (move mutation fires)', async () => {
+        mockState.moveMut.mockClear();
+        mockState.boardValue = { isLoading: false, data: boardWithHierarchy() };
+        renderBoard();
+
+        await capturedOnDragEnd.current?.({
+            draggableId: 's1', // childCount 0
+            source: { droppableId: 'c1', index: 1 },
+            destination: { droppableId: 'c2', index: 0 },
+            reason: 'DROP',
+            type: 'DEFAULT',
+            mode: 'FLUID',
+            combine: null,
+        });
+        expect(mockState.moveMut).toHaveBeenCalledTimes(1);
+    });
+
+    it('CR-03: the Epics view shows an empty state without epics', () => {
+        mockState.boardValue = {
+            isLoading: false,
+            data: {
+                project: { id: 'p1', name: 'Slyk', slug: 'SLYK' },
+                columns: [{ id: 'c1', name: 'To Do', isUnsorted: false, tickets: [ticket101] }],
+                epics: [],
+            },
+        };
+        renderBoard();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Epics' }));
+        expect(screen.getByText('No epics yet')).toBeInTheDocument();
     });
 });

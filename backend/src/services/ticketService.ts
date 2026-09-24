@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull, max, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/client';
-import { labels, projectSequences, projects, tickets, users } from '../db/schema';
+import { labels, projectSequences, projects, tickets, users, type Column } from '../db/schema';
 import { sanitizeDescription } from '../utils/sanitizeHtml';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
@@ -40,6 +40,154 @@ const assigneeUser = alias(users, 'ticket_assignee');
 // the inferred type yet; keep this local to avoid widening the T6 scope.)
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 
+// CR-03: hierarchy types + rank ordering. A parent-child link is valid iff the
+// parent's rank is STRICTLY greater than the child's — an Epic can never belong
+// to a Story, a Story never to a Task; a Subtask may sit under Epic/Story/Task.
+// Root level is allowed for every type except SUBTASK.
+export type TicketType = 'EPIC' | 'STORY' | 'TASK' | 'SUBTASK';
+
+export const TICKET_TYPE_RANK: Readonly<Record<TicketType, number>> = Object.freeze({
+  EPIC: 3,
+  STORY: 2,
+  TASK: 1,
+  SUBTASK: 0,
+});
+
+/**
+ * CR-03 FR-03.9 (pure): the earliest board column occupied by any child —
+ * "least progressed" measured by column order index, NOT tracked time.
+ * Unknown column ids (legacy/unsorted) are skipped; null when nothing resolves
+ * (caller leaves the parent's column untouched in that case).
+ */
+export function earliestChildColumn(
+  projectColumns: ReadonlyArray<Pick<Column, 'id'>>,
+  childColumns: ReadonlyArray<string>,
+): string | null {
+  const order = new Map(projectColumns.map((column, index) => [column.id, index]));
+  let best: string | null = null;
+  let bestIndex = Number.POSITIVE_INFINITY;
+  for (const columnId of childColumns) {
+    const index = order.get(columnId);
+    if (index === undefined) continue; // unsorted/legacy → unresolvable here
+    if (index < bestIndex) {
+      bestIndex = index;
+      best = columnId;
+    }
+  }
+  return best;
+}
+
+/**
+ * CR-03: validate a (childType, parentId) pairing. Runs inside the caller's tx
+ * so the parent read shares the mutation's snapshot. Throws:
+ *   - VALIDATION_FAILED: subtask without parent; rank-inverted pairing
+ *     (incl. self-parenting); cross-project parent.
+ *   - NOT_FOUND: parent id given but no live row exists.
+ */
+async function assertHierarchyRules(
+  tx: Tx,
+  args: { projectId: string; ticketId?: string; type: TicketType; parentId: string | null },
+): Promise<void> {
+  const { projectId, ticketId, type, parentId } = args;
+  if (parentId === null) {
+    if (type === 'SUBTASK') {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, 'A subtask must have a parent ticket');
+    }
+    return;
+  }
+  if (ticketId !== undefined && parentId === ticketId) {
+    throw new AppError(ErrorCode.VALIDATION_FAILED, 'A ticket cannot be its own parent');
+  }
+  const [parent] = await tx
+    .select({
+      id: tickets.id,
+      projectId: tickets.projectId,
+      type: tickets.type,
+      deletedAt: tickets.deletedAt,
+    })
+    .from(tickets)
+    .where(eq(tickets.id, parentId))
+    .limit(1);
+  if (!parent || parent.deletedAt !== null) {
+    throw new AppError(ErrorCode.NOT_FOUND, `Parent ticket '${parentId}' not found`);
+  }
+  if (parent.projectId !== projectId) {
+    throw new AppError(
+      ErrorCode.VALIDATION_FAILED,
+      'Parent ticket must belong to the same project',
+    );
+  }
+  if (TICKET_TYPE_RANK[parent.type as TicketType] <= TICKET_TYPE_RANK[type]) {
+    throw new AppError(
+      ErrorCode.VALIDATION_FAILED,
+      `A ${type} cannot be nested under a ${parent.type}`,
+    );
+  }
+}
+
+/**
+ * CR-03 FR-03.9: auto-progression recompute, walked UP from the mutated child.
+ * Any ticket with ≥1 live direct children derives its column from the earliest
+ * child column (Epics, Stories, and Tasks alike — client decision 2026-09-25).
+ * A childless ancestor keeps its column (manual control resumes). The walk
+ * stops as soon as an ancestor's column does not change — higher ancestors
+ * cannot be affected when this one didn't move. Auto-moves are logged as
+ * ordinary STATUS_CHANGED rows attributed to the acting user.
+ */
+export async function recomputeAncestorColumns(
+  tx: Tx,
+  args: { projectId: string; startTicketId: string; actingUserId: string },
+): Promise<void> {
+  const [project] = await tx
+    .select({ columns: projects.columns })
+    .from(projects)
+    .where(eq(projects.id, args.projectId))
+    .limit(1);
+  // Defensive: a project row without a columns array (mock/legacy shape) → no-op.
+  if (!project || !Array.isArray(project.columns)) return;
+
+  let currentId = args.startTicketId;
+  const visited = new Set<string>([args.startTicketId]); // corrupt-cycle guard
+  for (let depth = 0; depth < 4; depth += 1) {
+    const [child] = await tx
+      .select({ id: tickets.id, parentId: tickets.parentId })
+      .from(tickets)
+      .where(eq(tickets.id, currentId))
+      .limit(1);
+    // `== null` covers both null (root) and undefined (legacy rows pre-CR-03).
+    if (!child || child.parentId == null || visited.has(child.parentId)) break;
+    visited.add(child.parentId);
+
+    const [parent] = await tx.select().from(tickets).where(eq(tickets.id, child.parentId)).limit(1);
+    if (!parent || parent.deletedAt !== null) break;
+
+    const children = await tx
+      .select({ statusColumn: tickets.statusColumn })
+      .from(tickets)
+      .where(and(eq(tickets.parentId, parent.id), isNull(tickets.deletedAt)));
+    if (children.length === 0) break; // childless → manual control, stop climbing
+
+    const target = earliestChildColumn(
+      project.columns,
+      children.map((row) => row.statusColumn),
+    );
+    if (target === null || target === parent.statusColumn) break; // stable → done
+
+    await tx
+      .update(tickets)
+      .set({ statusColumn: target, updatedAt: new Date() })
+      .where(eq(tickets.id, parent.id));
+    await recordActivity(tx, {
+      ticketId: parent.id,
+      actorId: args.actingUserId,
+      action: 'STATUS_CHANGED',
+      oldValue: parent.statusColumn,
+      newValue: target,
+    });
+    currentId = parent.id; // the move may ripple to the grandparent
+  }
+}
+
 // F13 T6: partial patch for title/description/priority/assigneeId. `description`
 // and `assigneeId` are nullable — `null` is a real value (clear), distinct from
 // `undefined` (leave untouched). Route layer validates Priority; service trusts the type.
@@ -53,6 +201,8 @@ export type TicketPatch = {
   labelIds?: string[];
   checklist?: ChecklistItem[];
   dueDate?: string | null;
+  type?: TicketType; // CR-03: hierarchy type change (validated against parent AND children)
+  parentId?: string | null; // CR-03: re-parent (null = detach to root; SUBTASK cannot detach)
 };
 
 export interface MoveTicketInput {
@@ -110,6 +260,22 @@ export async function moveTicket({
     });
   }
 
+  // CR-03 FR-03.10: a ticket with live children has a DERIVED column — manual
+  // cross-column moves are rejected; move the (least-progressed) child instead.
+  // Same-column reposition is not a column change, so the guard only fires on
+  // an actual cross-column move. The pre-tx check has a benign race (a child
+  // created concurrently) — the post-move recompute self-heals that case by
+  // snapping the parent back to its least-progressed child's column.
+  if (ticket.statusColumn !== statusColumn) {
+    const liveChildren = await countLiveChildren(ticket.id);
+    if (liveChildren > 0) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "This ticket's column is derived from its children — move the children instead",
+      );
+    }
+  }
+
   // 4-6. Single Drizzle transaction: write both fields, conditionally rebalance the
   //      destination column, then return the final row. A thrown error inside aborts
   //      the txn (drizzle/pg rollback) — atomicity is structural.
@@ -154,8 +320,27 @@ export async function moveTicket({
 
     // 6. Return the moved ticket's final state (post any rebalance).
     const [updated] = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+
+    // CR-03 FR-03.9: the child move may pull the parent chain — recompute inside
+    // the same txn (logged as STATUS_CHANGED, attributed to the acting user).
+    await recomputeAncestorColumns(tx, {
+      projectId: ticket.projectId,
+      startTicketId: ticketId,
+      actingUserId,
+    });
+
     return updated!;
   });
+}
+
+// CR-03: count of live (non-deleted) direct children — backs moveTicket's
+// derived-column guard and updateTicket's type-change compatibility check.
+async function countLiveChildren(ticketId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(tickets)
+    .where(and(eq(tickets.parentId, ticketId), isNull(tickets.deletedAt)));
+  return Number(row?.count ?? 0);
 }
 
 // F12 D1: allocate the next per-project ticket_number inside the caller's txn.
@@ -190,6 +375,8 @@ export interface CreateTicketInput {
   statusColumn?: string; // optional; defaults to project.columns[0].id
   checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
   dueDate?: string | null; // T1: optional due date (ISO 8601); null = none
+  type?: TicketType; // CR-03: hierarchy type; defaults to TASK (DB default)
+  parentId?: string | null; // CR-03: optional parent (required for SUBTASK)
 }
 
 // F12: create a ticket with a per-project sequential number, bottom of the
@@ -212,7 +399,13 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
     });
   }
 
+  // CR-03: parenting rules (rank ordering, subtask-needs-parent, same project).
+  const type = input.type ?? 'TASK';
+  const parentId = input.parentId ?? null;
+
   const insertedTicket = await db.transaction(async (tx) => {
+    await assertHierarchyRules(tx, { projectId: project.id, type, parentId });
+
     const ticketNumber = await allocateTicketNumber(tx, project.id);
 
     // F12 D3: bottom of the resolved column = (max(position) || 0) + POSITION_GAP.
@@ -240,6 +433,8 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         priority: input.priority,
         checklist: input.checklist,
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
+        type,
+        parentId,
       })
       .returning();
     // F18 T3: stamp a CREATED activity log inside the same txn so a rollback
@@ -249,6 +444,17 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
       actorId: input.creatorId,
       action: 'CREATED',
     });
+    // CR-03 FR-03.9: a new child may pull its parent chain backward (the new
+    // ticket starts in the first column / its resolved column — the earliest
+    // child rule applies immediately). Runs in the same txn; no-op when the
+    // new ticket is a root.
+    if (parentId !== null) {
+      await recomputeAncestorColumns(tx, {
+        projectId: project.id,
+        startTicketId: inserted!.id,
+        actingUserId: input.creatorId,
+      });
+    }
     return inserted!;
   });
 
@@ -277,7 +483,20 @@ export type HydratedTicket = TicketRow & {
   labels: HydratedLabel[];
   creator: TicketActor | null;
   assignee: TicketActor | null;
+  // CR-03: hierarchy context for the detail modal — direct parent + live
+  // direct children (order preserved by position).
+  parent: TicketRelationSummary | null;
+  children: TicketRelationSummary[];
 };
+
+// CR-03: minimal related-ticket shape used for parent + children summaries.
+export interface TicketRelationSummary {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+  statusColumn: string;
+}
 
 // F16: shared shape of a raw joined row from the tickets + 2x users left-join.
 // Both getTicket and getTicketByNumber build this row, then call hydrateTicketRow
@@ -302,6 +521,30 @@ type JoinedTicketRow = {
 async function hydrateTicketRow(row: JoinedTicketRow): Promise<HydratedTicket> {
   const ticketId = row.ticket.id;
   const labelMap = await hydrateLabelsForTickets([ticketId]);
+  // CR-03: parent summary (null when root or the parent row vanished) + live
+  // direct children. Two extra queries per detail read — bounded and indexed
+  // (tickets_parent_id_idx); the board payload computes the same data in bulk.
+  const relationColumns = {
+    id: tickets.id,
+    ticketNumber: tickets.ticketNumber,
+    title: tickets.title,
+    type: tickets.type,
+    statusColumn: tickets.statusColumn,
+  };
+  const parentRow = row.ticket.parentId
+    ? ((
+        await db
+          .select(relationColumns)
+          .from(tickets)
+          .where(eq(tickets.id, row.ticket.parentId))
+          .limit(1)
+      )[0] ?? null)
+    : null;
+  const children = await db
+    .select(relationColumns)
+    .from(tickets)
+    .where(and(eq(tickets.parentId, ticketId), isNull(tickets.deletedAt)))
+    .orderBy(asc(tickets.position));
   return {
     ...row.ticket,
     creator:
@@ -321,6 +564,8 @@ async function hydrateTicketRow(row: JoinedTicketRow): Promise<HydratedTicket> {
             avatarUrl: row.assigneeAvatarUrl,
           },
     labels: labelMap.get(ticketId) ?? [],
+    parent: parentRow as TicketRelationSummary | null,
+    children: children as TicketRelationSummary[],
   };
 }
 
@@ -425,6 +670,38 @@ export async function updateTicket(args: {
       };
     }
 
+    // CR-03: hierarchy changes — validate BEFORE writing. The effective pairing
+    // after the patch (new type × new-or-current parent) must satisfy the rank
+    // rules, and a type change must stay compatible with the ticket's own live
+    // children (e.g. a Story with Task children cannot become a SUBTASK).
+    const hierarchyTouched = patch.type !== undefined || patch.parentId !== undefined;
+    const effectiveType = patch.type ?? oldRow.type;
+    const effectiveParentId = patch.parentId !== undefined ? patch.parentId : oldRow.parentId;
+    if (hierarchyTouched) {
+      await assertHierarchyRules(tx, {
+        projectId: oldRow.projectId,
+        ticketId,
+        type: effectiveType,
+        parentId: effectiveParentId,
+      });
+      if (patch.type !== undefined && patch.type !== oldRow.type) {
+        const children = await tx
+          .select({ type: tickets.type })
+          .from(tickets)
+          .where(and(eq(tickets.parentId, ticketId), isNull(tickets.deletedAt)));
+        const newRank = TICKET_TYPE_RANK[patch.type];
+        const offending = children.find(
+          (child) => TICKET_TYPE_RANK[child.type as TicketType] >= newRank,
+        );
+        if (offending) {
+          throw new AppError(
+            ErrorCode.VALIDATION_FAILED,
+            `Cannot change type: this ticket has ${offending.type} children that would no longer be valid`,
+          );
+        }
+      }
+    }
+
     const updateSet: Partial<TicketRow> = { updatedAt: new Date() };
     if (patch.title !== undefined) {
       updateSet.title = patch.title;
@@ -444,6 +721,12 @@ export async function updateTicket(args: {
     }
     if (patch.dueDate !== undefined) {
       updateSet.dueDate = patch.dueDate === null ? null : new Date(patch.dueDate);
+    }
+    if (patch.type !== undefined) {
+      updateSet.type = patch.type;
+    }
+    if (patch.parentId !== undefined) {
+      updateSet.parentId = patch.parentId;
     }
 
     const updated = await tx
@@ -495,25 +778,116 @@ export async function updateTicket(args: {
       });
     }
 
+    // CR-03 FR-03.7: hierarchy lifecycle events.
+    if (oldRow.type !== newRow.type) {
+      await recordActivity(tx, {
+        ticketId,
+        actorId: actingUserId,
+        action: 'TYPE_CHANGED',
+        oldValue: oldRow.type,
+        newValue: newRow.type,
+      });
+    }
+    if (oldRow.parentId !== newRow.parentId) {
+      await recordActivity(tx, {
+        ticketId,
+        actorId: actingUserId,
+        action: 'PARENT_CHANGED',
+        oldValue: oldRow.parentId,
+        newValue: newRow.parentId,
+      });
+    }
+
+    // CR-03 FR-03.9: a re-parent changes both chains — the OLD parent may have
+    // lost its least-progressed child, the NEW parent gained one. A type change
+    // alone cannot move a column (children compatibility is enforced above), but
+    // re-running the walk is harmless (no-op) and keeps one code path.
+    if (hierarchyTouched) {
+      if (oldRow.parentId !== null) {
+        await recomputeAncestorColumns(tx, {
+          projectId: oldRow.projectId,
+          startTicketId: oldRow.parentId,
+          actingUserId,
+        });
+      }
+      if (newRow.parentId !== null && newRow.parentId !== oldRow.parentId) {
+        await recomputeAncestorColumns(tx, {
+          projectId: oldRow.projectId,
+          startTicketId: newRow.id,
+          actingUserId,
+        });
+      }
+    }
+
     return { old: oldRow, new: newRow };
   });
 }
 
-export async function deleteTicket(ticketId: string): Promise<void> {
-  const softDeleted = await db.transaction(async (tx) => {
-    // F20 §9.3: close any running timer on this ticket before soft-delete,
-    // so a deleted ticket cannot leave an orphaned open timer.
-    await stopTimerForTicket(tx, ticketId);
-    const [row] = await tx
+// CR-03: collect the live descendant ids of a ticket (BFS by parentId, max
+// depth 3 — the rank ordering caps chains at Epic→Story→Task→Subtask). Runs
+// inside the caller's tx so the soft-delete and this read share a snapshot.
+async function collectDescendantIds(tx: Tx, rootId: string): Promise<string[]> {
+  const all: string[] = [];
+  let frontier = [rootId];
+  const seen = new Set<string>([rootId]);
+  for (let depth = 0; depth < 3 && frontier.length > 0; depth += 1) {
+    const rows = await tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .where(and(inArray(tickets.parentId, frontier), isNull(tickets.deletedAt)));
+    frontier = [];
+    for (const row of rows) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        all.push(row.id);
+        frontier.push(row.id);
+      }
+    }
+  }
+  return all;
+}
+
+// F17 + CR-03 FR-03.6: soft-delete with cascade. Deleting a parent takes its
+// whole live subtree (the UI confirms via the descendant-tree modal first);
+// running timers on EVERY affected ticket are closed, and the deleted ticket's
+// own parent chain is recomputed (it may have been the least-progressed child).
+export async function deleteTicket(
+  ticketId: string,
+  actingUserId?: string,
+): Promise<{ deletedCount: number }> {
+  const result = await db.transaction(async (tx) => {
+    const [root] = await tx.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+    if (!root || root.deletedAt !== null) {
+      return null;
+    }
+    const descendantIds = await collectDescendantIds(tx, ticketId);
+    const allIds = [ticketId, ...descendantIds];
+
+    // F20 §9.3: close running timers on every affected ticket so a deleted
+    // subtree cannot leave orphaned open timers.
+    for (const id of allIds) {
+      await stopTimerForTicket(tx, id);
+    }
+
+    await tx
       .update(tickets)
       .set({ deletedAt: new Date() })
-      .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)))
-      .returning({ id: tickets.id });
-    return row;
+      .where(and(inArray(tickets.id, allIds), isNull(tickets.deletedAt)));
+
+    // CR-03: the root's parent may now be childless or have a new least child.
+    if (root.parentId !== null && actingUserId !== undefined) {
+      await recomputeAncestorColumns(tx, {
+        projectId: root.projectId,
+        startTicketId: ticketId,
+        actingUserId,
+      });
+    }
+    return { deletedCount: allIds.length };
   });
-  if (!softDeleted) {
+  if (!result) {
     throw new AppError(ErrorCode.NOT_FOUND, `Ticket '${ticketId}' not found`, {
       details: { ticketId },
     });
   }
+  return result;
 }

@@ -1,4 +1,5 @@
 import { FormProvider } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 
 import { Button } from './ui/Button';
 import { TitleField } from './ticket-fields/TitleField';
@@ -9,6 +10,8 @@ import { LabelsField } from './ticket-fields/LabelsField';
 import { ChecklistField } from './ticket-fields/ChecklistField';
 import { StatusField } from './ticket-fields/StatusField';
 import { DueDateField } from './ticket-fields/DueDateField';
+import { TypeField } from './ticket-fields/TypeField';
+import { ParentField } from './ticket-fields/ParentField';
 import { useTicketForm, type TicketFormValues } from '@/hooks/useTicketForm';
 import type { UpdateTicketDto } from '@/types/ticket';
 
@@ -79,10 +82,12 @@ export function TicketAttributeForm({
                         <DescriptionField readOnly={readOnly} />
                     </div>
 
-                    {/* RIGHT 1/3 — Status / Priority / Assignee / Due date / Labels /
-                        Checklist. Scrolls independently for long checklists. */}
+                    {/* RIGHT 1/3 — Status / Type / Parent / Priority / Assignee /
+                        Due date / Labels / Checklist. Scrolls independently. */}
                     <div className="space-y-4 lg:col-span-1 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
                         <StatusField projectSlug={projectSlug} />
+                        <TypeField readOnly={readOnly} />
+                        <ParentField projectSlug={projectSlug} readOnly={readOnly} />
                         <PriorityField />
                         <AssigneeField projectSlug={projectSlug} />
                         <DueDateField />

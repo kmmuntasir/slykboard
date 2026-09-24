@@ -3,11 +3,23 @@ import { useQuery } from '@tanstack/react-query';
 
 import { listLabels } from '@/api/labels';
 import { labelKeys } from '@/api/queryKeys';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/Select';
 import { useUsers } from '@/hooks/useUsers';
+import { useBoard } from '@/hooks/useBoard';
 import { useBoardUiStore } from '@/stores/useBoardUiStore';
 import type { Label } from '@/types/label';
-import { PRIORITY_DISPLAY, type Priority } from '@/types/ticket';
+import {
+    PRIORITY_DISPLAY,
+    TICKET_TYPE_DISPLAY,
+    type Priority,
+    type TicketType,
+} from '@/types/ticket';
 
 // F26: board filter bar. Reads/writes filter state in useBoardUiStore; the
 // useBoard hook reacts to those values and refires the board query with a
@@ -19,6 +31,7 @@ import { PRIORITY_DISPLAY, type Priority } from '@/types/ticket';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const PRIORITIES = Object.keys(PRIORITY_DISPLAY) as Priority[];
+const TYPES = Object.keys(TICKET_TYPE_DISPLAY) as TicketType[];
 
 /** Resolve a loose priority string (from the store) to its display label,
  *  or undefined when the value is unset/invalid (SelectValue falls back). */
@@ -39,10 +52,14 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
         assigneeFilter,
         priorityFilter,
         labelFilter,
+        typeFilter,
+        epicFilter,
         setSearchQuery,
         setAssigneeFilter,
         setPriorityFilter,
         setLabelFilter,
+        setTypeFilter,
+        setEpicFilter,
         clearFilters,
     } = useBoardUiStore();
 
@@ -70,6 +87,10 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
         queryKey: labelKeys.forProject(slug),
         queryFn: () => listLabels(slug),
     });
+    // CR-03: epic options come from the (possibly filtered) board query — the
+    // filter is client-side anyway, so the current board data is the source.
+    const { data: board } = useBoard(slug);
+    const epics = board?.epics ?? [];
 
     return (
         <div className="flex flex-wrap items-center gap-3">
@@ -89,7 +110,7 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
                 <SelectTrigger aria-label="Filter by assignee" className="text-sm">
                     <SelectValue placeholder="All assignees">
                         {assigneeFilter
-                            ? users.find((u) => u.id === assigneeFilter)?.fullName ?? ''
+                            ? (users.find((u) => u.id === assigneeFilter)?.fullName ?? '')
                             : ''}
                     </SelectValue>
                 </SelectTrigger>
@@ -126,13 +147,57 @@ export function BoardFilters({ slug }: BoardFiltersProps) {
             >
                 <SelectTrigger aria-label="Filter by label" className="text-sm">
                     <SelectValue placeholder="All labels">
-                        {labelFilter ? labels.find((l) => l.id === labelFilter)?.name ?? '' : ''}
+                        {labelFilter ? (labels.find((l) => l.id === labelFilter)?.name ?? '') : ''}
                     </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="" textValue="All labels" />
                     {labels.map((label) => (
                         <SelectItem key={label.id} value={label.id} textValue={label.name} />
+                    ))}
+                </SelectContent>
+            </Select>
+
+            {/* CR-03: hierarchy filters — client-side (BoardPage applies them). */}
+            <Select
+                value={typeFilter ?? ''}
+                onValueChange={(v) => setTypeFilter(v === '' ? null : v)}
+            >
+                <SelectTrigger aria-label="Filter by type" className="text-sm">
+                    <SelectValue placeholder="All types">
+                        {typeFilter ? TICKET_TYPE_DISPLAY[typeFilter as TicketType] : ''}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="" textValue="All types" />
+                    {TYPES.map((type) => (
+                        <SelectItem key={type} value={type} textValue={type}>
+                            {TICKET_TYPE_DISPLAY[type]}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
+            <Select
+                value={epicFilter ?? ''}
+                onValueChange={(v) => setEpicFilter(v === '' ? null : v)}
+            >
+                <SelectTrigger aria-label="Filter by epic" className="text-sm">
+                    <SelectValue placeholder="All epics">
+                        {epicFilter
+                            ? (epics.find((epic) => epic.id === epicFilter)?.title ?? '')
+                            : ''}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="" textValue="All epics" />
+                    {epics.length === 0 && (
+                        <SelectItem value="" disabled textValue="No epics yet" />
+                    )}
+                    {epics.map((epic) => (
+                        <SelectItem key={epic.id} value={epic.id} textValue={epic.title}>
+                            {epic.title} ({epic.doneDescendantCount}/{epic.descendantCount})
+                        </SelectItem>
                     ))}
                 </SelectContent>
             </Select>

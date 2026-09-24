@@ -19,6 +19,13 @@ describe('UnsortedBucket', () => {
             assignee: null,
             creator: null,
             creatorId: 'c1',
+            type: 'TASK' as const,
+            parentId: null,
+            parent: null,
+            children: [],
+            epic: null,
+            childCount: 0,
+            childDoneCount: 0,
             createdAt: '2026-06-01T00:00:00.000Z',
             updatedAt: '2026-06-01T00:00:00.000Z',
         };

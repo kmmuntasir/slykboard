@@ -30,6 +30,13 @@ function makeTicket(id: string, overrides: Partial<Ticket> = {}): Ticket {
     assignee: null,
     creator: null,
     creatorId: 'u1',
+    type: 'TASK' as const,
+    parentId: null,
+    parent: null,
+    children: [],
+    epic: null,
+    childCount: 0,
+    childDoneCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -46,6 +53,7 @@ function seedBoard(): BoardPayload {
   return {
     project: { id: 'p1', name: 'Slyk', slug: 'slyk' },
     columns: [{ id: 'c1', name: 'Todo', isUnsorted: false, tickets: [t1, t2] }],
+    epics: [],
   };
 }
 

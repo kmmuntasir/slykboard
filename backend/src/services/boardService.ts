@@ -8,6 +8,17 @@ import { getProjectBySlug } from './projectService';
 import { hydrateLabelsForTickets } from './labelService';
 import type { HydratedLabel } from './labelService';
 import type { ChecklistItem } from '../db/schema';
+import type { TicketType } from './ticketService';
+
+// CR-03: rank map mirrored from ticketService for the board's epic-chip walk
+// (top-level epic resolution) — importing the frozen const directly would pull
+// the whole service into the board read path; the map is 4 literals.
+const TYPE_RANK: Readonly<Record<TicketType, number>> = {
+  EPIC: 3,
+  STORY: 2,
+  TASK: 1,
+  SUBTASK: 0,
+};
 
 // F09 D-Unsorted-Bucket: stable id for the orphan pseudo-column.
 export const UNSORTED_BUCKET_ID = '__unsorted__';
@@ -35,6 +46,22 @@ export interface BoardTicket {
   creatorId: string;
   createdAt: Date;
   updatedAt: Date;
+  // CR-03: hierarchy context.
+  type: TicketType;
+  parentId: string | null;
+  parent: { id: string; ticketNumber: number; title: string; type: TicketType } | null;
+  epic: { id: string; ticketNumber: number; title: string } | null; // top-level epic ancestor
+  childCount: number; // live direct children (0 → card is freely draggable)
+  childDoneCount: number; // direct children sitting in the LAST column
+}
+
+// CR-03 FR-03.8: epic summary for the board's Epics view.
+export interface EpicSummary {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  descendantCount: number; // live descendants at any depth
+  doneDescendantCount: number; // descendants in the LAST column
 }
 
 export interface BoardColumn {
@@ -47,6 +74,7 @@ export interface BoardColumn {
 export interface BoardPayload {
   project: { id: string; name: string; slug: string };
   columns: BoardColumn[];
+  epics: EpicSummary[]; // CR-03 FR-03.8: epic roll-up list for the Epics view
 }
 
 export interface BoardFilters {
@@ -125,6 +153,8 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
       assigneeFullName: users.fullName,
       assigneeAvatarUrl: users.avatarUrl,
       assigneeRowId: users.id,
+      type: tickets.type,
+      parentId: tickets.parentId,
     })
     .from(tickets)
     .leftJoin(users, eq(users.id, tickets.assigneeId))
@@ -157,7 +187,80 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
     creatorId: r.creatorId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    type: r.type as TicketType,
+    parentId: r.parentId,
+    parent: null, // resolved below (needs the full-row map)
+    epic: null, // resolved below
+    childCount: 0,
+    childDoneCount: 0,
   }));
+
+  // CR-03: hierarchy enrichment — done in one pass over the in-memory rows
+  // (the board already loads every live ticket, so parent/epic/child lookups
+  // are map hits; max chain depth is 3 by the rank ordering).
+  const byId = new Map(allTickets.map((t) => [t.id, t]));
+  const lastColumnId = project.columns.at(-1)?.id ?? null;
+  const childrenOf = new Map<string, BoardTicket[]>();
+  for (const t of allTickets) {
+    if (t.parentId !== null) {
+      const list = childrenOf.get(t.parentId) ?? [];
+      list.push(t);
+      childrenOf.set(t.parentId, list);
+    }
+  }
+  for (const t of allTickets) {
+    const parent = t.parentId !== null ? (byId.get(t.parentId) ?? null) : null;
+    t.parent = parent
+      ? { id: parent.id, ticketNumber: parent.ticketNumber, title: parent.title, type: parent.type }
+      : null;
+    // Walk up to the topmost ancestor; the epic chip shows it when it's an EPIC.
+    let ancestor = parent;
+    let guard = 0;
+    while (ancestor !== null && ancestor.parentId !== null && guard < 4) {
+      ancestor = byId.get(ancestor.parentId) ?? null;
+      guard += 1;
+    }
+    t.epic =
+      ancestor !== null && ancestor.type === 'EPIC'
+        ? { id: ancestor.id, ticketNumber: ancestor.ticketNumber, title: ancestor.title }
+        : null;
+    const children = childrenOf.get(t.id) ?? [];
+    t.childCount = children.length;
+    t.childDoneCount =
+      lastColumnId === null ? 0 : children.filter((c) => c.statusColumn === lastColumnId).length;
+  }
+
+  // CR-03 FR-03.8: epic summaries (live descendants at any depth).
+  const epics: EpicSummary[] = allTickets
+    .filter((t) => t.type === 'EPIC')
+    .map((epic) => {
+      let frontier = [epic.id];
+      const seen = new Set<string>([epic.id]);
+      let descendantCount = 0;
+      let doneDescendantCount = 0;
+      for (let depth = 0; depth < 3 && frontier.length > 0; depth += 1) {
+        const next: string[] = [];
+        for (const id of frontier) {
+          for (const child of childrenOf.get(id) ?? []) {
+            if (seen.has(child.id)) continue;
+            seen.add(child.id);
+            descendantCount += 1;
+            if (lastColumnId !== null && child.statusColumn === lastColumnId) {
+              doneDescendantCount += 1;
+            }
+            next.push(child.id);
+          }
+        }
+        frontier = next;
+      }
+      return {
+        id: epic.id,
+        ticketNumber: epic.ticketNumber,
+        title: epic.title,
+        descendantCount,
+        doneDescendantCount,
+      };
+    });
 
   // F09 D-Soft-Cap: warn (not truncate).
   if (
@@ -208,5 +311,6 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
   return {
     project: { id: project.id, name: project.name, slug: project.slug },
     columns,
+    epics,
   };
 }

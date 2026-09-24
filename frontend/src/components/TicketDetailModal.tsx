@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock } from 'lucide-react';
+import { Clock, GitBranch } from 'lucide-react';
 import { FormProvider } from 'react-hook-form';
 
 import { fetchTicket, moveTicket } from '@/api/tickets';
 import { fetchTimeEntries } from '@/api/timer';
+import { fetchBoard } from '@/api/boards';
 import { ticketKeys, timerKeys, boardKeys } from '@/api/queryKeys';
 import { formatTicketId } from '@/utils/formatTicketId';
+import { buildDescendantTree } from '@/utils/hierarchy';
 import { formatDate } from '@/utils/formatDate';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import { formatDuration } from '@/utils/formatDuration';
@@ -38,6 +40,8 @@ import {
     DueDateField,
     LabelsField,
     ChecklistField,
+    TypeField,
+    ParentField,
 } from './ticket-fields';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/Collapsible';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/Tooltip';
@@ -95,6 +99,14 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
 
     const deleteTicketMutation = useDeleteTicket();
 
+    // CR-03: unfiltered board data (shared cache key with TicketAttributeForm's
+    // parent options) backs the delete-confirm descendant tree.
+    const { data: board } = useQuery({
+        queryKey: [...boardKeys.detail(slug), ''],
+        queryFn: () => fetchBoard(slug, ''),
+        enabled: Boolean(slug),
+    });
+
     // D7: reconcile board/modal drift — refetch the detail while the modal is
     // open (30s, matching the board). RHF defaultValues are seeded once (below),
     // so a background refetch updates the cache but never overwrites unsaved input.
@@ -112,8 +124,18 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
         refetchOnWindowFocus: true,
     });
 
+    // CR-03: descendant tree for the cascade-delete confirmation (after the
+    // detail query so `ticket` is initialized — the board data is unfiltered).
+    const descendantTree = useMemo(() => {
+        if (!board || !ticket) return [];
+        const allTickets = board.columns.flatMap((column) => column.tickets);
+        return buildDescendantTree(allTickets, ticket.id);
+    }, [board, ticket]);
+
     // statusColumn is NOT part of UpdateTicketDto — it moves via moveTicket
     // (handleStatusMove below). Everything else maps straight through.
+    // CR-03: type/parentId ride the same attribute patch (server validates the
+    // rank rules + children compatibility).
     const handleSubmit = (values: TicketFormValues) => {
         const dto: UpdateTicketDto = {
             title: values.title,
@@ -123,6 +145,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             labelIds: values.labelIds,
             checklist: values.checklist,
             dueDate: values.dueDate ?? null,
+            type: values.type,
+            parentId: values.parentId,
         };
         return onSubmit(dto);
     };
@@ -168,6 +192,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             checklist: ticket.checklist,
             statusColumn: ticket.statusColumn,
             dueDate: ticket.dueDate ?? null,
+            type: ticket.type,
+            parentId: ticket.parentId,
         });
     }, [ticket, methods]);
 
@@ -369,6 +395,14 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                     hidden={activeTab !== 'metadata'}
                                     className="mt-4 flex flex-col gap-4"
                                 >
+                                    <HierarchyPanel
+                                        slug={slug}
+                                        ticket={ticket}
+                                        lastColumnId={
+                                            board?.columns.filter((c) => !c.isUnsorted).at(-1)
+                                                ?.id ?? null
+                                        }
+                                    />
                                     <StatusField
                                         projectSlug={slug}
                                         ticketId={ticket.id}
@@ -383,6 +417,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                             });
                                         }}
                                     />
+                                    <TypeField />
+                                    <ParentField projectSlug={slug} />
                                     <PriorityField />
                                     <AssigneeField projectSlug={slug} />
                                     <DueDateField />
@@ -416,8 +452,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                                 Danger zone
                                             </h3>
                                             <p className="mb-3 text-sm text-muted-foreground">
-                                                Permanently remove this ticket from the board. This cannot be
-                                                undone.
+                                                Permanently remove this ticket from the board. This
+                                                cannot be undone.
                                             </p>
                                             <Button
                                                 variant="destructive-outline"
@@ -430,7 +466,6 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
                                 </TabsContent>
                             </Tabs>
                         </div>
-
                     </div>
                 </form>
             </FormProvider>
@@ -489,6 +524,8 @@ export function TicketDetailModal({ slug, ticketId, onClose, onSubmit }: TicketD
             <DeleteTicketConfirm
                 isOpen={deleteConfirmOpen}
                 isDeleting={deleteTicketMutation.isPending}
+                descendants={descendantTree}
+                projectSlug={slug}
                 onConfirm={handleConfirmDelete}
                 onCancel={() => setDeleteConfirmOpen(false)}
             />
@@ -508,6 +545,8 @@ const EMPTY_DEFAULT_VALUES: TicketFormValues = {
     checklist: [],
     statusColumn: '',
     dueDate: null,
+    type: 'TASK',
+    parentId: null,
 };
 
 // DEL-01 T7: Status → moveTicket. Same-column is a no-op (no spurious activity)
@@ -570,5 +609,73 @@ function TimerTrackingPanel({ ticketId }: TimerTrackingPanelProps) {
                 </CollapsibleContent>
             </Collapsible>
         </div>
+    );
+}
+
+// CR-03 FR-03.5: hierarchy roll-up panel for the Metadata tab — direct parent
+// link + live direct children with their done state (done = last board column,
+// matching the boardService convention). Tracked-time roll-ups land with CR-04.
+// Hidden entirely for plain root tickets without children.
+interface HierarchyPanelProps {
+    slug: string;
+    ticket: import('@/types/ticket').Ticket;
+    lastColumnId: string | null;
+}
+
+function HierarchyPanel({ slug, ticket, lastColumnId }: HierarchyPanelProps) {
+    const { parent, children } = ticket;
+    if (parent === null && children.length === 0) return null;
+
+    return (
+        <section className="space-y-2 rounded-md border border-border p-3" aria-label="Hierarchy">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                <GitBranch size={14} className="text-muted-foreground" />
+                Hierarchy
+            </h3>
+            {parent !== null && (
+                <p className="text-sm text-muted-foreground">
+                    Parent:{' '}
+                    <span className="font-mono text-xs text-foreground">
+                        {formatTicketId(slug, parent.ticketNumber, { padded: true })}
+                    </span>{' '}
+                    <span className="text-xs uppercase tracking-wide">{parent.type}</span>{' '}
+                    <span className="text-foreground">{parent.title}</span>
+                </p>
+            )}
+            {children.length > 0 && (
+                <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                        {children.filter((child) => child.statusColumn === lastColumnId).length}/
+                        {children.length} children done — this ticket&rsquo;s column follows its
+                        least-progressed child.
+                    </p>
+                    <ul className="space-y-0.5">
+                        {children.map((child) => {
+                            const done =
+                                lastColumnId !== null && child.statusColumn === lastColumnId;
+                            return (
+                                <li key={child.id} className="flex items-baseline gap-2 text-sm">
+                                    <span
+                                        aria-hidden="true"
+                                        className={
+                                            done ? 'text-emerald-600' : 'text-muted-foreground'
+                                        }
+                                    >
+                                        {done ? '✓' : '○'}
+                                    </span>
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                        {formatTicketId(slug, child.ticketNumber, { padded: true })}
+                                    </span>
+                                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                                        {child.type}
+                                    </span>
+                                    <span className="min-w-0 truncate">{child.title}</span>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
+        </section>
     );
 }

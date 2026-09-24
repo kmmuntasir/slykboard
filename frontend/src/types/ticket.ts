@@ -34,6 +34,33 @@ export interface ChecklistItem {
   done: boolean;
 }
 
+// CR-03: hierarchy types. Storage is SCREAMING_SNAKE; display via the map.
+export type TicketType = 'EPIC' | 'STORY' | 'TASK' | 'SUBTASK';
+
+export const TICKET_TYPE_DISPLAY: Readonly<Record<TicketType, string>> = Object.freeze({
+  EPIC: 'Epic',
+  STORY: 'Story',
+  TASK: 'Task',
+  SUBTASK: 'Subtask',
+});
+
+// Rank mirror of backend TICKET_TYPE_RANK — a parent must outrank its child.
+export const TICKET_TYPE_RANK: Readonly<Record<TicketType, number>> = Object.freeze({
+  EPIC: 3,
+  STORY: 2,
+  TASK: 1,
+  SUBTASK: 0,
+});
+
+// CR-03: related-ticket summaries (detail modal parent/children + board chips).
+export interface TicketRelation {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+  statusColumn: string;
+}
+
 // F09 D-Assignee-Shape: assignee nullable (unassigned). creatorId returned but
 // not rendered on the card (F09 acceptance lists title/ID/assignee/priority/labels).
 export interface Ticket {
@@ -51,6 +78,14 @@ export interface Ticket {
   creatorId: string;
   // DEL-01: nullable due date (full ISO datetime; null = no due date).
   dueDate?: string | null;
+  // CR-03: hierarchy context.
+  type: TicketType;
+  parentId: string | null;
+  parent: TicketRelation | null;
+  children: TicketRelation[];
+  epic: { id: string; ticketNumber: number; title: string } | null;
+  childCount: number;
+  childDoneCount: number;
   createdAt: string; // ISO
   updatedAt: string;
   deletedAt?: string | null; // F17: soft-delete tombstone (absent on board payload; set on detail for soft-deleted)
@@ -64,4 +99,6 @@ export interface UpdateTicketDto {
   labelIds?: string[]; // F14: replace a ticket's label set
   checklist?: ChecklistItem[]; // F15: replace the checklist array (full-array replace)
   dueDate?: string | null; // DEL-01: nullable ISO datetime; backend z.string().datetime().nullable().optional()
+  type?: TicketType; // CR-03: hierarchy type change
+  parentId?: string | null; // CR-03: re-parent (null = detach; SUBTASK cannot)
 }

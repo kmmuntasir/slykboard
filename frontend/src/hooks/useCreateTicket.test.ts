@@ -34,6 +34,13 @@ function makeTicket(
     assignee: null,
     creator: null,
     creatorId: 'u1',
+    type: 'TASK' as const,
+    parentId: null,
+    parent: null,
+    children: [],
+    epic: null,
+    childCount: 0,
+    childDoneCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -51,6 +58,7 @@ function seedBoard(): BoardPayload {
         tickets: [],
       },
     ],
+    epics: [],
   };
 }
 

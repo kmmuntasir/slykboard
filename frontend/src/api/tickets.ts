@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { ChecklistItem, Ticket, UpdateTicketDto } from '../types/ticket';
+import type { ChecklistItem, Ticket, TicketType, UpdateTicketDto } from '../types/ticket';
 import type { ActivityResponse } from '../types/activity';
 
 export interface MoveTicketRequest {
@@ -25,6 +25,8 @@ export interface CreateTicketDto {
   statusColumn?: string;
   checklist?: ChecklistItem[]; // F15: optional checklist at create; DB defaults to []
   dueDate?: string | null; // DEL-01: nullable ISO datetime at create
+  type?: TicketType; // CR-03: hierarchy type (default TASK)
+  parentId?: string | null; // CR-03: parent ticket (required for SUBTASK)
 }
 
 export function createTicket(slug: string, dto: CreateTicketDto): Promise<Ticket> {
