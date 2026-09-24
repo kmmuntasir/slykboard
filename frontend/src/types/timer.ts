@@ -43,3 +43,18 @@ export interface TimeEntriesResponse {
   entries: TimeEntryWithDuration[];
   totalMs: number; // sum of all closed durations (running entry excluded)
 }
+
+// CR-09 / CR-15: the caller's timer state (GET /timer/state).
+export interface TimerTicketRef {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  projectId: string;
+  projectSlug: string;
+  projectName: string;
+}
+
+export interface TimerStateResponse {
+  active: { entryId: string; startTime: string; ticket: TimerTicketRef } | null;
+  lastTracked: (TimerTicketRef & { endedAt: string; durationMs: number }) | null;
+}

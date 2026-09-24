@@ -34,6 +34,8 @@ export const labelKeys = {
 export const timerKeys = {
   all: ['timer'] as const,
   active: () => [...timerKeys.all, 'active'] as const,
+  // CR-09/CR-15: active session + last tracked ticket (one query).
+  state: () => [...timerKeys.all, 'state'] as const,
   // F20: per-ticket time-tracking log cache key.
   entries: (id: string) => [...timerKeys.all, 'entries', id] as const,
 };

@@ -20,6 +20,8 @@ vi.mock('@/api/timer', () => ({
         serverNow: new Date().toISOString(),
     }),
     fetchActiveTimer: vi.fn().mockResolvedValue({ activeTimer: null }),
+    // CR-09: the start guard reads the shared timer state first.
+    fetchTimerState: vi.fn().mockResolvedValue({ active: null, lastTracked: null }),
 }));
 vi.mock('@/api/time', () => ({
     fetchServerTime: vi.fn().mockResolvedValue({ now: new Date().toISOString() }),
@@ -95,8 +97,6 @@ describe('TimerHeroCard', () => {
 
         await waitFor(() => expect(stopTimer).toHaveBeenCalledWith(TICKET_ID));
         // After stop resolves, the last-tracked affordance shows (90s fixture → ~1m 30s).
-        await waitFor(() =>
-            expect(screen.getByText(/Last tracked:/)).toBeInTheDocument(),
-        );
+        await waitFor(() => expect(screen.getByText(/Last tracked:/)).toBeInTheDocument());
     });
 });

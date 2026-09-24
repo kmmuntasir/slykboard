@@ -32,6 +32,7 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/Tooltip';
 import { ProjectPicker } from './ProjectPicker';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { TimerWidget } from './TimerWidget';
 import { useTheme } from '@/hooks/useTheme';
 import { useHealth } from '@/hooks/useHealth';
 
@@ -363,8 +364,10 @@ export function TopNav() {
                     {/* Center cluster: primary nav (desktop). */}
                     <div className="hidden md:flex">{navItems}</div>
 
-                    {/* Right cluster: theme slot (F40) + avatar (F39 swaps). */}
+                    {/* Right cluster: timer widget (CR-15) + theme slot (F40) + avatar (F39 swaps). */}
                     <div className="flex items-center gap-3">
+                        {/* CR-15: pulsing clock while tracking; last-tracked restart when idle. */}
+                        <TimerWidget />
                         {/* F40 — fill the F37 theme slot with the reusable segmented control. */}
                         <ThemeToggle />
                         {/* F41 (D2) — health indicator folded into the navbar (PRD §4.2). Activity

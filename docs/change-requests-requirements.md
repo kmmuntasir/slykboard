@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v9 — CR-01 … CR-06, CR-08, CR-10, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v10 — CR-01 … CR-06, CR-08 … CR-12, CR-15 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -627,7 +627,7 @@ What exists today (verified against the code, not the PRD):
 
 | Phase | CRs | Rationale |
 | --- | --- | --- |
-| 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-10 ✅, CR-11 ✅, CR-12 ✅ (all done 2026-09-25), CR-09 (confirm UX), CR-15 (timer widget) | Small, independent, high client visibility; unblock daily usage. |
+| 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-09 ✅, CR-10 ✅, CR-11 ✅, CR-12 ✅, CR-15 ✅ (all done 2026-09-25) | Small, independent, high client visibility; unblock daily usage. |
 | 2 — Time integrity & forensics | CR-08 ✅ (done 2026-09-25), CR-14 | Make recorded time trustworthy and explainable before building more reporting on it. |
 | 3 — Hierarchy & reports | CR-03 ✅, CR-04 ✅, CR-05 ✅ (all done 2026-09-25), CR-06 | Largest chunk; CR-03/04/05 shipped; CR-06 remains. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |

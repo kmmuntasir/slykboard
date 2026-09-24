@@ -5,6 +5,7 @@ import type {
   ActiveTimerResponse,
   TimeEntriesResponse,
   TimeEntryWithDuration,
+  TimerStateResponse,
 } from '../types/timer';
 
 // F20 T4: server-authoritative timer HTTP client.
@@ -42,4 +43,9 @@ export async function addManualEntry(
     method: 'POST',
     body: JSON.stringify({ minutes: body.minutes, description: body.description }),
   });
+}
+
+// CR-09 / CR-15: active session + last tracked ticket in one read.
+export async function fetchTimerState(): Promise<TimerStateResponse> {
+  return apiFetch<TimerStateResponse>('/timer/state');
 }

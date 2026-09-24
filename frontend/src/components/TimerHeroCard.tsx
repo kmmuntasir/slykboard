@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchActiveTimer } from '@/api/timer';
 import { timerKeys } from '@/api/queryKeys';
 import { useTimer } from '@/hooks/useTimer';
+import { TimerSwitchConfirm } from './TimerSwitchConfirm';
 import { useServerTime } from '@/hooks/useServerTime';
 import { formatDuration } from '@/utils/formatDuration';
 import { Button } from './ui/Button';
@@ -24,7 +25,8 @@ interface TimerHeroCardProps {
 }
 
 export function TimerHeroCard({ ticketId }: TimerHeroCardProps) {
-    const { start, stop, isStarting, isStopping } = useTimer(ticketId);
+    const { start, stop, isStarting, isStopping, pendingConfirm, confirmStart, cancelConfirm } =
+        useTimer(ticketId);
     const { offset } = useServerTime();
     const { data: activeTimerData } = useQuery({
         queryKey: timerKeys.active(),
@@ -59,11 +61,7 @@ export function TimerHeroCard({ ticketId }: TimerHeroCardProps) {
     // Show the live elapsed while running; otherwise the last-tracked duration
     // (if any) or a resting 00:00:00 placeholder. formatDuration collapses to
     // "0s" at 0 — render the explicit zero form when nothing has run yet.
-    const displayMs = isRunning
-        ? elapsedMs
-        : lastDurationMs !== null
-            ? lastDurationMs
-            : 0;
+    const displayMs = isRunning ? elapsedMs : lastDurationMs !== null ? lastDurationMs : 0;
     const readout = displayMs > 0 ? formatDuration(displayMs) : '00:00:00';
 
     return (

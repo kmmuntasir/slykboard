@@ -6,6 +6,7 @@ import { timerKeys } from '@/api/queryKeys';
 import { useTimer } from '@/hooks/useTimer';
 import { useServerTime } from '@/hooks/useServerTime';
 import { formatDuration } from '@/utils/formatDuration';
+import { TimerSwitchConfirm } from './TimerSwitchConfirm';
 
 // F20: per-ticket timer controls. Renders Start when no timer is running on
 // this ticket, or Stop + a live elapsed readout when this ticket's timer is the
@@ -16,7 +17,8 @@ interface TimerControlsProps {
 }
 
 export function TimerControls({ ticketId }: TimerControlsProps) {
-    const { start, stop, isStarting, isStopping } = useTimer(ticketId);
+    const { start, stop, isStarting, isStopping, pendingConfirm, confirmStart, cancelConfirm } =
+        useTimer(ticketId);
     const { offset } = useServerTime();
     const { data: activeTimerData } = useQuery({
         queryKey: timerKeys.active(),
@@ -51,6 +53,13 @@ export function TimerControls({ ticketId }: TimerControlsProps) {
 
     return (
         <div className="mb-4 flex items-center gap-3">
+            <TimerSwitchConfirm
+                pending={pendingConfirm}
+                onConfirm={() => {
+                    void confirmStart();
+                }}
+                onCancel={cancelConfirm}
+            />
             {isRunning ? (
                 <>
                     <button

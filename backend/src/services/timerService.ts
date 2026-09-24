@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
-import { tickets, timeEntries, users } from '../db/schema';
+import { tickets, timeEntries, users, projects } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 
@@ -278,4 +278,112 @@ export async function addManualEntry(args: {
     type: 'manual',
     user,
   };
+}
+
+// ============================================================================
+// CR-09 / CR-15: the caller's timer STATE for the top-bar widget and the
+// start-confirmation guard. One endpoint answers both questions the UI needs:
+// "what am I tracking right now?" and "what did I track last?".
+// ============================================================================
+
+export interface TimerTicketRef {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  projectId: string;
+  projectSlug: string;
+  projectName: string;
+}
+
+export interface TimerStateActive {
+  entryId: string;
+  startTime: string;
+  ticket: TimerTicketRef;
+}
+
+export interface TimerStateLastTracked extends TimerTicketRef {
+  endedAt: string;
+  durationMs: number;
+}
+
+export interface TimerState {
+  active: TimerStateActive | null;
+  lastTracked: TimerStateLastTracked | null;
+}
+
+const ticketRefColumns = {
+  id: tickets.id,
+  ticketNumber: tickets.ticketNumber,
+  title: tickets.title,
+  projectId: projects.id,
+  projectSlug: projects.slug,
+  projectName: projects.name,
+};
+
+/**
+ * The caller's global timer state. `lastTracked` walks back through the most
+ * recent CLOSED timer entries, skipping soft-deleted tickets (a restart target
+ * the user can no longer open is useless) — bounded scan keeps it cheap.
+ */
+export async function getTimerState(userId: string): Promise<TimerState> {
+  const [activeRow] = await db
+    .select({
+      entryId: timeEntries.id,
+      startTime: timeEntries.startTime,
+      ...ticketRefColumns,
+    })
+    .from(timeEntries)
+    .innerJoin(tickets, eq(tickets.id, timeEntries.ticketId))
+    .innerJoin(projects, eq(projects.id, tickets.projectId))
+    .where(and(eq(timeEntries.userId, userId), isNull(timeEntries.endTime)))
+    .limit(1);
+
+  const active: TimerStateActive | null = activeRow
+    ? {
+        entryId: activeRow.entryId,
+        startTime: activeRow.startTime.toISOString(),
+        ticket: {
+          id: activeRow.id,
+          ticketNumber: activeRow.ticketNumber,
+          title: activeRow.title,
+          projectId: activeRow.projectId,
+          projectSlug: activeRow.projectSlug,
+          projectName: activeRow.projectName,
+        },
+      }
+    : null;
+
+  // Most recent closed sessions, newest first; walk back past deleted tickets.
+  const recent = await db
+    .select({
+      endTime: timeEntries.endTime,
+      startTime: timeEntries.startTime,
+      deletedAt: tickets.deletedAt,
+      ...ticketRefColumns,
+    })
+    .from(timeEntries)
+    .innerJoin(tickets, eq(tickets.id, timeEntries.ticketId))
+    .innerJoin(projects, eq(projects.id, tickets.projectId))
+    .where(and(eq(timeEntries.userId, userId), isNotNull(timeEntries.endTime)))
+    .orderBy(desc(timeEntries.startTime))
+    .limit(10);
+
+  const previous = recent.find(
+    (row): row is typeof row & { endTime: Date; deletedAt: null } =>
+      row.deletedAt === null && row.endTime !== null,
+  );
+  const lastTracked: TimerStateLastTracked | null = previous
+    ? {
+        id: previous.id,
+        ticketNumber: previous.ticketNumber,
+        title: previous.title,
+        projectId: previous.projectId,
+        projectSlug: previous.projectSlug,
+        projectName: previous.projectName,
+        endedAt: previous.endTime.toISOString(),
+        durationMs: previous.endTime.getTime() - previous.startTime.getTime(),
+      }
+    : null;
+
+  return { active, lastTracked };
 }
