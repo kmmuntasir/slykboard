@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v10 — CR-01 … CR-06, CR-08 … CR-12, CR-15 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v11 — all active CRs (CR-01 … CR-06, CR-08 … CR-12, CR-14, CR-15) delivered (2026-09-25). CR-07 and CR-13 remain deferred by client. |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -527,9 +527,19 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Manual adjustment of auto-tracked time (need to be recorded) [Example: A member starts a task, works for 30 minutes, then for an extreme urgency, he has to leave the desk. He comes back 2 hours later, and then he stops the timer. It shows 2 hours and 30 minutes. He should be perform a manual adjustment - increase or decrease - with a mandatory 'Reason' text field]"_
 
-**Status:** New feature.
+**Status:** **DONE — implemented 2026-09-25.**
 
 **Requirement:** A member can correct an auto-tracked (timer) entry by increasing or decreasing its duration, with a mandatory reason; the original measurement and every adjustment are preserved for audit.
+
+**Implementation notes (2026-09-25)**
+
+- Migration `0005_cr14_time_adjustments`: nullable `adjustment_minutes` / `adjustment_reason` / `adjusted_by_id` / `adjusted_at` on `TimeEntries` plus the `TIME_ADJUSTED` activity action. `startTime`/`endTime` are never rewritten (FR-14.6).
+- `timerService.adjustTimeEntry` validates in one transaction: reason ≥ 10 chars, non-zero whole minutes, closed entry only, timer entries only, owner-or-admin, and effective duration stays > 0 (FR-14.5). Every adjustment appends a `TIME_ADJUSTED` activity row (original ms + signed delta + reason). A second correction overwrites the delta/reason with a mandatory new one and audits it again (OQ-14c settled this way).
+- Endpoint `PATCH /api/tickets/:ticketId/timer/entries/:entryId/adjustment` (membership-resolved; the entry must belong to the ticket's scope).
+- Effective duration now flows through the single shared `effectiveDurationMs` (the CR-14 hook this document reserved in CR-04/05/06/08): ticket Time Log totals, board badges (SQL aggregate), hierarchy roll-ups, member reports, and column-time tracked splits all use adjusted minutes. The Time Log entry carries `originalDurationMs` + `adjustmentMinutes`/`adjustmentReason`, shows an "Adjusted ±Nm" marker, the original duration, and the reason.
+- UI: an Adjust action on closed timer entries only (never running or manual), opening a modal with signed-minutes input and a mandatory reason; one entry at a time, no batch path (FR-14.7).
+- Tests: 3 real-DB cases (meeting example + audit row, all guards, re-adjustment) + 4 route cases + 5 component cases; suites green (backend 958, frontend 1141).
+- OQ-14b remains open: whether member totals should carry an explicit "includes adjustments" marker (entries are already marked individually).
 
 **Proposed model**
 
@@ -628,7 +638,7 @@ What exists today (verified against the code, not the PRD):
 | Phase | CRs | Rationale |
 | --- | --- | --- |
 | 1 — Quick wins | CR-01 ✅, CR-02 ✅, CR-09 ✅, CR-10 ✅, CR-11 ✅, CR-12 ✅, CR-15 ✅ (all done 2026-09-25) | Small, independent, high client visibility; unblock daily usage. |
-| 2 — Time integrity & forensics | CR-08 ✅ (done 2026-09-25), CR-14 | Make recorded time trustworthy and explainable before building more reporting on it. |
+| 2 — Time integrity & forensics | CR-08 ✅, CR-14 ✅ (both done 2026-09-25) | Make recorded time trustworthy and explainable before building more reporting on it. |
 | 3 — Hierarchy & reports | CR-03 ✅, CR-04 ✅, CR-05 ✅ (all done 2026-09-25), CR-06 | Largest chunk; CR-03/04/05 shipped; CR-06 remains. |
 | Deferred | CR-07, CR-13 | Per client (2026-09-25): comparative chart and recurring tasks are out of the current scope. |
 
@@ -662,4 +672,4 @@ What exists today (verified against the code, not the PRD):
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
 | OQ-14b | CR-14 | Flag adjusted totals in reports? | Yes |
-| OQ-14c | CR-14 | Single overwrite vs adjustment ledger? | Single overwrite |
+| OQ-14c | CR-14 | Implemented as a single overwrite with a mandatory new reason (audited each time). |

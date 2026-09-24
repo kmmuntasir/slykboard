@@ -408,6 +408,7 @@ interface NodeEntryAggregateRow {
   startTime: Date;
   endTime: Date | null;
   manualEntryMinutes: number | null;
+  adjustmentMinutes: number | null;
   description: string | null;
 }
 
@@ -499,6 +500,7 @@ async function loadSubtreeEntries(args: {
       startTime: timeEntries.startTime,
       endTime: timeEntries.endTime,
       manualEntryMinutes: timeEntries.manualEntryMinutes,
+      adjustmentMinutes: timeEntries.adjustmentMinutes,
       description: timeEntries.description,
     })
     .from(timeEntries)
@@ -517,10 +519,13 @@ export function effectiveDurationMs(row: {
   startTime: Date;
   endTime: Date | null;
   manualEntryMinutes: number | null;
+  // CR-14: manual adjustment of an auto-tracked entry (signed minutes).
+  adjustmentMinutes?: number | null;
 }): number {
   if (row.manualEntryMinutes !== null) return row.manualEntryMinutes * 60_000;
   if (row.endTime === null) return 0;
-  return row.endTime.getTime() - row.startTime.getTime();
+  const base = row.endTime.getTime() - row.startTime.getTime();
+  return base + (row.adjustmentMinutes ?? 0) * 60_000;
 }
 
 interface HierarchyReportArgs {

@@ -278,6 +278,8 @@ export const activityActionEnum = pgEnum('ActivityAction', [
   // CR-03: hierarchy lifecycle events.
   'PARENT_CHANGED',
   'TYPE_CHANGED',
+  // CR-14: manual time adjustment audit.
+  'TIME_ADJUSTED',
 ]);
 
 // PRD §8.5 — ActivityLogs. user_id nullable + ON DELETE SET NULL preserves audit
@@ -315,6 +317,12 @@ export const timeEntries = pgTable(
     startTime: timestamp('start_time', { withTimezone: true, mode: 'date' }).notNull(),
     endTime: timestamp('end_time', { withTimezone: true, mode: 'date' }),
     manualEntryMinutes: integer('manual_entry_minutes'), // F21-ready, nullable
+    // CR-14: manual adjustment of an auto-tracked entry. startTime/endTime are
+    // never rewritten — the effective duration is (end - start) + adjustmentMinutes.
+    adjustmentMinutes: integer('adjustment_minutes'), // signed; null = unadjusted
+    adjustmentReason: text('adjustment_reason'), // mandatory when adjusted
+    adjustedById: uuid('adjusted_by_id').references((): AnyPgColumn => users.id), // audit
+    adjustedAt: timestamp('adjusted_at', { withTimezone: true, mode: 'date' }),
     description: text('description'), // nullable
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   },

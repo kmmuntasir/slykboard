@@ -15,7 +15,8 @@ export type ActivityAction =
   | 'COMMENT_EDITED'
   | 'COMMENT_DELETED'
   | 'PARENT_CHANGED'
-  | 'TYPE_CHANGED';
+  | 'TYPE_CHANGED'
+  | 'TIME_ADJUSTED';
 
 export interface ActivityLogEntry {
   action: ActivityAction;

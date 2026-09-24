@@ -49,3 +49,15 @@ export async function addManualEntry(
 export async function fetchTimerState(): Promise<TimerStateResponse> {
   return apiFetch<TimerStateResponse>('/timer/state');
 }
+
+// CR-14: adjust a closed auto-tracked entry by signed minutes with a reason.
+export async function adjustTimeEntry(
+  ticketId: string,
+  entryId: string,
+  body: { adjustmentMinutes: number; reason: string },
+): Promise<{ id: string; adjustmentMinutes: number; adjustmentReason: string }> {
+  return apiFetch(`/tickets/${ticketId}/timer/entries/${entryId}/adjustment`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}

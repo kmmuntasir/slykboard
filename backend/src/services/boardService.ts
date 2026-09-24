@@ -186,11 +186,14 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
     const totals = await db
       .select({
         ticketId: timeEntries.ticketId,
+        // CR-14: manual entries = minutes; timer entries = wall-clock + the
+        // signed adjustment (never a rewrite of start/end).
         ms: sql<number>`coalesce(
           sum(
             case when ${timeEntries.manualEntryMinutes} is not null
               then ${timeEntries.manualEntryMinutes} * 60000
               else extract(epoch from (${timeEntries.endTime} - ${timeEntries.startTime})) * 1000
+                   + coalesce(${timeEntries.adjustmentMinutes}, 0) * 60000
             end
           ), 0
         )`,

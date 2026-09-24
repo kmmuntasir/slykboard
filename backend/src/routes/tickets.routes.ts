@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { requireProjectAdmin } from '../middleware/requireProjectAdmin';
 import { resolveTicketProject } from '../middleware/resolveProject';
@@ -18,6 +19,7 @@ import {
   type ManualEntryBody,
 } from './tickets.schema';
 import { createCommentBody, type CreateCommentBody } from './comments.schema';
+import { adjustmentBody } from './tickets.schema';
 import * as commentService from '../services/commentService';
 
 export const ticketsRouter = Router();
@@ -262,5 +264,32 @@ ticketsRouter.post(
       description: body.description,
     });
     res.status(201).json(success(entry));
+  },
+);
+
+// CR-14: manual adjustment of a closed auto-tracked entry. Scoped under the
+// ticket (membership + project resolved by the same resolver chain) so the
+// authorization context (owner-or-admin) is available to the service.
+ticketsRouter.patch(
+  '/:ticketId/timer/entries/:entryId/adjustment',
+  authenticate,
+  validateRequest({
+    params: ticketIdParam.extend({ entryId: z.uuid() }),
+    body: adjustmentBody,
+  }),
+  resolveTicketProject(),
+  async (req, res) => {
+    const { ticketId, entryId } = req.params as { ticketId: string; entryId: string };
+    const body = req.body as { adjustmentMinutes: number; reason: string };
+    const adjusted = await timerService.adjustTimeEntry({
+      entryId,
+      adjustmentMinutes: body.adjustmentMinutes,
+      reason: body.reason,
+      actingUserId: req.user!.id,
+      actingUserIsAdmin: req.user!.isPlatformAdmin,
+    });
+    // Refresh the entry list + activity feed the ticket surfaces.
+    void ticketId;
+    res.json(success(adjusted));
   },
 );

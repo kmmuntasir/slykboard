@@ -33,7 +33,10 @@ export interface TimeEntryWithDuration {
   id: string;
   startTime: string; // ISO
   endTime: string | null; // null = still running
-  durationMs: number | null; // null if running; else end - start
+  durationMs: number | null; // EFFECTIVE duration (CR-14 adjustment applied)
+  originalDurationMs?: number | null; // wall-clock before any adjustment
+  adjustmentMinutes?: number | null;
+  adjustmentReason?: string | null; // null if running; else end - start
   type: 'manual' | 'timer'; // F21: manual entry vs. live-timer run
   description: string | null;
   user: { id: string; fullName: string; avatarUrl: string | null } | null; // F22: who tracked it

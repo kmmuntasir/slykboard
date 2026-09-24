@@ -10,14 +10,6 @@ export const ticketIdParam = z.object({
 
 const priorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']);
 
-// CR-10: required schedule window shared by create + PATCH. Both dates are
-// required (no defaults) and end must be strictly after start. A small helper
-// keeps the two refinements identical.
-const startEndFields = {
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
-};
-
 function assertWindowOrder(
   startDate: string | undefined,
   endDate: string | undefined,
@@ -106,3 +98,15 @@ export const manualEntryBody = z.object({
 });
 
 export type ManualEntryBody = z.infer<typeof manualEntryBody>;
+
+// CR-14: adjustment payload — signed whole minutes (non-zero) + a mandatory
+// reason (min length mirrors the service guard).
+export const adjustmentBody = z.object({
+  adjustmentMinutes: z
+    .number()
+    .int()
+    .refine((m) => m !== 0, {
+      message: 'Adjustment must be a non-zero whole number of minutes',
+    }),
+  reason: z.string().min(10, 'A reason of at least 10 characters is required').max(500),
+});

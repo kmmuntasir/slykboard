@@ -18,7 +18,8 @@ export type EnrichedActionType =
   | 'COMMENT_EDITED'
   | 'COMMENT_DELETED'
   | 'PARENT_CHANGED'
-  | 'TYPE_CHANGED';
+  | 'TYPE_CHANGED'
+  | 'TIME_ADJUSTED';
 
 export interface ActivityActor {
   id: string;

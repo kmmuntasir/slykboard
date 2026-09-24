@@ -68,6 +68,7 @@ const timerMock = vi.hoisted(() => ({
   stopTimer: vi.fn(),
   getTimeEntries: vi.fn(),
   addManualEntry: vi.fn(),
+  adjustTimeEntry: vi.fn(),
 }));
 vi.mock('../services/timerService', () => timerMock);
 
@@ -1287,5 +1288,67 @@ describe('GET /api/tickets/:ticketId/activity (F19)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedGetTicketActivity).not.toHaveBeenCalled();
+  });
+});
+
+// CR-14: manual adjustment of a closed auto-tracked entry.
+describe('PATCH /api/tickets/:ticketId/timer/entries/:entryId/adjustment (CR-14)', () => {
+  const ENTRY_ID = '55555555-5555-4555-8555-555555555555';
+
+  it('200 forwards the adjustment with the acting user', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    vi.mocked(timerService.adjustTimeEntry).mockResolvedValue({
+      id: ENTRY_ID,
+      adjustmentMinutes: -120,
+      adjustmentReason: 'Left the desk for two hours',
+      adjustedById: 'u1',
+      adjustedAt: '2026-01-01T12:00:00.000Z',
+    } as never);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/${ENTRY_ID}/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: -120, reason: 'Left the desk for two hours' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.adjustmentMinutes).toBe(-120);
+    expect(vi.mocked(timerService.adjustTimeEntry)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryId: ENTRY_ID,
+        adjustmentMinutes: -120,
+        actingUserId: 'u1',
+        actingUserIsAdmin: false,
+      }),
+    );
+  });
+
+  it('400 when the reason is too short (service NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/${ENTRY_ID}/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: -10, reason: 'short' });
+    expect(res.status).toBe(400);
+    expect(vi.mocked(timerService.adjustTimeEntry)).not.toHaveBeenCalled();
+  });
+
+  it('400 when the adjustment is zero', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/${ENTRY_ID}/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: 0, reason: 'A perfectly fine reason' });
+    expect(res.status).toBe(400);
+    expect(vi.mocked(timerService.adjustTimeEntry)).not.toHaveBeenCalled();
+  });
+
+  it('400 on a malformed entryId', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/not-a-uuid/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: -10, reason: 'A perfectly fine reason' });
+    expect(res.status).toBe(400);
+    expect(vi.mocked(timerService.adjustTimeEntry)).not.toHaveBeenCalled();
   });
 });

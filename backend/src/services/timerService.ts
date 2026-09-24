@@ -3,6 +3,7 @@ import { db } from '../db/client';
 import { tickets, timeEntries, users, projects } from '../db/schema';
 import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
+import { recordActivity } from './activityLogService';
 
 // Local alias mirroring ticketService.ts — the drizzle tx client type.
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -157,7 +158,12 @@ export interface TimeEntryWithDuration {
   id: string;
   startTime: string; // ISO
   endTime: string | null; // null = still running
-  durationMs: number | null; // null if running; else end - start (or minutes*60000 for manual)
+  durationMs: number | null; // null if running; else EFFECTIVE duration (CR-14)
+  /** Wall-clock duration before any CR-14 adjustment (null while running). */
+  originalDurationMs: number | null;
+  /** Signed adjustment minutes (CR-14); null when unadjusted. */
+  adjustmentMinutes: number | null;
+  adjustmentReason: string | null;
   description: string | null;
   type: 'manual' | 'timer';
   user: { id: string; fullName: string; avatarUrl: string | null } | null;
@@ -175,6 +181,9 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
       startTime: timeEntries.startTime,
       endTime: timeEntries.endTime,
       manualEntryMinutes: timeEntries.manualEntryMinutes,
+      adjustmentMinutes: timeEntries.adjustmentMinutes,
+      adjustmentReason: timeEntries.adjustmentReason,
+      adjustedById: timeEntries.adjustedById,
       description: timeEntries.description,
       userId: users.id,
       userFullName: users.fullName,
@@ -187,16 +196,24 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
 
   const entries: TimeEntryWithDuration[] = rows.map((r) => {
     const isManual = r.manualEntryMinutes !== null;
-    const durationMs = isManual
+    const originalMs = isManual
       ? (r.manualEntryMinutes ?? 0) * 60_000
       : r.endTime
         ? r.endTime.getTime() - r.startTime.getTime()
         : null;
+    // CR-14: effective duration = original + signed adjustment (timers only).
+    const durationMs =
+      originalMs === null
+        ? null
+        : originalMs + (isManual ? 0 : (r.adjustmentMinutes ?? 0) * 60_000);
     return {
       id: r.id,
       startTime: r.startTime.toISOString(),
       endTime: r.endTime?.toISOString() ?? null,
       durationMs,
+      originalDurationMs: originalMs,
+      adjustmentMinutes: r.adjustmentMinutes,
+      adjustmentReason: r.adjustmentReason,
       description: r.description,
       type: isManual ? 'manual' : 'timer',
       user:
@@ -269,11 +286,15 @@ export async function addManualEntry(args: {
     ? { id: userId, fullName: userRow.fullName, avatarUrl: userRow.avatarUrl }
     : null;
 
+  const manualMs = (row!.manualEntryMinutes ?? 0) * 60_000;
   return {
     id: row!.id,
     startTime: row!.startTime.toISOString(),
     endTime: row!.endTime?.toISOString() ?? null,
-    durationMs: (row!.manualEntryMinutes ?? 0) * 60_000,
+    durationMs: manualMs,
+    originalDurationMs: manualMs,
+    adjustmentMinutes: null,
+    adjustmentReason: null,
     description: row!.description,
     type: 'manual',
     user,
@@ -386,4 +407,125 @@ export async function getTimerState(userId: string): Promise<TimerState> {
     : null;
 
   return { active, lastTracked };
+}
+
+// ============================================================================
+// CR-14: manual adjustment of an auto-tracked (closed timer) entry.
+//
+// startTime/endTime are NEVER rewritten — the effective duration is
+// (end - start) + adjustmentMinutes, so the original measurement survives.
+// Every adjustment writes a TIME_ADJUSTED activity row (who / delta / reason).
+// ============================================================================
+
+export const ADJUSTMENT_REASON_MIN_LENGTH = 10;
+
+export interface AdjustTimeEntryInput {
+  entryId: string;
+  /** Signed minutes to add (negative reduces). */
+  adjustmentMinutes: number;
+  reason: string;
+  actingUserId: string;
+  /** True when the acting user administers the entry's project. */
+  actingUserIsAdmin: boolean;
+}
+
+export interface AdjustedEntry {
+  id: string;
+  adjustmentMinutes: number;
+  adjustmentReason: string;
+  adjustedById: string | null;
+  adjustedAt: string;
+}
+
+export async function adjustTimeEntry(input: AdjustTimeEntryInput): Promise<AdjustedEntry> {
+  const reason = input.reason.trim();
+  if (reason.length < ADJUSTMENT_REASON_MIN_LENGTH) {
+    throw new AppError(
+      ErrorCode.VALIDATION_FAILED,
+      `A reason of at least ${ADJUSTMENT_REASON_MIN_LENGTH} characters is required`,
+      { details: { reason: 'too short' } },
+    );
+  }
+  if (!Number.isInteger(input.adjustmentMinutes) || input.adjustmentMinutes === 0) {
+    throw new AppError(
+      ErrorCode.VALIDATION_FAILED,
+      'Adjustment must be a non-zero whole number of minutes',
+      {
+        details: { adjustmentMinutes: 'invalid' },
+      },
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const [entry] = await tx
+      .select()
+      .from(timeEntries)
+      .where(eq(timeEntries.id, input.entryId))
+      .limit(1);
+    if (!entry) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Time entry '${input.entryId}' not found`);
+    }
+    if (entry.endTime === null) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, 'Stop the timer before adjusting it', {
+        details: { entryId: input.entryId },
+      });
+    }
+    if (entry.manualEntryMinutes !== null) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, 'Manual entries cannot be adjusted', {
+        details: { entryId: input.entryId },
+      });
+    }
+
+    // FR-14.1: the entry owner or a project/Platform admin may adjust.
+    const isOwner = entry.userId === input.actingUserId;
+    if (!isOwner && !input.actingUserIsAdmin) {
+      throw new AppError(ErrorCode.FORBIDDEN, 'You can only adjust your own time entries');
+    }
+
+    // FR-14.5: the EFFECTIVE duration must stay positive.
+    const baseMs = entry.endTime.getTime() - entry.startTime.getTime();
+    const effectiveMs = baseMs + input.adjustmentMinutes * 60_000;
+    if (effectiveMs <= 0) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        'Adjustment cannot reduce the tracked time to zero or below',
+        { details: { entryId: input.entryId } },
+      );
+    }
+
+    const adjustedAt = new Date();
+    const [updated] = await tx
+      .update(timeEntries)
+      .set({
+        adjustmentMinutes: input.adjustmentMinutes,
+        adjustmentReason: reason,
+        adjustedById: input.actingUserId,
+        adjustedAt,
+      })
+      .where(eq(timeEntries.id, input.entryId))
+      .returning({
+        id: timeEntries.id,
+        adjustmentMinutes: timeEntries.adjustmentMinutes,
+        adjustmentReason: timeEntries.adjustmentReason,
+        adjustedById: timeEntries.adjustedById,
+        adjustedAt: timeEntries.adjustedAt,
+      });
+
+    // FR-14.6: audit row on the ticket (startTime/endTime untouched).
+    await recordActivity(tx, {
+      ticketId: entry.ticketId,
+      actorId: input.actingUserId,
+      action: 'TIME_ADJUSTED',
+      oldValue: String(baseMs),
+      newValue: `${input.adjustmentMinutes > 0 ? '+' : ''}${input.adjustmentMinutes}m: ${reason}`,
+    });
+
+    return {
+      id: updated!.id,
+      adjustmentMinutes: updated!.adjustmentMinutes!,
+      adjustmentReason: updated!.adjustmentReason!,
+      adjustedById: updated!.adjustedById,
+      adjustedAt: updated!.adjustedAt!.toISOString(),
+    };
+  });
 }
