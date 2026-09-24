@@ -6,11 +6,30 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import type { TicketType } from './ticketService';
 
+export interface ReportUserTicketRow {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+  /** CR-06: the epic this ticket rolls up to (null when it has no epic). */
+  epic: { id: string; ticketNumber: number; title: string } | null;
+  totalMs: number;
+  autoMs: number;
+  manualMs: number;
+  entryCount: number;
+}
+
 export interface ReportUser {
   id: string;
   fullName: string;
   avatarUrl: string | null;
   totalMs: number;
+  /** CR-06: auto/manual split of totalMs. */
+  autoMs: number;
+  manualMs: number;
+  entryCount: number;
+  /** CR-06: where this member's time went (sorted totalMs DESC). */
+  tickets: ReportUserTicketRow[];
 }
 export interface TimeReportResponse {
   users: ReportUser[];
@@ -77,9 +96,10 @@ function formatWindowLabel(start: Date, period: 'weekly' | 'monthly'): string {
 export async function getTimeReport(args: {
   period: 'weekly' | 'monthly';
   offset: number;
-  // F48: project scope is REQUIRED. Time is scoped via a join
-  // timeEntries → tickets (timeEntries has no projectId column).
   projectId: string;
+  // CR-06: the same member/source filters the hierarchy reports expose.
+  memberId?: string | null;
+  source?: 'auto' | 'manual' | null;
 }): Promise<TimeReportResponse> {
   // SLYK-16 T3: defense-in-depth runtime guard — reject JS callers that bypass TS.
   if (!args.projectId) throw new Error('projectId is required');
@@ -87,59 +107,138 @@ export async function getTimeReport(args: {
   const end = computeWindowEnd(start, args.period);
   const label = formatWindowLabel(start, args.period);
 
-  // F48 D5: project scoping joins tickets on ticketId and filters projectId.
-  // timeEntries has no projectId column, so the join is the only way to scope
-  // time by project. Drizzle's query builder chains immutably, so the join is
-  // applied conditionally by branching on args.projectId.
-  const baseSelect = {
-    userId: users.id,
-    userFullName: users.fullName,
-    userAvatarUrl: users.avatarUrl,
-    startTime: timeEntries.startTime,
-    endTime: timeEntries.endTime,
-    manualEntryMinutes: timeEntries.manualEntryMinutes,
+  // CR-06: the member report reuses the SAME windowed entry read + effective
+  // duration as the hierarchy reports, so member totals, ticket rows, and
+  // hierarchy roll-ups can never drift apart.
+  const ticketRows = await db
+    .select({
+      id: tickets.id,
+      ticketNumber: tickets.ticketNumber,
+      title: tickets.title,
+      type: tickets.type,
+      parentId: tickets.parentId,
+    })
+    .from(tickets)
+    .where(and(eq(tickets.projectId, args.projectId), isNull(tickets.deletedAt)));
+  const metaById = new Map(ticketRows.map((t) => [t.id, t]));
+  const epicCache = new Map<string, { id: string; ticketNumber: number; title: string } | null>();
+  const epicById = (id: string) => {
+    const cached = epicCache.get(id);
+    if (cached !== undefined) return cached;
+    let current = metaById.get(id);
+    let guard = 0;
+    while (current?.parentId != null && guard < 4) {
+      current = metaById.get(current.parentId);
+      guard += 1;
+    }
+    const epic =
+      current && (current.type as TicketType) === 'EPIC'
+        ? { id: current.id, ticketNumber: current.ticketNumber, title: current.title }
+        : null;
+    epicCache.set(id, epic);
+    return epic;
   };
 
-  // Scoped path — join tickets to filter on projectId.
-  const withProject = () =>
-    db
-      .select(baseSelect)
-      .from(timeEntries)
-      .leftJoin(users, eq(users.id, timeEntries.userId))
-      .leftJoin(tickets, eq(tickets.id, timeEntries.ticketId));
+  const entryConditions = [
+    gte(timeEntries.startTime, start),
+    lt(timeEntries.startTime, end),
+    isNotNull(timeEntries.endTime),
+  ];
+  if (args.memberId) entryConditions.push(eq(timeEntries.userId, args.memberId));
+  if (args.source === 'manual') entryConditions.push(isNotNull(timeEntries.manualEntryMinutes));
+  if (args.source === 'auto') entryConditions.push(isNull(timeEntries.manualEntryMinutes));
+  const entries = await db
+    .select({
+      ticketId: timeEntries.ticketId,
+      userId: timeEntries.userId,
+      startTime: timeEntries.startTime,
+      endTime: timeEntries.endTime,
+      manualEntryMinutes: timeEntries.manualEntryMinutes,
+    })
+    .from(timeEntries)
+    .where(and(...entryConditions));
 
-  const query = withProject();
+  interface MemberAgg {
+    id: string;
+    fullName: string;
+    avatarUrl: string | null;
+    totalMs: number;
+    autoMs: number;
+    manualMs: number;
+    entryCount: number;
+    tickets: Map<string, ReportUserTicketRow>;
+  }
+  const members = new Map<string, MemberAgg>();
+  for (const row of entries) {
+    if (!row.userId) continue;
+    const meta = metaById.get(row.ticketId);
+    if (!meta) continue; // ticket soft-deleted between the two reads
+    const ms = effectiveDurationMs(row);
+    const isManual = row.manualEntryMinutes !== null;
+    const member = members.get(row.userId) ?? {
+      id: row.userId,
+      fullName: 'Unknown user',
+      avatarUrl: null,
+      totalMs: 0,
+      autoMs: 0,
+      manualMs: 0,
+      entryCount: 0,
+      tickets: new Map<string, ReportUserTicketRow>(),
+    };
+    member.totalMs += ms;
+    if (isManual) member.manualMs += ms;
+    else member.autoMs += ms;
+    member.entryCount += 1;
+    const ticket = member.tickets.get(row.ticketId) ?? {
+      id: row.ticketId,
+      ticketNumber: meta.ticketNumber,
+      title: meta.title,
+      type: meta.type as TicketType,
+      epic: epicById(row.ticketId),
+      totalMs: 0,
+      autoMs: 0,
+      manualMs: 0,
+      entryCount: 0,
+    };
+    ticket.totalMs += ms;
+    if (isManual) ticket.manualMs += ms;
+    else ticket.autoMs += ms;
+    ticket.entryCount += 1;
+    member.tickets.set(row.ticketId, ticket);
+    members.set(row.userId, member);
+  }
 
-  const rows = await query.where(
-    and(
-      gte(timeEntries.startTime, start),
-      lt(timeEntries.startTime, end),
-      isNotNull(timeEntries.endTime),
-      eq(tickets.projectId, args.projectId),
-    ),
-  );
-
-  const userMap = new Map<string, ReportUser>();
-  for (const r of rows) {
-    if (!r.userId) continue;
-    const isManual = r.manualEntryMinutes !== null;
-    const durationMs = isManual
-      ? (r.manualEntryMinutes ?? 0) * 60_000
-      : r.endTime!.getTime() - r.startTime.getTime();
-    const existing = userMap.get(r.userId);
-    if (existing) {
-      existing.totalMs += durationMs;
-    } else {
-      userMap.set(r.userId, {
-        id: r.userId,
-        fullName: r.userFullName ?? 'Unknown user',
-        avatarUrl: r.userAvatarUrl,
-        totalMs: durationMs,
-      });
+  // Resolve member names in ONE query rather than per row.
+  if (members.size > 0) {
+    const userRows = await db
+      .select({ id: users.id, fullName: users.fullName, avatarUrl: users.avatarUrl })
+      .from(users)
+      .where(inArray(users.id, [...members.keys()]));
+    const userById = new Map(userRows.map((u) => [u.id, u]));
+    for (const member of members.values()) {
+      const user = userById.get(member.id);
+      if (user) {
+        member.fullName = user.fullName;
+        member.avatarUrl = user.avatarUrl;
+      }
     }
   }
 
-  const reportUsers = [...userMap.values()].sort((a, b) => b.totalMs - a.totalMs);
+  const reportUsers: ReportUser[] = [...members.values()]
+    .map((member) => ({
+      id: member.id,
+      fullName: member.fullName,
+      avatarUrl: member.avatarUrl,
+      totalMs: member.totalMs,
+      autoMs: member.autoMs,
+      manualMs: member.manualMs,
+      entryCount: member.entryCount,
+      tickets: [...member.tickets.values()].sort(
+        (a, b) => b.totalMs - a.totalMs || a.ticketNumber - b.ticketNumber,
+      ),
+    }))
+    .sort((a, b) => b.totalMs - a.totalMs);
+
   return {
     users: reportUsers,
     window: { start: start.toISOString(), end: end.toISOString(), label },

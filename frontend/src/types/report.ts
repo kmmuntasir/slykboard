@@ -2,11 +2,28 @@ import type { TicketType } from './ticket';
 
 // F23: per-user aggregated time report shapes. Mirrors the backend
 // GET /reports/time response (envelope's inner `data`).
+// CR-06: where a member's time went (one row per ticket, sorted totalMs DESC).
+export interface ReportUserTicketRow {
+  id: string;
+  ticketNumber: number;
+  title: string;
+  type: TicketType;
+  epic: { id: string; ticketNumber: number; title: string } | null;
+  totalMs: number;
+  autoMs: number;
+  manualMs: number;
+  entryCount: number;
+}
+
 export interface ReportUser {
   id: string;
   fullName: string;
   avatarUrl: string | null;
   totalMs: number; // milliseconds tracked in the window
+  autoMs: number; // CR-06: auto/manual split of totalMs
+  manualMs: number;
+  entryCount: number;
+  tickets: ReportUserTicketRow[]; // CR-06: per-ticket breakdown
 }
 
 export interface TimeReportResponse {

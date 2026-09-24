@@ -37,10 +37,18 @@ projectReportsRouter.get(
   requireProjectMember(),
   async (req, res) => {
     const { period, offset } = parseReportQuery(req.query);
+    // CR-06: optional member/source filters narrow the report AND its
+    // per-ticket breakdown in one pass.
+    const q = (req.query ?? {}) as Record<string, unknown>;
     const report = await reportService.getTimeReport({
       period,
       offset,
       projectId: req.project!.id,
+      memberId:
+        typeof q.member === 'string' && z.string().uuid().safeParse(q.member).success
+          ? q.member
+          : null,
+      source: q.source === 'manual' || q.source === 'auto' ? q.source : null,
     });
     res.json(success(report));
   },

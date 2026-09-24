@@ -11,6 +11,7 @@ import { ApiClientError } from '@/api/client';
 import { useReport, useTicketSummary } from '@/hooks/useReport';
 import { useBoard } from '@/hooks/useBoard';
 import { HierarchyTimeReport } from '@/components/HierarchyTimeReport';
+import { MemberTimeReport } from '@/components/MemberTimeReport';
 import type { ReportUser, TicketSummaryUser } from '@/types/report';
 import { formatDuration } from '@/utils/formatDuration';
 
@@ -101,7 +102,8 @@ function ReportsBody({ slug }: ReportsBodyProps) {
                 </div>
             </div>
 
-            <TimeReportSection
+            <MemberTimeReport
+                projectSlug={slug}
                 label={time.data?.window?.label}
                 isLoading={time.isLoading}
                 error={time.error}
@@ -146,71 +148,6 @@ interface SectionLabelProps {
 function WindowLabel({ label }: SectionLabelProps) {
     if (!label) return null;
     return <p className="mt-4 text-lg font-medium text-foreground">{label}</p>;
-}
-
-interface TimeReportSectionProps {
-    label?: string;
-    isLoading: boolean;
-    error: unknown;
-    onRetry: () => void;
-    users: ReportUser[];
-}
-
-function TimeReportSection({ label, isLoading, error, onRetry, users }: TimeReportSectionProps) {
-    return (
-        <>
-            <WindowLabel label={label} />
-
-            {isLoading && <TimeReportSkeleton />}
-            {!isLoading && error && <Retry message="Failed to load report." onRetry={onRetry} />}
-            {!isLoading && !error && users.length === 0 && (
-                <EmptyState
-                    icon={Inbox}
-                    title="No time tracked"
-                    message="No time tracked in this period."
-                />
-            )}
-            {!isLoading && !error && users.length > 0 && (
-                <Card className="mt-4 overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            <tr>
-                                <th scope="col" className="px-4 py-2.5">
-                                    User
-                                </th>
-                                <th scope="col" className="px-4 py-2.5 text-right">
-                                    Total Time
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {users.map((user) => (
-                                <tr key={user.id} className="hover:bg-muted">
-                                    <td className="px-4 py-2.5">
-                                        <div className="flex items-center gap-2">
-                                            <AssigneeAvatar
-                                                assignee={{
-                                                    id: user.id,
-                                                    fullName: user.fullName,
-                                                    avatarUrl: user.avatarUrl,
-                                                }}
-                                            />
-                                            <span className="text-foreground">{user.fullName}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-2.5 text-right">
-                                        <span className="font-mono tabular-nums text-sm text-foreground">
-                                            {formatDuration(user.totalMs)}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </Card>
-            )}
-        </>
-    );
 }
 
 interface TicketSummarySectionProps {
@@ -339,21 +276,6 @@ function EmptyState({ icon: Icon, title, message }: EmptyStateProps) {
                 <Icon className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
                 <p className="text-sm font-medium text-foreground">{title}</p>
                 <p className="text-sm text-muted-foreground">{message}</p>
-            </div>
-        </Card>
-    );
-}
-
-function TimeReportSkeleton() {
-    return (
-        <Card className="mt-4 p-0">
-            <div className="divide-y divide-border">
-                {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                        <SkeletonLine className="h-6 w-40" />
-                        <SkeletonLine className="h-6 w-20" />
-                    </div>
-                ))}
             </div>
         </Card>
     );

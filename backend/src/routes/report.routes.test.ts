@@ -157,6 +157,8 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
       period: 'weekly',
       offset: 0,
       projectId: 'p1',
+      memberId: null,
+      source: null,
     });
   });
 
@@ -236,6 +238,8 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
       period: 'monthly',
       offset: -1,
       projectId: 'p1',
+      memberId: null,
+      source: null,
     });
   });
 });

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Document Status** | Draft v6 — CR-01 … CR-06, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
+| **Document Status** | Draft v7 — CR-01 … CR-06, CR-11, CR-12 delivered (2026-09-25); remaining open questions in §6.2 |
 | **Source** | Client meeting notes, `docs/change-requests.md` |
 | **Date** | 2026-09-25 |
 | **Baseline** | Slykboard current `main` (PRD: `.docs/basic-PRD.md`) |
@@ -249,7 +249,14 @@ What exists today (verified against the code, not the PRD):
 
 **Source note:** _"Member-wise Time Tracking Report with Breakdown"_
 
-**Status:** Extension of existing feature.
+**Status:** **DONE — implemented 2026-09-25.**
+
+**Implementation notes (2026-09-25)**
+
+- `getTimeReport` now aggregates from the SAME windowed entry read + `effectiveDurationMs` as the hierarchy reports, so member totals, ticket rows, and roll-ups can never drift. Each member carries `autoMs`/`manualMs`/`entryCount` plus a `tickets[]` breakdown (display id, title, type, epic reference, split, entry count) sorted by time; member names resolve in one query.
+- Route accepts optional `member` + `source` filters that narrow totals AND breakdown rows in the same pass.
+- Frontend: extracted `MemberTimeReport` (expandable member rows → per-ticket table with epic reference and auto/manual split, sortable by member total); OQ-06a/OQ-06b defaults applied (weekly/monthly windows kept, no CSV in this CR).
+- Tests: 2 new integration cases (per-ticket/epic breakdown + sum-equals-total; member/source filters) + 7 component cases; suites green (backend 920, frontend 1121).
 
 **Requirement:** The existing member-wise time report (per-project totals per member) gains a breakdown: each member row expands to show where the time went.
 
@@ -623,6 +630,7 @@ What exists today (verified against the code, not the PRD):
 | OQ-03d | CR-03 | Epic, Story, Task, and Subtask all render as board cards. |
 | OQ-03e | CR-03 | Intermediate parents (Story/Task with children) auto-progress exactly like Epics. |
 | OQ-04a | CR-04 | Roll-ups ship with the auto/manual split (proposed default applied at implementation). |
+| OQ-06a/b | CR-06 | Weekly/monthly windows kept and no CSV export in this CR (proposed defaults applied). |
 | Feature | CR-02 | Existing label flow confirmed sufficient; no work needed. |
 | OQ-08a | CR-08 | Show tracked working time per column alongside wall-clock residence. |
 | OQ-09a | CR-09 | Keep auto-stop; add explicit confirmation naming the currently tracked task. |
@@ -635,8 +643,6 @@ What exists today (verified against the code, not the PRD):
 
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
-| OQ-06a | CR-06 | Custom date ranges needed now? | No (follow-up) |
-| OQ-06b | CR-06 | CSV export needed now? | No (follow-up) |
 | OQ-10b | CR-10 | Backfill values for existing tickets? | Mechanical + review |
 | OQ-14b | CR-14 | Flag adjusted totals in reports? | Yes |
 | OQ-14c | CR-14 | Single overwrite vs adjustment ledger? | Single overwrite |

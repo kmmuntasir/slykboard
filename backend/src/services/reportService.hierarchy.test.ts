@@ -381,4 +381,71 @@ describe('CR-04/CR-05 hierarchy time reports (integration)', () => {
       }),
     ).toBe(0);
   });
+
+  it('CR-06: the member report breaks totals down per ticket and epic', async () => {
+    const slug = await createTestProject();
+    const projectId = await projectIdFor(slug);
+    const epic = await create(slug, { title: 'Epic', type: 'EPIC' });
+    const story = await create(slug, { title: 'Story', type: 'STORY', parentId: epic.id });
+    const loose = await create(slug, { title: 'Loose task', type: 'TASK' });
+
+    await addTimer(story.id, HOUR, userId);
+    await addTimer(story.id, 30 * MINUTE, otherUserId);
+    await addManual(loose.id, 15, userId);
+
+    const report = await reportService.getTimeReport({
+      projectId,
+      period: 'weekly',
+      offset: 0,
+    });
+
+    const me = report.users.find((u) => u.id === userId)!;
+    const other = report.users.find((u) => u.id === otherUserId)!;
+    // Sorted by total DESC: me (1h + 15m) then other (30m).
+    expect(report.users[0]!.id).toBe(userId);
+    expect(me.totalMs).toBe(HOUR + 15 * MINUTE);
+    expect(me.autoMs).toBe(HOUR);
+    expect(me.manualMs).toBe(15 * MINUTE);
+    expect(me.entryCount).toBe(2);
+    expect(other.totalMs).toBe(30 * MINUTE);
+
+    // Per-ticket rows, sorted DESC, with the epic reference attached.
+    expect(me.tickets.map((t) => t.ticketNumber)).toEqual([story.ticketNumber, loose.ticketNumber]);
+    const storyRow = me.tickets[0]!;
+    expect(storyRow.totalMs).toBe(HOUR);
+    expect(storyRow.type).toBe('STORY');
+    expect(storyRow.epic?.id).toBe(epic.id);
+    expect(me.tickets[1]!.epic).toBeNull();
+    // AC: the member's rows sum exactly to the headline total.
+    expect(me.tickets.reduce((sum, t) => sum + t.totalMs, 0)).toBe(me.totalMs);
+  });
+
+  it('CR-06: member + source filters narrow totals AND breakdown rows', async () => {
+    const slug = await createTestProject();
+    const projectId = await projectIdFor(slug);
+    const ticket = await create(slug, { title: 'Task', type: 'TASK' });
+    await addTimer(ticket.id, HOUR, userId);
+    await addTimer(ticket.id, 2 * HOUR, otherUserId);
+    await addManual(ticket.id, 20, userId);
+
+    const manualOnly = await reportService.getTimeReport({
+      projectId,
+      period: 'weekly',
+      offset: 0,
+      source: 'manual',
+    });
+    expect(manualOnly.users).toHaveLength(1);
+    expect(manualOnly.users[0]!.totalMs).toBe(20 * MINUTE);
+    expect(manualOnly.users[0]!.tickets).toHaveLength(1);
+
+    const justMe = await reportService.getTimeReport({
+      projectId,
+      period: 'weekly',
+      offset: 0,
+      memberId: userId,
+    });
+    expect(justMe.users).toHaveLength(1);
+    expect(justMe.users[0]!.totalMs).toBe(HOUR + 20 * MINUTE);
+    expect(justMe.users[0]!.tickets[0]!.totalMs).toBe(HOUR + 20 * MINUTE);
+  });
 });
