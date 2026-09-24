@@ -665,6 +665,7 @@ What exists today (verified against the code, not the PRD):
 | OQ-10a | CR-10 | Start + End dates; Start pre-filled "right now"; End manually picked. |
 | OQ-14a | CR-14 | No time limit; one-by-one adjustments only, no batch. |
 | Feature | CR-13 | Recurring tasks deferred entirely. |
+| OQ-14c | CR-14 | Implemented as a single overwrite with a mandatory new reason (audited each time) |
 | Feature | CR-07 | Comparative segmented bar chart reconfirmed deferred. |
 
 ### 6.2 Still open
@@ -672,4 +673,3 @@ What exists today (verified against the code, not the PRD):
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
 | OQ-14b | CR-14 | Flag adjusted totals in reports? | Yes |
-| OQ-14c | CR-14 | Implemented as a single overwrite with a mandatory new reason (audited each time) |
