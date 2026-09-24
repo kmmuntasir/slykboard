@@ -672,4 +672,4 @@ What exists today (verified against the code, not the PRD):
 | ID | CR | Question | Proposed default |
 | --- | --- | --- | --- |
 | OQ-14b | CR-14 | Flag adjusted totals in reports? | Yes |
-| OQ-14c | CR-14 | Implemented as a single overwrite with a mandatory new reason (audited each time). |
+| OQ-14c | CR-14 | Implemented as a single overwrite with a mandatory new reason (audited each time) |
