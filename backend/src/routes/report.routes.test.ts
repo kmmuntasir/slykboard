@@ -56,6 +56,9 @@ vi.mock('../services/reportService', () => ({
   getNodeTrackedTotalMs: vi.fn(),
   resolveLiveTicketByNumber: vi.fn(),
 }));
+vi.mock('../services/columnTimeService', () => ({
+  getColumnTimeReport: vi.fn(),
+}));
 
 import { app } from '../index';
 import { signJwt } from '../utils/jwt';
@@ -64,6 +67,7 @@ import { ErrorCode } from '../utils/envelope';
 import { findUserTokenVersion } from '../services/tokenVersion';
 import * as projectService from '../services/projectService';
 import * as reportService from '../services/reportService';
+import * as columnTimeService from '../services/columnTimeService';
 
 const mockedFindVersion = vi.mocked(findUserTokenVersion);
 const mockedGetBySlug = vi.mocked(projectService.getProjectBySlug);
@@ -73,6 +77,7 @@ const mockedGetNodeRollup = vi.mocked(reportService.getNodeTimeRollup);
 const mockedGetNodeBreakdown = vi.mocked(reportService.getNodeTimeBreakdown);
 const mockedGetNodeEntries = vi.mocked(reportService.getNodeTimeEntries);
 const mockedResolveNode = vi.mocked(reportService.resolveLiveTicketByNumber);
+const mockedGetColumnTimeReport = vi.mocked(columnTimeService.getColumnTimeReport);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -159,6 +164,7 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
       projectId: 'p1',
       memberId: null,
       source: null,
+      type: null,
     });
   });
 
@@ -240,7 +246,46 @@ describe('GET /api/projects/:slug/reports/time (F48 scoped)', () => {
       projectId: 'p1',
       memberId: null,
       source: null,
+      type: null,
     });
+  });
+
+  // FR-06/FR-11: query validation lives at the route edge — malformed filters
+  // must be 400 VALIDATION_FAILED, never a 500 from an in-handler ZodError.
+  const malformedQueries = [
+    { name: 'offset=abc', qs: 'offset=abc' },
+    { name: 'member=not-a-uuid', qs: 'member=not-a-uuid' },
+    { name: 'type=BOGUS', qs: 'type=BOGUS' },
+    { name: 'source=warp', qs: 'source=warp' },
+  ];
+  malformedQueries.forEach(({ name, qs }) => {
+    it(`returns 400 VALIDATION_FAILED for ${name} (service NOT called)`, async () => {
+      mockedFindVersion.mockResolvedValue(0);
+      mockedGetBySlug.mockResolvedValue(projectRow() as never);
+
+      const res = await request(app)
+        .get(`/api/projects/SLYK/reports/time?${qs}`)
+        .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+      expect(mockedGetTimeReport).not.toHaveBeenCalled();
+    });
+  });
+
+  it('forwards the FR-06.3 type filter to the service', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    mockedGetTimeReport.mockResolvedValue(timeReportPayload as never);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time?type=TASK')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(mockedGetTimeReport).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'p1', type: 'TASK' }),
+    );
   });
 });
 
@@ -440,6 +485,19 @@ describe('hierarchy time reports (CR-04/CR-05)', () => {
     expect(mockedGetNodeRollup).not.toHaveBeenCalled();
   });
 
+  it('400s on a malformed offset instead of 500ing on an in-handler parse', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/time/rollup?node=SLYK-42&offset=abc')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetNodeRollup).not.toHaveBeenCalled();
+  });
+
   it('404s when the node is not a live ticket in this project', async () => {
     mockedFindVersion.mockResolvedValue(0);
     mockedResolveNode.mockResolvedValue(null);
@@ -469,5 +527,99 @@ describe('hierarchy time reports (CR-04/CR-05)', () => {
     const res = await request(app).get('/api/projects/SLYK/reports/time/rollup?node=SLYK-42');
     expect(res.status).toBe(401);
     expect(mockedGetNodeRollup).not.toHaveBeenCalled();
+  });
+});
+
+// ----------------------------------------------------------------------------
+// CR-08: column-time. Addresses its subject by `ticket` display id — the query
+// schema must NOT require `node` (the old in-handler parse 500'd every real
+// request because of that).
+// ----------------------------------------------------------------------------
+describe('GET /api/projects/:slug/reports/column-time (CR-08)', () => {
+  const TICKET_UUID = '33333333-3333-4333-8333-333333333333';
+
+  beforeEach(() => {
+    mockedGetBySlug.mockResolvedValue(projectRow() as never);
+    mockedResolveNode.mockResolvedValue({ id: TICKET_UUID });
+    mockedGetColumnTimeReport.mockResolvedValue({
+      ticket: {
+        id: TICKET_UUID,
+        ticketNumber: 7,
+        title: 'Task',
+        type: 'TASK',
+        statusColumn: 'c-todo',
+        deletedAt: null,
+      },
+      columns: [],
+      totalResidenceMs: 0,
+      totalTrackedMs: 0,
+      autoMs: 0,
+      manualMs: 0,
+      window: null,
+      filters: { memberId: null, source: null },
+    } as never);
+  });
+
+  it('returns 200 and forwards the resolved ticket + lifetime window', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/column-time?ticket=SLYK-7')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.ticket.id).toBe(TICKET_UUID);
+    expect(mockedGetColumnTimeReport).toHaveBeenCalledWith({
+      projectId: 'p1',
+      ticketId: TICKET_UUID,
+      period: null,
+      offset: 0,
+      memberId: null,
+      source: null,
+    });
+  });
+
+  it('forwards the window + filters when provided', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    const MEMBER_UUID = '44444444-4444-4444-8444-444444444444';
+
+    await request(app)
+      .get(
+        `/api/projects/SLYK/reports/column-time?ticket=SLYK-7&period=monthly&offset=-1&member=${MEMBER_UUID}&source=manual`,
+      )
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(mockedGetColumnTimeReport).toHaveBeenCalledWith({
+      projectId: 'p1',
+      ticketId: TICKET_UUID,
+      period: 'monthly',
+      offset: -1,
+      memberId: MEMBER_UUID,
+      source: 'manual',
+    });
+  });
+
+  it('400s VALIDATION_FAILED when the ticket display id is missing', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/column-time')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetColumnTimeReport).not.toHaveBeenCalled();
+  });
+
+  it('400s on a malformed offset (service NOT called)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+
+    const res = await request(app)
+      .get('/api/projects/SLYK/reports/column-time?ticket=SLYK-7&offset=abc')
+      .set('Authorization', `Bearer ${await tokenFor(false)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedGetColumnTimeReport).not.toHaveBeenCalled();
   });
 });

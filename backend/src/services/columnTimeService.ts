@@ -13,7 +13,10 @@ import type { TicketType } from './ticketService';
 //      derived from its status-transition history (CREATED + STATUS_CHANGED).
 //  (b) TRACKED — effective working time overlapping each column's residence
 //      intervals (FR-08.6), with manual entries attributed to the column the
-//      ticket occupied at the entry's instant.
+//      ticket occupied at the entry's instant. CR-14 adjustment deltas are not
+//      pro-rated across a split: they land whole in the interval containing the
+//      timer's endTime (where the member stopped), falling back to the
+//      ticket's still-open interval.
 //
 // Both metrics come from the same interval model, so the table can never
 // contradict itself. Running timers are excluded (consistent with CR-04/05);
@@ -27,6 +30,9 @@ export interface ColumnTimeRow {
   residenceMs: number;
   /** Effective tracked time overlapping this column's intervals. */
   trackedMs: number;
+  /** CR-11/FR-11.4: source split of trackedMs (trackedMs === autoMs + manualMs). */
+  autoMs: number;
+  manualMs: number;
   visits: number;
   /** Share of the ticket's total residence (0-100). */
   sharePct: number;
@@ -44,6 +50,9 @@ export interface ColumnTimeReport {
   columns: ColumnTimeRow[];
   totalResidenceMs: number;
   totalTrackedMs: number;
+  /** CR-11/FR-11.4: source split of totalTrackedMs (totalTrackedMs === autoMs + manualMs). */
+  autoMs: number;
+  manualMs: number;
   window: { start: string; end: string; label: string } | null;
   filters: { memberId: string | null; source: 'auto' | 'manual' | null };
 }
@@ -194,35 +203,58 @@ export async function getColumnTimeReport(args: {
       startTime: timeEntries.startTime,
       endTime: timeEntries.endTime,
       manualEntryMinutes: timeEntries.manualEntryMinutes,
+      adjustmentMinutes: timeEntries.adjustmentMinutes,
     })
     .from(timeEntries)
     .where(and(...entryConditions));
 
+  // Source-split attribution (CR-11/FR-11.4): every tracked millisecond is
+  // booked as auto (timer) or manual, so trackedMs === autoMs + manualMs holds
+  // per column and in the totals.
   const trackedByColumn = new Map<string, number>();
+  const autoByColumn = new Map<string, number>();
+  const manualByColumn = new Map<string, number>();
+  const addTracked = (columnId: string, ms: number, source: 'auto' | 'manual'): void => {
+    trackedByColumn.set(columnId, (trackedByColumn.get(columnId) ?? 0) + ms);
+    const split = source === 'auto' ? autoByColumn : manualByColumn;
+    split.set(columnId, (split.get(columnId) ?? 0) + ms);
+  };
+  const intervalContaining = (at: Date) =>
+    intervals.find((interval) => at >= interval.start && at < interval.end);
+  // The ticket's still-open interval — the last one chronologically, running to
+  // effectiveNow (or the window edge) in the ticket's current column. Used as
+  // the attribution fallback when no interval contains an instant.
+  const openInterval = intervals.length > 0 ? intervals[intervals.length - 1] : undefined;
+
   for (const row of entryRows) {
     if (row.manualEntryMinutes !== null) {
       // Manual entries are instantaneous: attribute the full duration to
       // whichever column the ticket occupied at that instant.
-      const at = row.startTime;
-      const owner = intervals.find((interval) => at >= interval.start && at < interval.end);
+      const owner = intervalContaining(row.startTime);
       if (owner) {
-        trackedByColumn.set(
-          owner.columnId,
-          (trackedByColumn.get(owner.columnId) ?? 0) + effectiveDurationMs(row),
-        );
+        addTracked(owner.columnId, effectiveDurationMs(row), 'manual');
       }
       continue;
     }
     if (row.endTime === null) continue;
-    // Timer entries: split across every column interval they overlap.
+    // Timer entries: split the wall-clock across every column interval they
+    // overlap (pro-rated).
     for (const interval of intervals) {
       const start = row.startTime > interval.start ? row.startTime : interval.start;
       const end = row.endTime < interval.end ? row.endTime : interval.end;
       if (end <= start) continue;
-      trackedByColumn.set(
-        interval.columnId,
-        (trackedByColumn.get(interval.columnId) ?? 0) + (end.getTime() - start.getTime()),
-      );
+      addTracked(interval.columnId, end.getTime() - start.getTime(), 'auto');
+    }
+    // FR-08.6: the CR-14 adjustment is NOT pro-rated — the signed delta lands
+    // whole in the column where the member stopped the timer (endTime's
+    // interval), falling back to the ticket's current interval on the edge
+    // where none contains it.
+    const adjustmentMs = (row.adjustmentMinutes ?? 0) * 60_000;
+    if (adjustmentMs !== 0) {
+      const owner = intervalContaining(row.endTime) ?? openInterval;
+      if (owner) {
+        addTracked(owner.columnId, adjustmentMs, 'auto');
+      }
     }
   }
 
@@ -239,12 +271,16 @@ export async function getColumnTimeReport(args: {
   }
   const totalResidenceMs = [...residenceByColumn.values()].reduce((a, b) => a + b, 0);
   const totalTrackedMs = [...trackedByColumn.values()].reduce((a, b) => a + b, 0);
+  const totalAutoMs = [...autoByColumn.values()].reduce((a, b) => a + b, 0);
+  const totalManualMs = [...manualByColumn.values()].reduce((a, b) => a + b, 0);
 
   const rowFor = (columnId: string): ColumnTimeRow => ({
     columnId,
     columnName: columnNameById.get(columnId) ?? 'Archived column',
     residenceMs: residenceByColumn.get(columnId) ?? 0,
     trackedMs: trackedByColumn.get(columnId) ?? 0,
+    autoMs: autoByColumn.get(columnId) ?? 0,
+    manualMs: manualByColumn.get(columnId) ?? 0,
     visits: visitsByColumn.get(columnId) ?? 0,
     sharePct:
       totalResidenceMs === 0
@@ -269,6 +305,8 @@ export async function getColumnTimeReport(args: {
     columns: [...ordered, ...legacy.map(rowFor)],
     totalResidenceMs,
     totalTrackedMs,
+    autoMs: totalAutoMs,
+    manualMs: totalManualMs,
     window: window
       ? {
           start: window.start.toISOString(),

@@ -58,8 +58,10 @@ export const memberKeys = {
 // not leak across projects on switch (stale-cross-project-data edge case).
 export const reportKeys = {
   all: ['reports'] as const,
-  time: (period: 'weekly' | 'monthly', offset: number, slug: string) =>
-    [...reportKeys.all, 'time', period, offset, slug] as const,
+  // CR-06 FR-06.3: the member/source/type filter string is part of the key so
+  // each filtered combination caches independently (same pattern as rollup).
+  time: (period: 'weekly' | 'monthly', offset: number, slug: string, filters = '') =>
+    [...reportKeys.all, 'time', period, offset, slug, filters] as const,
   tickets: (period: 'weekly' | 'monthly', offset: number, slug: string) =>
     [...reportKeys.all, 'tickets', period, offset, slug] as const,
   // CR-04/CR-05: hierarchy roll-up / breakdown / raw entries. The filter string

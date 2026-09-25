@@ -11,9 +11,33 @@ import * as columnTimeService from '../services/columnTimeService';
 import { slugParamSchema } from './projects.schema';
 import { parseTicketDisplayId } from '../utils/parseTicketDisplayId';
 
-// F48 D2: parse period/offset query params identically on both the scoped and
-// the deprecated global routes, so behaviour is byte-identical apart from the
-// project filter. period defaults to 'weekly'; offset defaults to 0.
+// F48 D2: report query validation happens at the route edge via validateRequest
+// — malformed period/offset/member/source/type produce 400 VALIDATION_FAILED
+// instead of a ZodError falling through to INTERNAL_ERROR. Shared filters
+// first; the hierarchy + column-time routes extend with their display ids.
+// period defaults to 'weekly'; offset defaults to 0 (applied by the handlers).
+const reportFilterQuerySchema = z.object({
+  period: z.enum(['weekly', 'monthly']).optional(),
+  offset: z.coerce.number().int().optional(),
+  member: z.uuid().optional(),
+  source: z.enum(['auto', 'manual']).optional(),
+  // FR-06.3: filter entries by their ticket's type before aggregation.
+  type: z.enum(['EPIC', 'STORY', 'TASK', 'SUBTASK']).optional(),
+});
+
+// CR-04 / CR-05: `node` addresses the subtree root by display id (SLYK-42);
+// `ticket` (entries route) narrows the raw list to one row's subtree.
+const hierarchyQuerySchema = reportFilterQuerySchema.extend({
+  node: z.string().min(1),
+  ticket: z.string().min(1).optional(),
+});
+
+// CR-08: column-time addresses its subject by display id (`ticket`) — no node.
+const columnTimeQuerySchema = reportFilterQuerySchema.extend({
+  ticket: z.string().min(1),
+});
+
+// F48 D2: lenient legacy parse for the ticket-summary route (no filters there).
 function parseReportQuery(query: unknown): { period: 'weekly' | 'monthly'; offset: number } {
   const q = (query ?? {}) as Record<string, unknown>;
   const period = (q.period === 'monthly' ? 'monthly' : 'weekly') as 'weekly' | 'monthly';
@@ -34,22 +58,19 @@ export const projectReportsRouter = Router();
 projectReportsRouter.get(
   '/:slug/reports/time',
   authenticate,
-  validateRequest({ params: slugParamSchema }),
+  validateRequest({ params: slugParamSchema, query: reportFilterQuerySchema }),
   requireProjectMember(),
   async (req, res) => {
-    const { period, offset } = parseReportQuery(req.query);
     // CR-06: optional member/source filters narrow the report AND its
-    // per-ticket breakdown in one pass.
-    const q = (req.query ?? {}) as Record<string, unknown>;
+    // per-ticket breakdown in one pass; FR-06.3 adds the ticket-type filter.
+    const q = req.query as unknown as z.infer<typeof reportFilterQuerySchema>;
     const report = await reportService.getTimeReport({
-      period,
-      offset,
+      period: q.period ?? 'weekly',
+      offset: q.offset ?? 0,
       projectId: req.project!.id,
-      memberId:
-        typeof q.member === 'string' && z.string().uuid().safeParse(q.member).success
-          ? q.member
-          : null,
-      source: q.source === 'manual' || q.source === 'auto' ? q.source : null,
+      memberId: q.member ?? null,
+      source: q.source ?? null,
+      type: q.type ?? null,
     });
     res.json(success(report));
   },
@@ -78,15 +99,20 @@ projectReportsRouter.get(
 // `ticket` (entries only) narrows the raw list to one row's subtree.
 // ----------------------------------------------------------------------------
 
-// displayId shape only — existence is resolved in the service (404 there).
-const hierarchyQuerySchema = z.object({
-  node: z.string().min(1),
-  period: z.enum(['weekly', 'monthly']).optional(),
-  offset: z.coerce.number().int().optional(),
-  member: z.uuid().optional(),
-  source: z.enum(['auto', 'manual']).optional(),
-  ticket: z.string().min(1).optional(),
-});
+/** Map the edge-validated query onto the service args (defaults applied). */
+function hierarchyArgs(query: z.infer<typeof hierarchyQuerySchema>): {
+  period: 'weekly' | 'monthly';
+  offset: number;
+  memberId: string | null;
+  source: 'auto' | 'manual' | null;
+} {
+  return {
+    period: query.period ?? 'weekly',
+    offset: query.offset ?? 0,
+    memberId: query.member ?? null,
+    source: query.source ?? null,
+  };
+}
 
 /** Resolve the `node` display id to a live ticket id inside the project. */
 async function resolveNode(project: { id: string; slug: string }, node: string) {
@@ -103,32 +129,15 @@ async function resolveNode(project: { id: string; slug: string }, node: string) 
   return row.id;
 }
 
-function hierarchyArgs(query: unknown): {
-  period: 'weekly' | 'monthly';
-  offset: number;
-  memberId: string | null;
-  source: 'auto' | 'manual' | null;
-} {
-  const parsed = hierarchyQuerySchema.parse(query ?? {});
-  return {
-    period: parsed.period ?? 'weekly',
-    offset: parsed.offset ?? 0,
-    memberId: parsed.member ?? null,
-    source: parsed.source ?? null,
-  };
-}
-
 projectReportsRouter.get(
   '/:slug/reports/time/rollup',
   authenticate,
-  validateRequest({ params: slugParamSchema }),
+  validateRequest({ params: slugParamSchema, query: hierarchyQuerySchema }),
   requireProjectMember(),
   async (req, res) => {
-    const { period, offset, memberId, source } = hierarchyArgs(req.query);
-    const nodeId = await resolveNode(
-      req.project!,
-      String((req.query as { node?: string }).node ?? ''),
-    );
+    const q = req.query as unknown as z.infer<typeof hierarchyQuerySchema>;
+    const { period, offset, memberId, source } = hierarchyArgs(q);
+    const nodeId = await resolveNode(req.project!, q.node);
     res.json(
       success(
         await reportService.getNodeTimeRollup({
@@ -147,14 +156,12 @@ projectReportsRouter.get(
 projectReportsRouter.get(
   '/:slug/reports/time/breakdown',
   authenticate,
-  validateRequest({ params: slugParamSchema }),
+  validateRequest({ params: slugParamSchema, query: hierarchyQuerySchema }),
   requireProjectMember(),
   async (req, res) => {
-    const { period, offset, memberId, source } = hierarchyArgs(req.query);
-    const nodeId = await resolveNode(
-      req.project!,
-      String((req.query as { node?: string }).node ?? ''),
-    );
+    const q = req.query as unknown as z.infer<typeof hierarchyQuerySchema>;
+    const { period, offset, memberId, source } = hierarchyArgs(q);
+    const nodeId = await resolveNode(req.project!, q.node);
     res.json(
       success(
         await reportService.getNodeTimeBreakdown({
@@ -173,18 +180,15 @@ projectReportsRouter.get(
 projectReportsRouter.get(
   '/:slug/reports/time/entries',
   authenticate,
-  validateRequest({ params: slugParamSchema }),
+  validateRequest({ params: slugParamSchema, query: hierarchyQuerySchema }),
   requireProjectMember(),
   async (req, res) => {
-    const { period, offset, memberId, source } = hierarchyArgs(req.query);
-    const nodeId = await resolveNode(
-      req.project!,
-      String((req.query as { node?: string }).node ?? ''),
-    );
-    const rawTicket = (req.query as { ticket?: string }).ticket;
+    const q = req.query as unknown as z.infer<typeof hierarchyQuerySchema>;
+    const { period, offset, memberId, source } = hierarchyArgs(q);
+    const nodeId = await resolveNode(req.project!, q.node);
     let ticketId: string | null = null;
-    if (rawTicket) {
-      ticketId = await resolveNode(req.project!, rawTicket);
+    if (q.ticket) {
+      ticketId = await resolveNode(req.project!, q.ticket);
     }
     res.json(
       success(
@@ -211,21 +215,19 @@ projectReportsRouter.get(
 projectReportsRouter.get(
   '/:slug/reports/column-time',
   authenticate,
-  validateRequest({ params: slugParamSchema }),
+  validateRequest({ params: slugParamSchema, query: columnTimeQuerySchema }),
   requireProjectMember(),
   async (req, res) => {
-    const parsed = hierarchyQuerySchema.parse(req.query ?? {});
-    const q = (req.query ?? {}) as Record<string, unknown>;
-    const ticketRef = typeof q.ticket === 'string' ? q.ticket : '';
-    const ticketId = await resolveNode(req.project!, ticketRef);
+    const q = req.query as unknown as z.infer<typeof columnTimeQuerySchema>;
+    const ticketId = await resolveNode(req.project!, q.ticket);
     const report = await columnTimeService.getColumnTimeReport({
       projectId: req.project!.id,
       ticketId,
       // period omitted = lifetime view
-      period: q.period === 'weekly' || q.period === 'monthly' ? q.period : null,
-      offset: parsed.offset ?? 0,
-      memberId: parsed.member ?? null,
-      source: parsed.source ?? null,
+      period: q.period ?? null,
+      offset: q.offset ?? 0,
+      memberId: q.member ?? null,
+      source: q.source ?? null,
     });
     res.json(success(report));
   },

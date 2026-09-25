@@ -100,6 +100,9 @@ export async function getTimeReport(args: {
   // CR-06: the same member/source filters the hierarchy reports expose.
   memberId?: string | null;
   source?: 'auto' | 'manual' | null;
+  // FR-06.3: entries are filtered by their ticket's type before aggregation,
+  // so headline totals and per-ticket rows recompute consistently.
+  type?: TicketType | null;
 }): Promise<TimeReportResponse> {
   // SLYK-16 T3: defense-in-depth runtime guard — reject JS callers that bypass TS.
   if (!args.projectId) throw new Error('projectId is required');
@@ -154,6 +157,7 @@ export async function getTimeReport(args: {
       startTime: timeEntries.startTime,
       endTime: timeEntries.endTime,
       manualEntryMinutes: timeEntries.manualEntryMinutes,
+      adjustmentMinutes: timeEntries.adjustmentMinutes,
     })
     .from(timeEntries)
     .where(and(...entryConditions));
@@ -173,6 +177,9 @@ export async function getTimeReport(args: {
     if (!row.userId) continue;
     const meta = metaById.get(row.ticketId);
     if (!meta) continue; // ticket soft-deleted between the two reads
+    // FR-06.3: the type filter resolves against the entry's ticket, before any
+    // aggregate is touched — totals and rows always agree.
+    if (args.type && (meta.type as TicketType) !== args.type) continue;
     const ms = effectiveDurationMs(row);
     const isManual = row.manualEntryMinutes !== null;
     const member = members.get(row.userId) ?? {
@@ -336,8 +343,8 @@ export async function getTicketSummary(args: {
 // One shared entry query over the node's live subtree feeds every surface, so
 // the roll-up, the per-ticket rows, the member table, and the raw entries can
 // never disagree. Effective duration follows the cross-cutting rule: timer
-// entries use (end - start) and manual entries use manualEntryMinutes; CR-14's
-// adjustment column will fold into this single spot when it lands.
+// entries use (end - start) + CR-14's signed adjustment, manual entries use
+// manualEntryMinutes.
 // ============================================================================
 
 /** Depth cap of the type-ranked hierarchy (Epic→Story→Task→Subtask). */
@@ -393,8 +400,7 @@ export interface NodeTimeEntryRow {
   durationMs: number;
   type: 'manual' | 'timer';
   description: string | null;
-  // CR-14 hook: the adjustment columns are not in the schema yet; the field is
-  // shipped now so the UI contract is stable when adjustments land.
+  /** CR-14: true when a signed adjustment changed the effective duration. */
   adjusted: boolean;
   adjustmentReason: string | null;
 }
@@ -409,6 +415,7 @@ interface NodeEntryAggregateRow {
   endTime: Date | null;
   manualEntryMinutes: number | null;
   adjustmentMinutes: number | null;
+  adjustmentReason: string | null;
   description: string | null;
 }
 
@@ -432,7 +439,6 @@ async function loadSubtree(projectId: string, nodeId: string) {
     return null;
   }
 
-  const byParent = new Map<string, (typeof root)[]>([[root.id, [root]]]);
   const all: (typeof root)[] = [root];
   let frontier = [root.id];
   for (let depth = 0; depth < HIERARCHY_MAX_DEPTH && frontier.length > 0; depth += 1) {
@@ -456,7 +462,6 @@ async function loadSubtree(projectId: string, nodeId: string) {
     for (const row of rows) {
       all.push(row);
       frontier.push(row.id);
-      byParent.set(row.id, [row]);
     }
   }
   return { root, nodes: all };
@@ -501,6 +506,7 @@ async function loadSubtreeEntries(args: {
       endTime: timeEntries.endTime,
       manualEntryMinutes: timeEntries.manualEntryMinutes,
       adjustmentMinutes: timeEntries.adjustmentMinutes,
+      adjustmentReason: timeEntries.adjustmentReason,
       description: timeEntries.description,
     })
     .from(timeEntries)
@@ -511,9 +517,8 @@ async function loadSubtreeEntries(args: {
 /**
  * Effective duration of one entry — the single definition shared by every
  * hierarchy time surface (roll-up, rows, members, entries). Timer entries use
- * wall-clock (end - start); manual entries use their recorded minutes; running
- * timers contribute 0 (FR-04.5). CR-14's adjustment delta folds in here when
- * the column lands.
+ * wall-clock (end - start) plus CR-14's signed adjustment; manual entries use
+ * their recorded minutes; running timers contribute 0 (FR-04.5).
  */
 export function effectiveDurationMs(row: {
   startTime: Date;
@@ -583,6 +588,18 @@ async function buildHierarchyReport(
       members: Map<string, number>;
     }
   >();
+  // FR-05.1: one row per live ticket in the subtree — descendants without any
+  // in-window entry still appear (zeroed) instead of silently vanishing.
+  // Member/source filters recompute the aggregates; zero-time rows show 0.
+  for (const node of subtree.nodes) {
+    rowMap.set(node.id, {
+      ownMs: 0,
+      ownAutoMs: 0,
+      ownManualMs: 0,
+      entryCount: 0,
+      members: new Map(),
+    });
+  }
   const entries: NodeTimeEntryRow[] = [];
 
   for (const raw of entryRows) {
@@ -640,8 +657,8 @@ async function buildHierarchyReport(
       durationMs: ms,
       type: isManual ? 'manual' : 'timer',
       description: raw.description,
-      adjusted: false,
-      adjustmentReason: null,
+      adjusted: (raw.adjustmentMinutes ?? 0) !== 0,
+      adjustmentReason: raw.adjustmentReason,
     });
   }
 

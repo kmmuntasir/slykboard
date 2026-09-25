@@ -73,19 +73,33 @@ async function projectIdFor(slug: string): Promise<string> {
   return row!.id;
 }
 
-async function addTimer(ticketId: string, ms: number, user = userId) {
+/** Insert a timer of `ms` ending now; returns the entry id (for adjustments). */
+async function addTimer(ticketId: string, ms: number, user = userId): Promise<string> {
   const start = new Date(Date.now() - ms);
-  await db.insert(timeEntries).values({
-    ticketId,
-    userId: user,
-    startTime: start,
-    endTime: new Date(),
-  });
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      ticketId,
+      userId: user,
+      startTime: start,
+      endTime: new Date(),
+    })
+    .returning({ id: timeEntries.id });
+  return row!.id;
 }
 
 /** Insert a timer entry with EXPLICIT bounds (for deterministic overlaps). */
-async function addTimerAt(ticketId: string, start: Date, end: Date, user = userId): Promise<void> {
-  await db.insert(timeEntries).values({ ticketId, userId: user, startTime: start, endTime: end });
+async function addTimerAt(
+  ticketId: string,
+  start: Date,
+  end: Date,
+  user = userId,
+): Promise<string> {
+  const [row] = await db
+    .insert(timeEntries)
+    .values({ ticketId, userId: user, startTime: start, endTime: end })
+    .returning({ id: timeEntries.id });
+  return row!.id;
 }
 
 /**
@@ -280,6 +294,106 @@ describe('CR-08 column time report (integration)', () => {
     });
     expect(report.columns.find((c) => c.columnId === C1)!.trackedMs).toBe(30 * 60_000);
     expect(report.columns.find((c) => c.columnId === C2)!.trackedMs).toBe(30 * 60_000);
+  });
+
+  it('books the CR-14 adjustment delta where the timer stopped (FR-08.6)', async () => {
+    const slug = await createTestProject();
+    const projectId = await projectIdFor(slug);
+    const ticket = await create(slug, { title: 'Task' });
+    const at = timeline();
+    // Backdate creation so the open To Do interval spans the whole entry.
+    await backdateTimeline(ticket.id, at.hoursAgo(2), []);
+
+    // The ticket never leaves To Do.
+    const entryId = await addTimer(ticket.id, HOUR);
+    await db
+      .update(timeEntries)
+      .set({ adjustmentMinutes: -30, adjustmentReason: 'Overtracked while idle' })
+      .where(eq(timeEntries.id, entryId));
+
+    const report = await columnTimeService.getColumnTimeReport({
+      projectId,
+      ticketId: ticket.id,
+      period: null,
+      offset: 0,
+    });
+    const todo = report.columns.find((c) => c.columnId === C1)!;
+    // Wall-clock ~1h minus the -30m delta; the open interval clips at most a
+    // few test-scheduling ms off the tail.
+    expect(todo.trackedMs).toBeGreaterThan(30 * 60_000 - 5_000);
+    expect(todo.trackedMs).toBeLessThanOrEqual(30 * 60_000);
+    expect(todo.trackedMs).toBe(todo.autoMs + todo.manualMs);
+    expect(todo.manualMs).toBe(0);
+    expect(report.totalTrackedMs).toBe(todo.trackedMs);
+  });
+
+  it('lands the adjustment delta whole in the stop column, not pro-rated (FR-08.6)', async () => {
+    const slug = await createTestProject();
+    const projectId = await projectIdFor(slug);
+    const ticket = await create(slug, { title: 'Task' });
+    const at = timeline();
+    await ticketService.moveTicket({
+      ticketId: ticket.id,
+      statusColumn: C2,
+      position: 10,
+      actingUserId: userId,
+    });
+    await backdateTimeline(ticket.id, at.hoursAgo(2), [at.hoursAgo(1)]);
+    // To Do = [2h ago, 1h ago]; In Progress = [1h ago, now].
+    // Timer runs 90m → 10m ago: 30m in To Do, 50m in In Progress, stopped there.
+    const entryId = await addTimerAt(ticket.id, at.minutesAgo(90), at.minutesAgo(10));
+    await db
+      .update(timeEntries)
+      .set({ adjustmentMinutes: 15, adjustmentReason: 'Missed buffer' })
+      .where(eq(timeEntries.id, entryId));
+
+    const report = await columnTimeService.getColumnTimeReport({
+      projectId,
+      ticketId: ticket.id,
+      period: null,
+      offset: 0,
+    });
+    expect(report.columns.find((c) => c.columnId === C1)!.trackedMs).toBe(30 * 60_000);
+    const inProgress = report.columns.find((c) => c.columnId === C2)!;
+    // 50m overlap + the FULL +15m delta (not 15m × 50/80 pro-rated).
+    expect(inProgress.trackedMs).toBe(65 * 60_000);
+    expect(inProgress.autoMs).toBe(65 * 60_000);
+    expect(inProgress.manualMs).toBe(0);
+    expect(report.totalTrackedMs).toBe(95 * 60_000);
+    expect(report.autoMs).toBe(95 * 60_000);
+    expect(report.manualMs).toBe(0);
+  });
+
+  it('splits tracked time into autoMs and manualMs per row and in totals (FR-11.4)', async () => {
+    const slug = await createTestProject();
+    const projectId = await projectIdFor(slug);
+    const ticket = await create(slug, { title: 'Task' });
+    const at = timeline();
+    await backdateTimeline(ticket.id, at.hoursAgo(2), []);
+    // To Do = [2h ago, now] — both entries land there deterministically.
+    await addTimerAt(ticket.id, at.minutesAgo(90), at.minutesAgo(60)); // 30m auto
+    await db.insert(timeEntries).values({
+      ticketId: ticket.id,
+      userId,
+      startTime: at.minutesAgo(30),
+      endTime: at.minutesAgo(30),
+      manualEntryMinutes: 15,
+    });
+
+    const report = await columnTimeService.getColumnTimeReport({
+      projectId,
+      ticketId: ticket.id,
+      period: null,
+      offset: 0,
+    });
+    const todo = report.columns.find((c) => c.columnId === C1)!;
+    expect(todo.trackedMs).toBe(45 * 60_000);
+    expect(todo.autoMs).toBe(30 * 60_000);
+    expect(todo.manualMs).toBe(15 * 60_000);
+    expect(todo.trackedMs).toBe(todo.autoMs + todo.manualMs);
+    expect(report.totalTrackedMs).toBe(45 * 60_000);
+    expect(report.autoMs).toBe(30 * 60_000);
+    expect(report.manualMs).toBe(15 * 60_000);
   });
 
   it('member + source filters narrow tracked time but not residence', async () => {

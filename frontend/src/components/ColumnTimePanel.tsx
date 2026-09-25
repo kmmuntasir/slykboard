@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
+import { Checkbox } from '@/components/ui/Checkbox';
 import {
     Select,
     SelectContent,
@@ -16,13 +17,14 @@ import type { ColumnTimeReport, ColumnTimeRow } from '@/types/report';
 import { fetchColumnTimeReport } from '@/api/reports';
 
 // CR-08: per-column time for one ticket — wall-clock residence AND the tracked
-// working time that overlapped each column. Rows are sortable; the member and
-// source filters narrow the TRACKED metric (residence is wall-clock, so it is
-// member-independent by definition).
+// working time that overlapped each column. Rows arrive in board column order
+// (the default sort) and can be re-sorted by name or the numeric metrics; the
+// member and source filters narrow the TRACKED metric (residence is wall-clock,
+// so it is member-independent by definition).
 
 const ALL = '__all__';
 
-type SortKey = 'column' | 'residence' | 'tracked';
+type SortKey = 'order' | 'column' | 'residence' | 'tracked';
 
 interface ColumnTimePanelProps {
     projectSlug: string;
@@ -33,19 +35,32 @@ interface ColumnTimePanelProps {
 
 function sortRows(rows: ColumnTimeRow[], key: SortKey, desc: boolean): ColumnTimeRow[] {
     const sorted = [...rows].sort((a, b) => {
+        // 'order' keeps the server's board-column order: a 0 comparator plus a
+        // stable sort is a no-op, so the desc flip must be skipped too.
+        if (key === 'order') return 0;
         if (key === 'column') return a.columnName.localeCompare(b.columnName);
         if (key === 'residence') return a.residenceMs - b.residenceMs;
         return a.trackedMs - b.trackedMs;
     });
-    return desc ? sorted.reverse() : sorted;
+    if (key === 'order' || !desc) return sorted;
+    return sorted.reverse();
+}
+
+// CR-11: "1h 20m auto · 30m manual" explains a mixed tracked total. A
+// single-source total is already unambiguous (one segment is 0), so no split
+// line is rendered for it.
+function sourceSplitText(autoMs: number, manualMs: number): string | null {
+    if (autoMs <= 0 || manualMs <= 0) return null;
+    return `${formatDuration(autoMs)} auto · ${formatDuration(manualMs)} manual`;
 }
 
 export function ColumnTimePanel({ projectSlug, ticket, members }: ColumnTimePanelProps) {
     const [period, setPeriod] = useState<'weekly' | 'monthly' | null>(null);
     const [member, setMember] = useState<string | null>(null);
     const [source, setSource] = useState<'auto' | 'manual' | null>(null);
-    const [sortKey, setSortKey] = useState<SortKey>('column');
+    const [sortKey, setSortKey] = useState<SortKey>('order');
     const [sortDesc, setSortDesc] = useState(false);
+    const [hideEmpty, setHideEmpty] = useState(false);
 
     const displayId = formatTicketId(projectSlug, ticket.ticketNumber, { padded: true });
     const { data, isLoading } = useQuery({
@@ -59,7 +74,20 @@ export function ColumnTimePanel({ projectSlug, ticket, members }: ColumnTimePane
             }),
     });
 
-    const rows = data ? sortRows(data.columns, sortKey, sortDesc) : [];
+    // The backend returns every project column; the hide-empty toggle drops
+    // rows with nothing to show (no residence, no tracked time, no visits).
+    const rows = data
+        ? sortRows(
+              hideEmpty
+                  ? data.columns.filter(
+                        (row) => row.residenceMs !== 0 || row.trackedMs !== 0 || row.visits !== 0,
+                    )
+                  : data.columns,
+              sortKey,
+              sortDesc,
+          )
+        : [];
+    const totalSplit = data ? sourceSplitText(data.autoMs, data.manualMs) : null;
     const header = (key: SortKey, label: string, align = 'left') => (
         <th
             scope="col"
@@ -148,6 +176,33 @@ export function ColumnTimePanel({ projectSlug, ticket, members }: ColumnTimePane
                             </SelectItem>
                         </SelectContent>
                     </Select>
+                    <Select
+                        value={sortKey}
+                        onValueChange={(next) => {
+                            setSortKey(next as SortKey);
+                            setSortDesc(false);
+                        }}
+                    >
+                        <SelectTrigger className="w-40" aria-label="Column time sort">
+                            <SelectValue placeholder="Sort" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="order" textValue="Board order">
+                                Board order
+                            </SelectItem>
+                            <SelectItem value="column" textValue="Column name">
+                                Column name
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <label className="flex cursor-pointer items-center gap-1.5 text-sm">
+                        <Checkbox
+                            checked={hideEmpty}
+                            onCheckedChange={(checked) => setHideEmpty(checked === true)}
+                            aria-label="Hide empty columns"
+                        />
+                        Hide empty columns
+                    </label>
                 </div>
             </div>
 
@@ -162,7 +217,9 @@ export function ColumnTimePanel({ projectSlug, ticket, members }: ColumnTimePane
                     <table className="w-full text-sm" aria-label="Time by column">
                         <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                             <tr>
-                                {header('column', 'Column')}
+                                <th scope="col" className="px-3 py-2 font-medium">
+                                    Column
+                                </th>
                                 {header('residence', 'Residence', 'right')}
                                 {header('tracked', 'Tracked', 'right')}
                                 <th scope="col" className="px-3 py-2 text-right font-medium">
@@ -189,6 +246,11 @@ export function ColumnTimePanel({ projectSlug, ticket, members }: ColumnTimePane
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums">
                                         {formatDuration(row.trackedMs)}
+                                        {sourceSplitText(row.autoMs, row.manualMs) && (
+                                            <span className="block text-xs text-muted-foreground">
+                                                {sourceSplitText(row.autoMs, row.manualMs)}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                                         {row.visits}
@@ -201,6 +263,7 @@ export function ColumnTimePanel({ projectSlug, ticket, members }: ColumnTimePane
                         {displayId} · {TICKET_TYPE_DISPLAY[ticket.type]} · residence{' '}
                         {formatDuration(data.totalResidenceMs)} · tracked{' '}
                         {formatDuration(data.totalTrackedMs)}
+                        {totalSplit && ` (${totalSplit})`}
                         {data.window ? ` · ${data.window.label}` : ' · all time'}
                     </p>
                 </>

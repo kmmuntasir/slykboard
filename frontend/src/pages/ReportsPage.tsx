@@ -12,8 +12,8 @@ import { useReport, useTicketSummary } from '@/hooks/useReport';
 import { useBoard } from '@/hooks/useBoard';
 import { HierarchyTimeReport } from '@/components/HierarchyTimeReport';
 import { MemberTimeReport } from '@/components/MemberTimeReport';
-import type { ReportUser, TicketSummaryUser } from '@/types/report';
-import { formatDuration } from '@/utils/formatDuration';
+import type { TicketSummaryUser } from '@/types/report';
+import type { TimeReportFilters } from '@/api/reports';
 
 type Period = 'weekly' | 'monthly';
 
@@ -39,8 +39,12 @@ interface ReportsBodyProps {
 function ReportsBody({ slug }: ReportsBodyProps) {
     const [period, setPeriod] = useState<Period>('weekly');
     const [offset, setOffset] = useState<number>(0);
+    // CR-06 FR-06.3: member/source/type narrowing for the member time report.
+    // Owned here so the same state feeds the useReport query key (server-side
+    // recompute) and the filter controls MemberTimeReport renders.
+    const [timeFilters, setTimeFilters] = useState<TimeReportFilters>({});
 
-    const time = useReport(period, offset, slug);
+    const time = useReport(period, offset, slug, timeFilters);
     const ticketSummary = useTicketSummary(period, offset, slug);
     // CR-04/CR-05: the hierarchy section reuses the same period/offset window
     // and takes its node candidates from the (unfiltered) board query.
@@ -109,6 +113,8 @@ function ReportsBody({ slug }: ReportsBodyProps) {
                 error={time.error}
                 onRetry={() => time.refetch()}
                 users={time.data?.users ?? []}
+                filters={timeFilters}
+                onFiltersChange={setTimeFilters}
             />
 
             {/* F24: Ticket Summary — resolved-ticket counts grouped by priority,
@@ -298,4 +304,4 @@ function TicketSummarySkeleton() {
     );
 }
 
-// --- Types (re-exported from @/types/report; ReportUser, TicketSummaryUser) -
+// --- Types (re-exported from @/types/report; TicketSummaryUser) --------------

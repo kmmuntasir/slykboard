@@ -289,6 +289,25 @@ describe('TicketDetailModal', () => {
         expect(timestampRow.parentElement!.querySelectorAll('svg.lucide-clock').length).toBe(2);
     });
 
+    // CR-12 FR-12.3: on a parent, the tracked-total badge is the CR-04 subtree
+    // roll-up and is labelled as such — without changing the dialog's name.
+    it('shows the tracked badge with "incl. sub-tickets" on a parent while the dialog name stays the ticket title', async () => {
+        renderModal({
+            ticket: makeTicket({ trackedTotalMs: 18_000_000, descendantCount: 2 }),
+        });
+        const dialog = await screen.findByRole('dialog', { name: 'SLYK-101' });
+
+        // The header adornment renders the tracked total with the roll-up label.
+        expect(
+            screen.getByLabelText('Tracked time 5h 0m including sub-tickets'),
+        ).toBeInTheDocument();
+        expect(within(dialog).getByText('incl. sub-tickets')).toBeInTheDocument();
+
+        // The adornment sits OUTSIDE the <h2> (Modal.headerAdornment), so the
+        // dialog's accessible name remains exactly the ticket display id.
+        expect(screen.getByRole('dialog', { name: 'SLYK-101' })).toBeInTheDocument();
+    });
+
     it('renders Created by Unknown and Unassigned avatar when creator is null', async () => {
         renderModal({ ticket: makeTicket({ creator: null }) });
         await screen.findByRole('dialog', { name: 'SLYK-101' });

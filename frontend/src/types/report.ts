@@ -136,6 +136,8 @@ export interface ColumnTimeRow {
   columnName: string;
   residenceMs: number;
   trackedMs: number;
+  autoMs: number; // CR-11: source split of trackedMs (trackedMs === autoMs + manualMs)
+  manualMs: number;
   visits: number;
   sharePct: number;
 }
@@ -152,6 +154,8 @@ export interface ColumnTimeReport {
   columns: ColumnTimeRow[];
   totalResidenceMs: number;
   totalTrackedMs: number;
+  autoMs: number; // CR-11: source split of totalTrackedMs (totalTrackedMs === autoMs + manualMs)
+  manualMs: number;
   window: { start: string; end: string; label: string } | null;
   filters: { memberId: string | null; source: 'auto' | 'manual' | null };
 }

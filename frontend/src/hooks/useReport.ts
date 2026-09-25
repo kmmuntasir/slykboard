@@ -7,16 +7,25 @@ import {
   fetchTicketSummary,
   fetchTimeReport,
 } from '@/api/reports';
+import type { TimeReportFilters } from '@/api/reports';
 import { reportKeys } from '@/api/queryKeys';
 
 // F49: project-scoped per-user time report over a weekly/monthly window.
 // `period` selects the bucket size; `offset` shifts the window (0 = current,
 // -1 = previous). `projectSlug` scopes the F48 endpoint and the cache key.
 // Server returns users sorted by totalMs DESC.
-export function useReport(period: 'weekly' | 'monthly', offset: number, projectSlug: string) {
+// CR-06 FR-06.3: `filters` (member/source/type) recompute the report
+// server-side, so they are part of both the cache key and the request.
+export function useReport(
+  period: 'weekly' | 'monthly',
+  offset: number,
+  projectSlug: string,
+  filters: TimeReportFilters = {},
+) {
+  const filterKey = `${filters.member ?? ''}|${filters.source ?? ''}|${filters.type ?? ''}`;
   return useQuery({
-    queryKey: reportKeys.time(period, offset, projectSlug),
-    queryFn: () => fetchTimeReport(period, offset, projectSlug),
+    queryKey: reportKeys.time(period, offset, projectSlug, filterKey),
+    queryFn: () => fetchTimeReport(period, offset, projectSlug, filters),
   });
 }
 

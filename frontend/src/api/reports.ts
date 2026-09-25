@@ -7,18 +7,46 @@ import type {
   TicketSummaryResponse,
   TimeReportResponse,
 } from '@/types/report';
+import type { TicketType } from '@/types/ticket';
 
 // F49: project-scoped report endpoints (F48). Each function targets
 // /projects/:slug/reports/{time,tickets}, gated by requireProjectMember.
 // `period` selects the bucket size; `offset` shifts the window in whole
 // periods (0 = current, -1 = previous). apiFetch unwraps `.data`.
+
+// CR-06 FR-06.3: optional narrowing filters for the member time report. The
+// server applies them to the member headline totals AND their tickets[]
+// breakdown rows so the two always agree. `source` matches the time-entry
+// kind; `type` matches the ticket hierarchy type.
+export interface TimeReportFilters {
+  member?: string | null;
+  // Matches the report routes' shared query enum: 'auto' (timer entries) | 'manual'.
+  source?: 'auto' | 'manual' | null;
+  type?: TicketType | null;
+}
+
+function timeReportParams(
+  period: 'weekly' | 'monthly',
+  offset: number,
+  filters: TimeReportFilters,
+): string {
+  const params = new URLSearchParams();
+  params.set('period', period);
+  params.set('offset', String(offset));
+  if (filters.member) params.set('member', filters.member);
+  if (filters.source) params.set('source', filters.source);
+  if (filters.type) params.set('type', filters.type);
+  return params.toString();
+}
+
 export async function fetchTimeReport(
   period: 'weekly' | 'monthly',
   offset: number,
   projectSlug: string,
+  filters: TimeReportFilters = {},
 ): Promise<TimeReportResponse> {
   return apiFetch<TimeReportResponse>(
-    `/projects/${projectSlug}/reports/time?period=${period}&offset=${offset}`,
+    `/projects/${projectSlug}/reports/time?${timeReportParams(period, offset, filters)}`,
   );
 }
 
