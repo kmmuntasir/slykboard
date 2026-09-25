@@ -384,7 +384,7 @@ What exists today (verified against the code, not the PRD):
 - API: create requires `title`, `description` (non-empty), `statusColumn`, `priority`, `startDate`, `endDate`, with `endDate > startDate` enforced by a shared schema refinement. PATCH accepts the window as optional-but-not-nullable (a move-only patch doesn't resend it) and rejects an inverted window; description can be edited but never cleared (empty legacy strings stay editable).
 - Frontend: `StartEndDateFields` (native datetime-local) replaces `DueDateField` on create + edit; Start pre-fills with "right now" and End must be picked; the form schema is mode-aware (`makeTicketFormSchema`) so CREATE requires a description + an explicit priority (no MEDIUM default) while EDIT tolerates legacy blanks. `PrioritySelect` renders a "not set" state for null.
 - FR-10.6 overdue chip: cards past their `endDate` show an Overdue badge, except in the project's last column; it self-refreshes each minute.
-- OQ-10b: the backfill used the more truthful reading (start = created_at, end = due_date when it is after creation, else created_at) rather than both = created_at — flagged here for client review.
+- OQ-10b: the backfill kept `start_date` = the original `due_date` (the rename preserves those values) and set `end_date` = `due_date` floored at `created_at` — so legacy rows may carry `start == end` and cannot take a single-bound window edit without resending both bounds (a corrected note; an earlier draft wrongly claimed `start = created_at`). Flagged for client review.
 - Tests: 9 route cases for the required-field matrix + 7 form-contract cases + 3 card overdue cases; suites green (backend 938, frontend 1123).
 
 **Requirement:** At ticket creation, Title, Description, Status, Priority, and a date (Due Date, or the Start/End pair — see decision below) are mandatory with **no defaults**. Labels and Checklist remain optional.
@@ -658,7 +658,7 @@ What exists today (verified against the code, not the PRD):
 | OQ-03e | CR-03 | Intermediate parents (Story/Task with children) auto-progress exactly like Epics. |
 | OQ-04a | CR-04 | Roll-ups ship with the auto/manual split (proposed default applied at implementation). |
 | OQ-06a/b | CR-06 | Weekly/monthly windows kept and no CSV export in this CR (proposed defaults applied). |
-| OQ-10b | CR-10 | Backfill applied: start = created_at, end = due_date (floored at created_at) — awaiting client review. |
+| OQ-10b | CR-10 | Backfill applied: start = due_date (column rename), end = due_date floored at created_at — awaiting client review. |
 | Feature | CR-02 | Existing label flow confirmed sufficient; no work needed. |
 | OQ-08a | CR-08 | Show tracked working time per column alongside wall-clock residence. |
 | OQ-09a | CR-09 | Keep auto-stop; add explicit confirmation naming the currently tracked task. |
