@@ -269,7 +269,10 @@ ticketsRouter.post(
 
 // CR-14: manual adjustment of a closed auto-tracked entry. Scoped under the
 // ticket (membership + project resolved by the same resolver chain) so the
-// authorization context (owner-or-admin) is available to the service.
+// authorization context (owner-or-admin) is available to the service. ticketId
+// is threaded through for the service-side entry↔ticket binding check, and the
+// resolved project role counts toward the admin tier (FR-14.1), not just the
+// Platform-Admin flag.
 ticketsRouter.patch(
   '/:ticketId/timer/entries/:entryId/adjustment',
   authenticate,
@@ -282,14 +285,13 @@ ticketsRouter.patch(
     const { ticketId, entryId } = req.params as { ticketId: string; entryId: string };
     const body = req.body as { adjustmentMinutes: number; reason: string };
     const adjusted = await timerService.adjustTimeEntry({
+      ticketId,
       entryId,
       adjustmentMinutes: body.adjustmentMinutes,
       reason: body.reason,
       actingUserId: req.user!.id,
-      actingUserIsAdmin: req.user!.isPlatformAdmin,
+      actingUserIsAdmin: req.user!.isPlatformAdmin || req.projectMember === 'PROJECT_ADMIN',
     });
-    // Refresh the entry list + activity feed the ticket surfaces.
-    void ticketId;
     res.json(success(adjusted));
   },
 );

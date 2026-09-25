@@ -1,12 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createElement, type ReactNode } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTimer } from '@/hooks/useTimer';
 import { startTimer, stopTimer, fetchTimerState } from '@/api/timer';
 import { fetchServerTime } from '@/api/time';
 import { timerKeys } from '@/api/queryKeys';
-import type { StartTimerResponse, StopTimerResponse, TimeEntry } from '@/types/timer';
+import type {
+  StartTimerResponse,
+  StopTimerResponse,
+  TimeEntry,
+  TimerStateResponse,
+  TimerTicketRef,
+} from '@/types/timer';
 
 // Mock the timer API at module scope; per-test mockResolvedValueOnce supplies
 // the start/stop responses. fetchServerTime is mocked so useServerTime's
@@ -27,6 +33,24 @@ function makeEntry(ticketId: string, id = 'e1'): TimeEntry {
     manualEntryMinutes: null,
     description: null,
     createdAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+// CR-09: the guard probes GET /timer/state; the active ticket ref feeds the
+// pendingConfirm payload (displayId = `${projectSlug}-${ticketNumber}`).
+const FOREIGN_TICKET: TimerTicketRef = {
+  id: PRIOR_ID,
+  ticketNumber: 7,
+  title: 'Nightly export',
+  projectId: 'p1',
+  projectSlug: 'SLYK',
+  projectName: 'Slyk',
+};
+
+function stateWithActive(ticket: TimerTicketRef): TimerStateResponse {
+  return {
+    active: { entryId: 'e9', startTime: '2026-01-01T00:00:00.000Z', ticket },
+    lastTracked: null,
   };
 }
 
@@ -161,5 +185,119 @@ describe('useTimer', () => {
     // Sanity: stop path fires exactly two invalidations (no extras).
     // active() + state() (CR-15) + entries(current).
     expect(invalidateSpy).toHaveBeenCalledTimes(3);
+  });
+
+  // --- CR-09 guard flow ------------------------------------------------------
+
+  it('start while another ticket is active raises pendingConfirm and does not start', async () => {
+    vi.mocked(fetchTimerState).mockResolvedValue(stateWithActive(FOREIGN_TICKET));
+
+    const queryClient = newQueryClient();
+    const { result } = renderHook(() => useTimer(TICKET_ID), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    expect(startTimer).not.toHaveBeenCalled();
+    expect(result.current.pendingConfirm).toEqual({
+      ticketId: PRIOR_ID,
+      title: 'Nightly export',
+      displayId: 'SLYK-7',
+    });
+  });
+
+  it('cancelConfirm clears pendingConfirm and the timer still does not start', async () => {
+    vi.mocked(fetchTimerState).mockResolvedValue(stateWithActive(FOREIGN_TICKET));
+
+    const queryClient = newQueryClient();
+    const { result } = renderHook(() => useTimer(TICKET_ID), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await act(async () => {
+      result.current.cancelConfirm();
+    });
+
+    expect(result.current.pendingConfirm).toBeNull();
+    expect(startTimer).not.toHaveBeenCalled();
+  });
+
+  it('confirmStart after the guard is raised starts the timer exactly once', async () => {
+    vi.mocked(fetchTimerState).mockResolvedValue(stateWithActive(FOREIGN_TICKET));
+    const resp: StartTimerResponse = {
+      entry: makeEntry(TICKET_ID),
+      serverNow: '2026-01-01T00:00:00.000Z',
+      // Confirming auto-stops the foreign session server-side.
+      autoStoppedEntry: makeEntry(PRIOR_ID, 'e2'),
+    };
+    vi.mocked(startTimer).mockResolvedValueOnce(resp);
+
+    const queryClient = newQueryClient();
+    const { result } = renderHook(() => useTimer(TICKET_ID), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.start();
+    });
+    await act(async () => {
+      await result.current.confirmStart();
+    });
+
+    expect(startTimer).toHaveBeenCalledTimes(1);
+    // The confirmed path short-circuits: no second state probe.
+    expect(fetchTimerState).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingConfirm).toBeNull();
+  });
+
+  it('start when this same ticket is already active starts immediately without a confirm', async () => {
+    vi.mocked(fetchTimerState).mockResolvedValue(
+      stateWithActive({ ...FOREIGN_TICKET, id: TICKET_ID, ticketNumber: 1 }),
+    );
+    const resp: StartTimerResponse = {
+      entry: makeEntry(TICKET_ID),
+      serverNow: '2026-01-01T00:00:00.000Z',
+      autoStoppedEntry: null,
+    };
+    vi.mocked(startTimer).mockResolvedValueOnce(resp);
+
+    const queryClient = newQueryClient();
+    const { result } = renderHook(() => useTimer(TICKET_ID), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    expect(startTimer).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingConfirm).toBeNull();
+  });
+
+  it('start with no active timer starts immediately', async () => {
+    const resp: StartTimerResponse = {
+      entry: makeEntry(TICKET_ID),
+      serverNow: '2026-01-01T00:00:00.000Z',
+      autoStoppedEntry: null,
+    };
+    vi.mocked(startTimer).mockResolvedValueOnce(resp);
+
+    const queryClient = newQueryClient();
+    const { result } = renderHook(() => useTimer(TICKET_ID), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    expect(startTimer).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingConfirm).toBeNull();
   });
 });

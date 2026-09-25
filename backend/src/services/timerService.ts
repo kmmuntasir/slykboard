@@ -202,6 +202,8 @@ export async function getTimeEntries(ticketId: string): Promise<TimeEntriesRespo
         ? r.endTime.getTime() - r.startTime.getTime()
         : null;
     // CR-14: effective duration = original + signed adjustment (timers only).
+    // Mirrors reportService.effectiveDurationMs — keep in sync (duplicated
+    // here intentionally for read-path locality, not imported).
     const durationMs =
       originalMs === null
         ? null
@@ -345,6 +347,7 @@ const ticketRefColumns = {
  * The caller's global timer state. `lastTracked` walks back through the most
  * recent CLOSED timer entries, skipping soft-deleted tickets (a restart target
  * the user can no longer open is useless) — bounded scan keeps it cheap.
+ * Manual logs never qualify (OQ-15a): they are not restart targets.
  */
 export async function getTimerState(userId: string): Promise<TimerState> {
   const [activeRow] = await db
@@ -375,6 +378,10 @@ export async function getTimerState(userId: string): Promise<TimerState> {
     : null;
 
   // Most recent closed sessions, newest first; walk back past deleted tickets.
+  // OQ-15a: manual entries (manualEntryMinutes NOT NULL, startTime === endTime)
+  // are excluded — they are not timer sessions, so they must never become the
+  // restart target (they would otherwise surface as lastTracked with a 0ms
+  // wall-clock duration).
   const recent = await db
     .select({
       endTime: timeEntries.endTime,
@@ -385,7 +392,13 @@ export async function getTimerState(userId: string): Promise<TimerState> {
     .from(timeEntries)
     .innerJoin(tickets, eq(tickets.id, timeEntries.ticketId))
     .innerJoin(projects, eq(projects.id, tickets.projectId))
-    .where(and(eq(timeEntries.userId, userId), isNotNull(timeEntries.endTime)))
+    .where(
+      and(
+        eq(timeEntries.userId, userId),
+        isNotNull(timeEntries.endTime),
+        isNull(timeEntries.manualEntryMinutes),
+      ),
+    )
     .orderBy(desc(timeEntries.startTime))
     .limit(10);
 
@@ -420,6 +433,12 @@ export async function getTimerState(userId: string): Promise<TimerState> {
 export const ADJUSTMENT_REASON_MIN_LENGTH = 10;
 
 export interface AdjustTimeEntryInput {
+  /**
+   * The ticket the request URL resolved to. The entry MUST live on it — the
+   * URL ticket's project membership is enforced by the resolver chain, so
+   * binding the row to that ticket keeps foreign entries unreachable.
+   */
+  ticketId: string;
   entryId: string;
   /** Signed minutes to add (negative reduces). */
   adjustmentMinutes: number;
@@ -464,6 +483,14 @@ export async function adjustTimeEntry(input: AdjustTimeEntryInput): Promise<Adju
       .limit(1);
     if (!entry) {
       throw new AppError(ErrorCode.NOT_FOUND, `Time entry '${input.entryId}' not found`);
+    }
+    // Entry↔ticket binding: the entry must live on the URL's ticket. Anything
+    // else (same-project sibling or a foreign project the caller cannot see)
+    // surfaces as the same non-revealing NOT_FOUND — no existence leak.
+    if (entry.ticketId !== input.ticketId) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Time entry '${input.entryId}' not found`, {
+        details: { entryId: input.entryId },
+      });
     }
     if (entry.endTime === null) {
       throw new AppError(ErrorCode.VALIDATION_FAILED, 'Stop the timer before adjusting it', {

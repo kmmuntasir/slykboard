@@ -157,6 +157,46 @@ describe('CR-09/CR-15 timer state (integration)', () => {
     await stopTimer({ ticketId: second.id, userId, isAdmin: false });
     expect((await getTimerState(userId)).lastTracked!.id).toBe(second.id);
   });
+
+  it('never reports a manual entry as lastTracked, even when logged after the last session (OQ-15a)', async () => {
+    const slug = await createTestProject();
+    const timerTicket = await create(slug, 'Timer ticket');
+    await insertClosed(timerTicket.id, 60, 30); // last real session: 30m, ended 1h ago
+
+    // A manual log created AFTER that session (startTime === endTime, duration
+    // carried solely by manualEntryMinutes) must not hijack last-tracked.
+    const manualTicket = await create(slug, 'Manual ticket');
+    const loggedAt = new Date(Date.now() - 5 * MINUTE);
+    await db.insert(teTable).values({
+      ticketId: manualTicket.id,
+      userId,
+      startTime: loggedAt,
+      endTime: loggedAt,
+      manualEntryMinutes: 20,
+    });
+
+    const state = await getTimerState(userId);
+    expect(state.lastTracked!.id).toBe(timerTicket.id);
+    expect(state.lastTracked!.title).toBe('Timer ticket');
+    expect(state.lastTracked!.durationMs).toBe(30 * MINUTE);
+  });
+
+  it('reports no lastTracked for a manual-only user (OQ-15a)', async () => {
+    const slug = await createTestProject();
+    const ticket = await create(slug, 'Only manual');
+    const loggedAt = new Date();
+    await db.insert(teTable).values({
+      ticketId: ticket.id,
+      userId,
+      startTime: loggedAt,
+      endTime: loggedAt,
+      manualEntryMinutes: 45,
+    });
+
+    const state = await getTimerState(userId);
+    expect(state.active).toBeNull();
+    expect(state.lastTracked).toBeNull();
+  });
 });
 
 describe('CR-14 adjustTimeEntry (integration)', () => {
@@ -171,6 +211,7 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
 
     // The meeting example: −2h with a reason.
     const adjusted = await adjustTimeEntry({
+      ticketId: ticket.id,
       entryId: entry!.id,
       adjustmentMinutes: -120,
       reason: 'Left the desk for two hours during an emergency',
@@ -200,6 +241,7 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
 
     const [entry] = await db.select().from(teTable).where(eq(teTable.ticketId, ticket.id));
     const base = {
+      ticketId: ticket.id,
       entryId: entry!.id,
       actingUserId: userId,
       actingUserIsAdmin: false,
@@ -233,6 +275,7 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
     const [open] = await db.select().from(teTable).where(eq(teTable.ticketId, running.id));
     await expect(
       adjustTimeEntry({
+        ticketId: running.id,
         entryId: open!.id,
         adjustmentMinutes: 10,
         reason: 'A valid reason here',
@@ -254,6 +297,7 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
     const [manual] = await db.select().from(teTable).where(eq(teTable.ticketId, manualTicket.id));
     await expect(
       adjustTimeEntry({
+        ticketId: manualTicket.id,
         entryId: manual!.id,
         adjustmentMinutes: 10,
         reason: 'A valid reason here',
@@ -285,6 +329,7 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
     const [entry] = await db.select().from(teTable).where(eq(teTable.ticketId, ticket.id));
 
     await adjustTimeEntry({
+      ticketId: ticket.id,
       entryId: entry!.id,
       adjustmentMinutes: -10,
       reason: 'First correction reason',
@@ -292,6 +337,7 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
       actingUserIsAdmin: false,
     });
     const second = await adjustTimeEntry({
+      ticketId: ticket.id,
       entryId: entry!.id,
       adjustmentMinutes: -20,
       reason: 'Second correction reason',
@@ -300,5 +346,79 @@ describe('CR-14 adjustTimeEntry (integration)', () => {
     });
     expect(second.adjustmentMinutes).toBe(-20);
     expect(second.adjustmentReason).toBe('Second correction reason');
+  });
+
+  it('returns NOT_FOUND when the entry belongs to another ticket of the SAME project (entry↔ticket binding)', async () => {
+    const slug = await createTestProject();
+    const host = await create(slug, 'Host ticket');
+    const other = await create(slug, 'Other ticket');
+    await insertClosed(other.id, 1, 30);
+    const [entry] = await db.select().from(teTable).where(eq(teTable.ticketId, other.id));
+
+    // The URL resolves `host`, but the entry lives on `other` — same project,
+    // yet the request must not reach it (no existence leak either).
+    await expect(
+      adjustTimeEntry({
+        ticketId: host.id,
+        entryId: entry!.id,
+        adjustmentMinutes: 10,
+        reason: 'A valid reason here',
+        actingUserId: userId,
+        actingUserIsAdmin: false,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // The entry row is untouched.
+    const [after] = await db.select().from(teTable).where(eq(teTable.id, entry!.id));
+    expect(after!.adjustmentMinutes).toBeNull();
+  });
+
+  it('returns NOT_FOUND when the entry belongs to a ticket of a DIFFERENT project', async () => {
+    const slugA = await createTestProject();
+    const slugB = await createTestProject();
+    const ticketB = await create(slugB, 'Project B ticket');
+    await insertClosed(ticketB.id, 1, 30);
+    const [entry] = await db.select().from(teTable).where(eq(teTable.ticketId, ticketB.id));
+
+    // The caller legitimately sees project A but not B; aiming the URL at an
+    // A-ticket must not expose B's entry.
+    const ticketA = await create(slugA, 'Project A ticket');
+    await expect(
+      adjustTimeEntry({
+        ticketId: ticketA.id,
+        entryId: entry!.id,
+        adjustmentMinutes: 10,
+        reason: 'A valid reason here',
+        actingUserId: userId,
+        actingUserIsAdmin: false,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('lets an admin adjust another member’s closed entry (FR-14.1)', async () => {
+    const slug = await createTestProject();
+    const ticket = await create(slug, 'Admin adjusted ticket');
+    await insertClosed(ticket.id, 1, 30);
+    const [entry] = await db.select().from(teTable).where(eq(teTable.ticketId, ticket.id));
+
+    const [admin] = await db
+      .insert(users)
+      .values({ email: `cr14-admin-${Date.now()}@example.com`, fullName: 'Admin' })
+      .returning();
+    createdUserIds.push(admin!.id);
+
+    const adjusted = await adjustTimeEntry({
+      ticketId: ticket.id,
+      entryId: entry!.id,
+      adjustmentMinutes: 15,
+      reason: 'Admin corrected the tracked session length',
+      actingUserId: admin!.id,
+      actingUserIsAdmin: true,
+    });
+    expect(adjusted.adjustmentMinutes).toBe(15);
+    expect(adjusted.adjustedById).toBe(admin!.id);
+
+    const [after] = await db.select().from(teTable).where(eq(teTable.id, entry!.id));
+    expect(after!.adjustmentMinutes).toBe(15);
   });
 });

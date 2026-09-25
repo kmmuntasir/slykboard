@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { TimerWidget } from './TimerWidget';
-import { useServerTime } from '@/hooks/useServerTime';
 import type { TimerStateResponse } from '@/types/timer';
 
 // CR-15: the top-bar timer widget — pulsing while tracking, last-tracked restart
@@ -109,6 +108,47 @@ describe('TimerWidget (CR-15)', () => {
         fireEvent.click(screen.getByRole('button', { name: /Timer running/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
         await waitFor(() => expect(mockState.stop).toHaveBeenCalledTimes(1));
+    });
+
+    it('shows the project name when the tracked ticket belongs to another project', async () => {
+        mockState.state = {
+            active: {
+                entryId: 'e1',
+                startTime: new Date().toISOString(),
+                ticket: { ...TICKET, projectSlug: 'ORBIT', projectName: 'Orbit' },
+            },
+            lastTracked: null,
+        };
+        renderWidget();
+        fireEvent.click(screen.getByRole('button', { name: /Timer running/ }));
+        expect(await screen.findByText('Orbit')).toBeInTheDocument();
+    });
+
+    it('omits the project name when the tracked ticket is in the current project', async () => {
+        mockState.state = {
+            active: { entryId: 'e1', startTime: new Date().toISOString(), ticket: TICKET },
+            lastTracked: null,
+        };
+        renderWidget();
+        fireEvent.click(screen.getByRole('button', { name: /Timer running/ }));
+        expect(await screen.findByText('Nightly export')).toBeInTheDocument();
+        expect(screen.queryByText('Slyk')).not.toBeInTheDocument();
+    });
+
+    it('shows the project name for a cross-project last-tracked ticket too', async () => {
+        mockState.state = {
+            active: null,
+            lastTracked: {
+                ...TICKET,
+                projectSlug: 'ORBIT',
+                projectName: 'Orbit',
+                endedAt: new Date().toISOString(),
+                durationMs: 60_000,
+            },
+        };
+        renderWidget();
+        fireEvent.click(screen.getByRole('button', { name: /Timer/ }));
+        expect(await screen.findByText('Orbit')).toBeInTheDocument();
     });
 
     it('offers the last-tracked ticket for restart when idle', async () => {

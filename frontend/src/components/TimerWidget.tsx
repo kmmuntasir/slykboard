@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { Clock } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
@@ -9,6 +9,7 @@ import { useTimerState } from '@/hooks/useTimerState';
 import { useTimer } from '@/hooks/useTimer';
 import { useServerTime } from '@/hooks/useServerTime';
 import { cn } from '@/components/ui/cn';
+import type { TimerTicketRef } from '@/types/timer';
 
 // CR-15: the global timer widget in the top bar.
 //
@@ -29,9 +30,27 @@ function RunningElapsed({ startTime }: { startTime: string }) {
     return <>{formatDuration(Math.max(0, now - Date.parse(startTime)))}</>;
 }
 
+/** Padded display ID + title, plus the project name when it is not the viewed project (CR-15 FR-15.2). */
+function TicketLabel({ ticket, currentSlug }: { ticket: TimerTicketRef; currentSlug?: string }) {
+    const isCrossProject = ticket.projectSlug !== currentSlug;
+    return (
+        <>
+            <span className="font-mono text-xs text-muted-foreground">
+                {formatTicketId(ticket.projectSlug, ticket.ticketNumber, { padded: true })}
+            </span>{' '}
+            {ticket.title}
+            {isCrossProject && (
+                <span className="block text-xs text-muted-foreground">{ticket.projectName}</span>
+            )}
+        </>
+    );
+}
+
 export function TimerWidget() {
     const { data } = useTimerState();
     const navigate = useNavigate();
+    // The widget lives in TopNav (app-wide); the route slug is the project being viewed.
+    const { slug: currentSlug } = useParams<{ slug: string }>();
     const active = data?.active ?? null;
     const lastTracked = data?.lastTracked ?? null;
 
@@ -102,14 +121,7 @@ export function TimerWidget() {
                                 }
                                 className="block w-full text-left hover:underline"
                             >
-                                <span className="font-mono text-xs text-muted-foreground">
-                                    {formatTicketId(
-                                        active.ticket.projectSlug,
-                                        active.ticket.ticketNumber,
-                                        { padded: true },
-                                    )}
-                                </span>{' '}
-                                {active.ticket.title}
+                                <TicketLabel ticket={active.ticket} currentSlug={currentSlug} />
                             </button>
                             <p className="flex items-center justify-between text-xs text-muted-foreground">
                                 <span className="inline-flex items-center gap-1">
@@ -139,14 +151,7 @@ export function TimerWidget() {
                                 }
                                 className="block w-full text-left hover:underline"
                             >
-                                <span className="font-mono text-xs text-muted-foreground">
-                                    {formatTicketId(
-                                        lastTracked.projectSlug,
-                                        lastTracked.ticketNumber,
-                                        { padded: true },
-                                    )}
-                                </span>{' '}
-                                {lastTracked.title}
+                                <TicketLabel ticket={lastTracked} currentSlug={currentSlug} />
                             </button>
                             <p className="text-xs text-muted-foreground">
                                 Last tracked:{' '}

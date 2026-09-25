@@ -27,7 +27,7 @@ vi.mock('@/api/time', () => ({
     fetchServerTime: vi.fn().mockResolvedValue({ now: new Date().toISOString() }),
 }));
 
-import { fetchActiveTimer, startTimer, stopTimer } from '@/api/timer';
+import { fetchActiveTimer, fetchTimerState, startTimer, stopTimer } from '@/api/timer';
 
 const TICKET_ID = 't101';
 
@@ -98,5 +98,59 @@ describe('TimerHeroCard', () => {
         await waitFor(() => expect(stopTimer).toHaveBeenCalledWith(TICKET_ID));
         // After stop resolves, the last-tracked affordance shows (90s fixture → ~1m 30s).
         await waitFor(() => expect(screen.getByText(/Last tracked:/)).toBeInTheDocument());
+    });
+
+    it('Start while another ticket is tracked raises the switch confirm and guards startTimer', async () => {
+        // Foreign active ticket: fetchActiveTimer carries a different ticketId so
+        // THIS card's isRunning stays false (Start renders), while the CR-09
+        // guard in useTimer sees the shared timer state and raises the confirm.
+        vi.mocked(fetchActiveTimer).mockResolvedValue({
+            activeTimer: {
+                id: 'e9',
+                ticketId: 't999',
+                userId: 'u1',
+                startTime: new Date(Date.now() - 5000).toISOString(),
+                endTime: null,
+                manualEntryMinutes: null,
+                description: null,
+                createdAt: new Date().toISOString(),
+            },
+        });
+        vi.mocked(fetchTimerState).mockResolvedValue({
+            active: {
+                entryId: 'e9',
+                startTime: new Date().toISOString(),
+                ticket: {
+                    id: 't999',
+                    ticketNumber: 7,
+                    title: 'Nightly export',
+                    projectId: 'p1',
+                    projectSlug: 'SLYK',
+                    projectName: 'Slyk',
+                },
+            },
+            lastTracked: null,
+        });
+        renderCard();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+        // The dialog names the running ticket instead of silently starting.
+        expect(
+            await screen.findByRole('dialog', { name: 'Stop the current timer?' }),
+        ).toBeInTheDocument();
+        expect(screen.getByText('SLYK-7')).toBeInTheDocument();
+        expect(screen.getByText('Nightly export')).toBeInTheDocument();
+        expect(startTimer).not.toHaveBeenCalled();
+
+        // Cancel closes the dialog; the timer never starts.
+        fireEvent.click(screen.getByRole('button', { name: 'Keep tracking' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(startTimer).not.toHaveBeenCalled();
+
+        // Re-raise and confirm: startTimer runs for THIS ticket.
+        fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Stop it and start' }));
+        await waitFor(() => expect(startTimer).toHaveBeenCalledWith(TICKET_ID));
     });
 });

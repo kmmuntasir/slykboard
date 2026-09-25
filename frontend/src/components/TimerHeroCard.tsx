@@ -19,7 +19,9 @@ import { Button } from './ui/Button';
 // hero card (timer surface). The hosting Time Tracking panel renders the
 // "Total tracked" summary line, <TimeLog>, and the collapsible <ManualEntryForm>
 // alongside it — that keeps this component single-responsibility (the timer)
-// and lets the panel own the log/disclosure layout.
+// and lets the panel own the log/disclosure layout. The CR-09 cross-ticket
+// switch confirm belongs to the timer surface and renders here (same wiring as
+// TimerControls).
 interface TimerHeroCardProps {
     ticketId: string;
 }
@@ -66,6 +68,15 @@ export function TimerHeroCard({ ticketId }: TimerHeroCardProps) {
 
     return (
         <div className="bg-card border border-border rounded-lg p-4 flex flex-col items-center gap-3">
+            {/* CR-09: the start guard in useTimer raises pendingConfirm when another
+            ticket is being tracked — surface it instead of a silent dead click. */}
+            <TimerSwitchConfirm
+                pending={pendingConfirm}
+                onConfirm={() => {
+                    void confirmStart();
+                }}
+                onCancel={cancelConfirm}
+            />
             <span
                 className="font-mono text-3xl tabular-nums text-foreground"
                 aria-live="polite"

@@ -898,6 +898,78 @@ describe('PATCH /api/tickets/:ticketId schedule window (CR-10)', () => {
     expect(res.body.error.code).toBe('VALIDATION_FAILED');
     expect(mockedUpdateTicket).not.toHaveBeenCalled();
   });
+
+  it('200 passes a single-sided endDate patch through (CR-10 FR-10.3: service owns the merged check)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow({}),
+      new: makeTicketRow({}),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ endDate: '2026-06-30T00:00:00.000Z' });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({ endDate: '2026-06-30T00:00:00.000Z' }),
+      }),
+    );
+  });
+
+  it('400 VALIDATION_FAILED when the service rejects an inverted merged window (single-sided PATCH)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockRejectedValue(
+      new AppError(ErrorCode.VALIDATION_FAILED, 'End date must be after the start date'),
+    );
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ endDate: '2026-01-01T00:00:00.000Z' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).toHaveBeenCalledTimes(1);
+  });
+
+  it('200 passes description "" through (CR-10 FR-10.4: the not-empty rule is service-side)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockResolvedValue({
+      old: makeTicketRow({ description: 'stored' }),
+      new: makeTicketRow({ description: 'kept' }),
+    } as unknown as Awaited<ReturnType<typeof ticketService.updateTicket>>);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ description: '' });
+
+    expect(res.status).toBe(200);
+    expect(mockedUpdateTicket).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({ description: '' }),
+      }),
+    );
+  });
+
+  it('400 VALIDATION_FAILED when the service rejects clearing a stored description', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    mockedUpdateTicket.mockRejectedValue(
+      new AppError(ErrorCode.VALIDATION_FAILED, 'Description is required'),
+    );
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ description: '' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(mockedUpdateTicket).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('PATCH /api/tickets/:ticketId labelIds (F14)', () => {
@@ -1314,11 +1386,77 @@ describe('PATCH /api/tickets/:ticketId/timer/entries/:entryId/adjustment (CR-14)
     expect(res.body.data.adjustmentMinutes).toBe(-120);
     expect(vi.mocked(timerService.adjustTimeEntry)).toHaveBeenCalledWith(
       expect.objectContaining({
+        ticketId: VALID_TICKET_ID,
         entryId: ENTRY_ID,
         adjustmentMinutes: -120,
         actingUserId: 'u1',
         actingUserIsAdmin: false,
       }),
+    );
+  });
+
+  it('200 and actingUserIsAdmin=true when the caller holds the PROJECT_ADMIN project role (FR-14.1)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    membershipMock.getMemberRole.mockResolvedValue('PROJECT_ADMIN');
+    vi.mocked(timerService.adjustTimeEntry).mockResolvedValue({
+      id: ENTRY_ID,
+      adjustmentMinutes: 15,
+      adjustmentReason: 'Admin corrected the tracked session',
+      adjustedById: 'u1',
+      adjustedAt: '2026-01-01T12:00:00.000Z',
+    } as never);
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/${ENTRY_ID}/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: 15, reason: 'Admin corrected the tracked session' });
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(timerService.adjustTimeEntry)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticketId: VALID_TICKET_ID,
+        entryId: ENTRY_ID,
+        actingUserId: 'u1',
+        actingUserIsAdmin: true,
+      }),
+    );
+  });
+
+  it('403 FORBIDDEN envelope when a plain MEMBER adjusts someone else’s entry', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    // Default role MEMBER → actingUserIsAdmin=false; the service re-check denies.
+    vi.mocked(timerService.adjustTimeEntry).mockRejectedValue(
+      new AppError(ErrorCode.FORBIDDEN, 'You can only adjust your own time entries'),
+    );
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/${ENTRY_ID}/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: 10, reason: 'A perfectly fine reason' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(vi.mocked(timerService.adjustTimeEntry)).toHaveBeenCalledWith(
+      expect.objectContaining({ actingUserIsAdmin: false }),
+    );
+  });
+
+  it('404 NOT_FOUND envelope when the entry does not belong to the URL ticket (binding)', async () => {
+    mockedFindVersion.mockResolvedValue(0);
+    // The service enforces the entry↔ticket binding (anti-oracle NOT_FOUND).
+    vi.mocked(timerService.adjustTimeEntry).mockRejectedValue(
+      new AppError(ErrorCode.NOT_FOUND, `Time entry '${ENTRY_ID}' not found`),
+    );
+
+    const res = await request(app)
+      .patch(`/api/tickets/${VALID_TICKET_ID}/timer/entries/${ENTRY_ID}/adjustment`)
+      .set('Authorization', `Bearer ${await tokenFor(false)}`)
+      .send({ adjustmentMinutes: 10, reason: 'A perfectly fine reason' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(vi.mocked(timerService.adjustTimeEntry)).toHaveBeenCalledWith(
+      expect.objectContaining({ ticketId: VALID_TICKET_ID, entryId: ENTRY_ID }),
     );
   });
 
