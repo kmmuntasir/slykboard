@@ -1,5 +1,11 @@
 import { UserCircle } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/Select';
 import { useProjectMembers } from '@/hooks/useProjectMembers';
 
 interface UserSelectProps {
@@ -18,13 +24,10 @@ export function UserSelect({ value, onChange, projectSlug, hideLabel = false }: 
     const { data: members, isLoading } = useProjectMembers(projectSlug);
 
     const select = (
-        <Select
-            value={value ?? ''}
-            onValueChange={(v) => onChange(v === '' ? null : v)}
-        >
+        <Select value={value ?? ''} onValueChange={(v) => onChange(v === '' ? null : v)}>
             <SelectTrigger aria-label="Assignee" className="w-full" disabled={isLoading}>
                 <SelectValue placeholder="Unassigned">
-                    {value ? members?.find((m) => m.userId === value)?.fullName ?? '' : ''}
+                    {value ? (members?.find((m) => m.userId === value)?.fullName ?? '') : ''}
                 </SelectValue>
             </SelectTrigger>
             <SelectContent searchable>
