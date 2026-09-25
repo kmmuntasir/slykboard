@@ -1,8 +1,6 @@
 import { Moon, Monitor, Sun } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { ThemePreference } from '@/utils/theme';
 import { useTheme } from '@/hooks/useTheme';
-import { cn } from '@/components/ui/cn';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/ToggleGroup';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip';
 

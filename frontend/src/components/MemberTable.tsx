@@ -8,7 +8,13 @@ import { Trash2 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/Select';
 import type { Member, MemberRole } from '@/types/member';
 
 export interface MemberTableProps {
@@ -73,10 +79,8 @@ export function MemberTable({
                         // Self-lock: cannot demote self out of PROJECT_ADMIN
                         // (client-side footgun guard, preserves existing behavior).
                         const selfLockedAdmin = isSelf && member.role === 'PROJECT_ADMIN';
-                        const primaryName =
-                            (member.displayName ?? member.fullName) || member.email;
-                        const avatarName =
-                            member.displayName ?? member.fullName ?? member.email;
+                        const primaryName = (member.displayName ?? member.fullName) || member.email;
+                        const avatarName = member.displayName ?? member.fullName ?? member.email;
 
                         return (
                             <tr key={member.userId} className="border-t border-border">
@@ -92,9 +96,7 @@ export function MemberTable({
                                                 <span className="truncate font-medium text-foreground">
                                                     {primaryName}
                                                 </span>
-                                                {isSelf && (
-                                                    <Badge variant="secondary">You</Badge>
-                                                )}
+                                                {isSelf && <Badge variant="secondary">You</Badge>}
                                             </div>
                                             <p className="truncate text-muted-foreground">
                                                 {member.email}
@@ -149,10 +151,7 @@ export function MemberTable({
                                             disabled={isSelf}
                                             onClick={() => onRemove(member.userId)}
                                         >
-                                            <Trash2
-                                                className="h-4 w-4"
-                                                aria-hidden="true"
-                                            />
+                                            <Trash2 className="h-4 w-4" aria-hidden="true" />
                                         </Button>
                                     </td>
                                 )}

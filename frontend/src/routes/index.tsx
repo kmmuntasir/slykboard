@@ -112,7 +112,10 @@ export const router = createBrowserRouter([
                                         path: '/settings',
                                         element: <RequirePlatformAdmin />,
                                         children: [
-                                            { index: true, element: <ComingSoonPage title='Settings' /> },
+                                            {
+                                                index: true,
+                                                element: <ComingSoonPage title="Settings" />,
+                                            },
                                         ],
                                     },
                                     // KMM-5: per-user Account Settings — authenticated only, no

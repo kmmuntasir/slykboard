@@ -49,13 +49,7 @@ describe('ConfirmDialog', () => {
 
     it('renders children as the body when message is omitted', () => {
         render(
-            <ConfirmDialog
-                isOpen
-                title="T"
-                titleId="t"
-                onConfirm={vi.fn()}
-                onCancel={vi.fn()}
-            >
+            <ConfirmDialog isOpen title="T" titleId="t" onConfirm={vi.fn()} onCancel={vi.fn()}>
                 <span data-testid="rich-body">rich</span>
             </ConfirmDialog>,
         );
@@ -159,13 +153,7 @@ describe('ConfirmDialog', () => {
 
     it("variant='default' renders a primary confirm button", () => {
         render(
-            <ConfirmDialog
-                isOpen
-                title="T"
-                titleId="t"
-                onConfirm={vi.fn()}
-                onCancel={vi.fn()}
-            />,
+            <ConfirmDialog isOpen title="T" titleId="t" onConfirm={vi.fn()} onCancel={vi.fn()} />,
         );
         expect(screen.getByRole('button', { name: 'Confirm' }).className).toContain('bg-primary');
     });
@@ -173,13 +161,7 @@ describe('ConfirmDialog', () => {
     it('Esc fires onCancel', () => {
         const onCancel = vi.fn();
         render(
-            <ConfirmDialog
-                isOpen
-                title="T"
-                titleId="t"
-                onConfirm={vi.fn()}
-                onCancel={onCancel}
-            />,
+            <ConfirmDialog isOpen title="T" titleId="t" onConfirm={vi.fn()} onCancel={onCancel} />,
         );
         fireEvent.keyDown(document.body, { key: 'Escape' });
         expect(onCancel).toHaveBeenCalledTimes(1);
@@ -188,13 +170,7 @@ describe('ConfirmDialog', () => {
     it('backdrop click does NOT call onCancel when blockBackdropClose (default true)', () => {
         const onCancel = vi.fn();
         render(
-            <ConfirmDialog
-                isOpen
-                title="T"
-                titleId="t"
-                onConfirm={vi.fn()}
-                onCancel={onCancel}
-            />,
+            <ConfirmDialog isOpen title="T" titleId="t" onConfirm={vi.fn()} onCancel={onCancel} />,
         );
         const backdrop = screen.getByRole('dialog').parentElement!;
         fireEvent.mouseDown(backdrop);

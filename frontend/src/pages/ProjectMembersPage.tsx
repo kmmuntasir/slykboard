@@ -184,11 +184,7 @@ function MembersBody({ slug }: MembersBodyProps) {
             </section>
 
             {canManage && (
-                <AddMemberModal
-                    slug={slug}
-                    isOpen={addOpen}
-                    onClose={() => setAddOpen(false)}
-                />
+                <AddMemberModal slug={slug} isOpen={addOpen} onClose={() => setAddOpen(false)} />
             )}
 
             <ConfirmDialog

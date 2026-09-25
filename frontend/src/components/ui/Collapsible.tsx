@@ -16,13 +16,7 @@ export const CollapsibleTrigger = forwardRef<
     ElementRef<typeof CollapsiblePrimitive.Trigger>,
     ComponentPropsWithoutRef<typeof CollapsiblePrimitive.Trigger>
 >(function CollapsibleTrigger({ className, ...rest }, ref) {
-    return (
-        <CollapsiblePrimitive.Trigger
-            ref={ref}
-            className={cn(className)}
-            {...rest}
-        />
-    );
+    return <CollapsiblePrimitive.Trigger ref={ref} className={cn(className)} {...rest} />;
 });
 
 // --- Content ----------------------------------------------------------------

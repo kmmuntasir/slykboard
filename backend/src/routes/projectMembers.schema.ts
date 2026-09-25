@@ -18,20 +18,20 @@ export const memberRoleSchema = z.enum(['PROJECT_ADMIN', 'MEMBER']);
 // fullName/displayName are optional at the edge; the service persists
 // fullName (DB NOT NULL) with a safe default when omitted.
 export const memberEmailSchema = z.object({
-    email: z.email(),
-    fullName: z.string().min(1).max(200).optional(),
-    displayName: z.string().max(100).nullable().optional(),
+  email: z.email(),
+  fullName: z.string().min(1).max(200).optional(),
+  displayName: z.string().max(100).nullable().optional(),
 });
 
 // POST /:slug/members/new body. memberEmailSchema + an optional target role
 // (defaults to 'MEMBER' in the service when omitted).
 export const createMemberSchema = memberEmailSchema.extend({
-    role: memberRoleSchema.optional(),
+  role: memberRoleSchema.optional(),
 });
 
 // PATCH /:slug/members/:userId/role body.
 export const updateMemberRoleSchema = z.object({
-    role: memberRoleSchema,
+  role: memberRoleSchema,
 });
 
 // POST /:slug/members body — add an EXISTING platform user to the project
@@ -40,22 +40,22 @@ export const updateMemberRoleSchema = z.object({
 // (defaults to 'MEMBER' in the service when omitted). The refine guards enforce
 // the mutual exclusivity + presence invariants at the edge.
 export const addMemberBody = z
-    .object({
-        email: z.email().optional(),
-        userId: z.uuid().optional(),
-        role: memberRoleSchema.optional(),
-    })
-    .refine((b) => Boolean(b.email) || Boolean(b.userId), {
-        message: 'Provide either email or userId',
-    })
-    .refine((b) => !(b.email && b.userId), {
-        message: 'Provide email OR userId, not both',
-    });
+  .object({
+    email: z.email().optional(),
+    userId: z.uuid().optional(),
+    role: memberRoleSchema.optional(),
+  })
+  .refine((b) => Boolean(b.email) || Boolean(b.userId), {
+    message: 'Provide either email or userId',
+  })
+  .refine((b) => !(b.email && b.userId), {
+    message: 'Provide email OR userId, not both',
+  });
 
 // :slug + :userId path params for PATCH/DELETE member routes. Reuses the
 // project slug param shape so an invalid slug is a 400 (not a 404/403).
 export const memberUserIdParamSchema = slugParamSchema.extend({
-    userId: z.uuid(),
+  userId: z.uuid(),
 });
 
 // GET /:slug/members/lookup query — read-only email probe powering the
@@ -63,8 +63,8 @@ export const memberUserIdParamSchema = slugParamSchema.extend({
 // branches so the client branches on the response shape, never exceptions.
 // Reuses the project slug param shape so an invalid slug is a 400.
 export const lookupMemberSchema = {
-    params: slugParamSchema,
-    query: z.object({ email: z.email() }),
+  params: slugParamSchema,
+  query: z.object({ email: z.email() }),
 };
 
 export type MemberEmailBody = z.infer<typeof memberEmailSchema>;

@@ -1,5 +1,4 @@
 import { FormProvider } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
 
 import { Button } from './ui/Button';
 import { TitleField } from './ticket-fields/TitleField';

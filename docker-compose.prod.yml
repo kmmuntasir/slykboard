@@ -61,7 +61,7 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       # $$ escapes to $ at runtime → expands the container's own env inside it.
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -84,7 +84,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      PORT: "3000"
+      PORT: '3000'
       # CORS allow-list origin — the host URL the browser uses to reach the FE.
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       # DATABASE_URL mirrors the db service creds above (same vars + defaults).
@@ -93,7 +93,7 @@ services:
       DIRECT_DATABASE_URL: postgres://${POSTGRES_USER:-slyk}:${POSTGRES_PASSWORD:-slyk}@db:5432/${POSTGRES_DB:-slyk}
       # Migrate the schema before serving (T4). Explicit even though prod
       # defaults to true — keeps intent visible in the stack file.
-      RUN_MIGRATIONS_ON_START: "true"
+      RUN_MIGRATIONS_ON_START: 'true'
       # Google OAuth 2.0 (postmessage flow — same as the hosted app).
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -107,7 +107,7 @@ services:
       - path: .env
         required: false
     ports:
-      - "3000:3000"
+      - '3000:3000'
     healthcheck:
       # Final BE image has NO wget/curl (only tini) → use node + global fetch
       # (Node 24). Readiness probe hits /api/health/ready (DB SELECT 1 → 200
@@ -142,7 +142,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - '8080:80'
 
 volumes:
   pgdata:

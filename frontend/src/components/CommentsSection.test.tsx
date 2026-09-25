@@ -84,10 +84,9 @@ function wrapper() {
 }
 
 function renderSection(props?: Partial<Parameters<typeof CommentsSection>[0]>) {
-    return render(
-        <CommentsSection ticketId="t-1" slug="proj" {...props} />,
-        { wrapper: wrapper() },
-    );
+    return render(<CommentsSection ticketId="t-1" slug="proj" {...props} />, {
+        wrapper: wrapper(),
+    });
 }
 
 describe('CommentsSection', () => {
@@ -100,9 +99,7 @@ describe('CommentsSection', () => {
     // --- empty / loading / error states ------------------------------------
     it('shows "No comments yet" when the thread is empty', async () => {
         renderSection();
-        await waitFor(() =>
-            expect(screen.getByText('No comments yet.')).toBeInTheDocument(),
-        );
+        await waitFor(() => expect(screen.getByText('No comments yet.')).toBeInTheDocument());
     });
 
     it('shows a loading message while the query is pending', () => {
@@ -148,9 +145,7 @@ describe('CommentsSection', () => {
     it('a successful create invalidates the comments query and refreshes', async () => {
         mockFetch([]);
         renderSection();
-        await waitFor(() =>
-            expect(screen.getByText('No comments yet.')).toBeInTheDocument(),
-        );
+        await waitFor(() => expect(screen.getByText('No comments yet.')).toBeInTheDocument());
         expect(fetchTicketComments).toHaveBeenCalledTimes(1);
 
         (createTicketComment as ReturnType<typeof vi.fn>).mockResolvedValue(
@@ -188,9 +183,7 @@ describe('CommentsSection', () => {
         fireEvent.change(editField, { target: { value: 'Updated' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        await waitFor(() =>
-            expect(updateTicketComment).toHaveBeenCalledWith('c-1', 'Updated'),
-        );
+        await waitFor(() => expect(updateTicketComment).toHaveBeenCalledWith('c-1', 'Updated'));
         // Edit form torn down after a successful update.
         await waitFor(() =>
             expect(screen.queryByLabelText('Edit comment')).not.toBeInTheDocument(),

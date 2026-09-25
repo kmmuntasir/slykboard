@@ -21,11 +21,7 @@ function makeReq(authorization?: string): Request {
   } as unknown as Request;
 }
 
-function signExpiredToken(claims: {
-  sub: string;
-  email: string;
-  pa: boolean;
-}): Promise<string> {
+function signExpiredToken(claims: { sub: string; email: string; pa: boolean }): Promise<string> {
   return new SignJWT({ email: claims.email, pa: claims.pa })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
@@ -36,11 +32,7 @@ function signExpiredToken(claims: {
     .sign(secretKey);
 }
 
-function signVerlessToken(claims: {
-  sub: string;
-  email: string;
-  pa: boolean;
-}): Promise<string> {
+function signVerlessToken(claims: { sub: string; email: string; pa: boolean }): Promise<string> {
   return new SignJWT({ email: claims.email, pa: claims.pa })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)

@@ -30,7 +30,6 @@ function renderDatePicker(overrides?: {
             clearable={overrides?.clearable}
             disabled={overrides?.disabled}
             placeholder={overrides?.placeholder}
-            aria-label='Test date'
         >
             <DatePickerTrigger />
         </DatePicker>,
@@ -41,7 +40,9 @@ function renderDatePicker(overrides?: {
 function getTrigger() {
     // The trigger button's accessible name is its text content:
     // the placeholder (default "Pick a date…") or the formatted date.
-    return screen.getByRole('button', { name: /Pick a date…|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/i });
+    return screen.getByRole('button', {
+        name: /Pick a date…|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/i,
+    });
 }
 
 function openPicker() {

@@ -98,7 +98,6 @@ vi.mock('../db/client', () => {
   return { db };
 });
 
-import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import {
   createUser,
@@ -130,7 +129,12 @@ describe('findUserByEmail', () => {
   beforeEach(resetBag);
 
   it.each([
-    { name: 'returns the row when found', input: 'admin@b.com', want: MOCK_USER_ROW, rows: [MOCK_USER_ROW] },
+    {
+      name: 'returns the row when found',
+      input: 'admin@b.com',
+      want: MOCK_USER_ROW,
+      rows: [MOCK_USER_ROW],
+    },
     { name: 'returns undefined when not found', input: 'nobody@b.com', want: undefined, rows: [] },
   ])('$name', async ({ input, want, rows }) => {
     bag.selectLimit.mockResolvedValueOnce(rows);
@@ -255,9 +259,9 @@ describe('createUser', () => {
   it('throws FORBIDDEN when the email domain is outside ALLOWED_DOMAIN (gate runs before insert)', async () => {
     testEnv.env.allowedDomain = 'allowed.com';
 
-    await expect(
-      createUser({ email: 'x@evil.com', fullName: 'Evil' }),
-    ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
+    await expect(createUser({ email: 'x@evil.com', fullName: 'Evil' })).rejects.toMatchObject({
+      code: ErrorCode.FORBIDDEN,
+    });
 
     // Zero side effects — the insert never ran.
     expect(bag.insertReturning).not.toHaveBeenCalled();
@@ -500,9 +504,33 @@ describe('listUsers', () => {
 
   it('passes rows through in the order the mock returns them', async () => {
     const rows = [
-      { id: 'u-a', email: 'a@x.com', fullName: 'Alice', displayName: null, isPlatformAdmin: false, avatarUrl: 'http://a', blocked: false },
-      { id: 'u-b', email: 'b@x.com', fullName: 'Bob', displayName: null, isPlatformAdmin: true, avatarUrl: null, blocked: false },
-      { id: 'u-c', email: 'c@x.com', fullName: 'Carol', displayName: null, isPlatformAdmin: false, avatarUrl: 'http://c', blocked: false },
+      {
+        id: 'u-a',
+        email: 'a@x.com',
+        fullName: 'Alice',
+        displayName: null,
+        isPlatformAdmin: false,
+        avatarUrl: 'http://a',
+        blocked: false,
+      },
+      {
+        id: 'u-b',
+        email: 'b@x.com',
+        fullName: 'Bob',
+        displayName: null,
+        isPlatformAdmin: true,
+        avatarUrl: null,
+        blocked: false,
+      },
+      {
+        id: 'u-c',
+        email: 'c@x.com',
+        fullName: 'Carol',
+        displayName: null,
+        isPlatformAdmin: false,
+        avatarUrl: 'http://c',
+        blocked: false,
+      },
     ];
     bag.selectList.mockResolvedValueOnce(rows);
 
@@ -514,8 +542,24 @@ describe('listUsers', () => {
 
   it('never exposes a role key on any item', async () => {
     const rows = [
-      { id: 'u-a', email: 'a@x.com', fullName: 'Alice', displayName: null, isPlatformAdmin: false, avatarUrl: null, blocked: false },
-      { id: 'u-b', email: 'b@x.com', fullName: 'Bob', displayName: null, isPlatformAdmin: true, avatarUrl: 'http://b', blocked: false },
+      {
+        id: 'u-a',
+        email: 'a@x.com',
+        fullName: 'Alice',
+        displayName: null,
+        isPlatformAdmin: false,
+        avatarUrl: null,
+        blocked: false,
+      },
+      {
+        id: 'u-b',
+        email: 'b@x.com',
+        fullName: 'Bob',
+        displayName: null,
+        isPlatformAdmin: true,
+        avatarUrl: 'http://b',
+        blocked: false,
+      },
     ];
     bag.selectList.mockResolvedValueOnce(rows);
 

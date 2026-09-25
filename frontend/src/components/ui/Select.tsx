@@ -13,6 +13,7 @@
 import {
     createContext,
     forwardRef,
+    useCallback,
     useContext,
     useMemo,
     useState,
@@ -71,12 +72,15 @@ export function Select({
     const isControlled = valueProp !== undefined;
     const value = isControlled ? (valueProp as string) : internalValue;
 
-    const handleValueChange = (next: string) => {
-        if (!isControlled) {
-            setInternalValue(next);
-        }
-        onValueChange?.(next);
-    };
+    const handleValueChange = useCallback(
+        (next: string) => {
+            if (!isControlled) {
+                setInternalValue(next);
+            }
+            onValueChange?.(next);
+        },
+        [isControlled, onValueChange],
+    );
 
     const handleOpenChange = (open: boolean) => {
         if (!open) {
@@ -93,7 +97,7 @@ export function Select({
             search,
             onSearchChange: setSearch,
         }),
-        [value, search],
+        [value, search, handleValueChange],
     );
 
     return (
@@ -106,8 +110,7 @@ export function Select({
 }
 
 // --- Trigger -----------------------------------------------------------------
-export interface SelectTriggerProps
-    extends ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger> {}
+export type SelectTriggerProps = ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>;
 
 export const SelectTrigger = forwardRef<
     ElementRef<typeof DropdownMenuPrimitive.Trigger>,
@@ -156,8 +159,9 @@ export function SelectValue({ placeholder, children }: SelectValueProps) {
 }
 
 // --- Content (wraps Portal + Content internally) ----------------------------
-export interface SelectContentProps
-    extends ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> {
+export interface SelectContentProps extends ComponentPropsWithoutRef<
+    typeof DropdownMenuPrimitive.Content
+> {
     /** Side offset in px (Radix default 0; we default to 4 for a small gap). */
     sideOffset?: number;
     /** When true, renders a filter input at the top of the content. */
@@ -237,8 +241,10 @@ export const SelectSeparator = forwardRef<
 });
 
 // --- Item --------------------------------------------------------------------
-export interface SelectItemProps
-    extends Omit<ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>, 'onSelect'> {
+export interface SelectItemProps extends Omit<
+    ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>,
+    'onSelect'
+> {
     /** Value emitted to onValueChange when this item is chosen. */
     value: string;
     /** Plain-text label used for both rendering (default children) and search matching. */

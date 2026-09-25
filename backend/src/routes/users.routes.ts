@@ -15,15 +15,10 @@ const userIdParams = z.object({ userId: z.string().min(1) });
 // SLYK-01 Task K: workspace-wide user list is Platform-Admin only. The
 // three-tier shape {id, email, fullName, displayName, isPlatformAdmin,
 // avatarUrl, blocked} lets the admin user-management UI render the full roster.
-usersRouter.get(
-  '/',
-  authenticate,
-  requirePlatformAdmin(),
-  async (_req, res) => {
-    const users = await listUsers();
-    res.json(success(users));
-  },
-);
+usersRouter.get('/', authenticate, requirePlatformAdmin(), async (_req, res) => {
+  const users = await listUsers();
+  res.json(success(users));
+});
 
 // SLYK-01 Task K (resolved decision): Platform-Admin promotion/demotion UI.
 // Platform-Admin only. Service applies the last-platform-admin guard (CONFLICT

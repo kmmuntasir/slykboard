@@ -215,9 +215,7 @@ describe('Modal', () => {
                 </Modal>,
             );
             // The max-w-* size class stays on the dialog panel in footer mode.
-            expect(screen.getByRole('dialog').className).toContain(
-                'max-w-[min(95vw,1400px)]',
-            );
+            expect(screen.getByRole('dialog').className).toContain('max-w-[min(95vw,1400px)]');
         });
     });
 });

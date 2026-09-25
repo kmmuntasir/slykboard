@@ -69,7 +69,10 @@ vi.mock('../db/client', () => {
         return {
           where: () => ({
             then: (onF: unknown, onR: unknown) =>
-              p.then(() => (onF as (v: undefined) => void)?.(undefined), onR as (e: unknown) => void),
+              p.then(
+                () => (onF as (v: undefined) => void)?.(undefined),
+                onR as (e: unknown) => void,
+              ),
             returning: () => p,
           }),
         };
@@ -94,7 +97,6 @@ vi.mock('../db/client', () => {
   return { db };
 });
 
-import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { db } from '../db/client';
 import {
@@ -170,8 +172,8 @@ describe('getMemberRole', () => {
   beforeEach(resetBag);
 
   it.each([
-    { name: "PROJECT_ADMIN", role: 'PROJECT_ADMIN' },
-    { name: "MEMBER", role: 'MEMBER' },
+    { name: 'PROJECT_ADMIN', role: 'PROJECT_ADMIN' },
+    { name: 'MEMBER', role: 'MEMBER' },
   ])('returns the tier ($name) for an existing member', async ({ role }) => {
     const t = await getTx();
     bag.txSelectLimit.mockResolvedValueOnce([{ role }]);
@@ -398,11 +400,14 @@ describe('promoteToProjectAdmin', () => {
 describe('setMemberRole', () => {
   beforeEach(resetBag);
 
-  it.each(['PROJECT_ADMIN', 'MEMBER'] as const)('sets the tier to %s on an existing member', async (role) => {
-    bag.dbUpdateReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
-    await setMemberRole(PROJECT_ID, USER_ID, role, 'user-other');
-    expect(bag.dbUpdateSetArg.role).toBe(role);
-  });
+  it.each(['PROJECT_ADMIN', 'MEMBER'] as const)(
+    'sets the tier to %s on an existing member',
+    async (role) => {
+      bag.dbUpdateReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
+      await setMemberRole(PROJECT_ID, USER_ID, role, 'user-other');
+      expect(bag.dbUpdateSetArg.role).toBe(role);
+    },
+  );
 
   it('throws NOT_FOUND "User not found" when demoting a non-member (no silent create)', async () => {
     bag.dbUpdateReturning.mockResolvedValueOnce([]);
@@ -418,13 +423,16 @@ describe('setMemberRole', () => {
 describe('setMemberRole — self role-change guard (SLYK-05)', () => {
   beforeEach(resetBag);
 
-  it.each(['PROJECT_ADMIN', 'MEMBER'] as const)('rejects FORBIDDEN when changing own role to %s', async (role) => {
-    await expect(setMemberRole(PROJECT_ID, USER_ID, role, USER_ID)).rejects.toMatchObject({
-      code: ErrorCode.FORBIDDEN,
-      message: 'You cannot change your own role',
-    });
-    expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
-  });
+  it.each(['PROJECT_ADMIN', 'MEMBER'] as const)(
+    'rejects FORBIDDEN when changing own role to %s',
+    async (role) => {
+      await expect(setMemberRole(PROJECT_ID, USER_ID, role, USER_ID)).rejects.toMatchObject({
+        code: ErrorCode.FORBIDDEN,
+        message: 'You cannot change your own role',
+      });
+      expect(bag.dbUpdateReturning).not.toHaveBeenCalled();
+    },
+  );
 
   it('regression: a different acting id still updates the role', async () => {
     bag.dbUpdateReturning.mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: USER_ID }]);
@@ -448,7 +456,12 @@ describe('createAndAddMember', () => {
       displayName: null,
       isPlatformAdmin: false,
     };
-    const memberRow = { projectId: PROJECT_ID, userId: 'u-new', role: 'MEMBER', createdAt: new Date() };
+    const memberRow = {
+      projectId: PROJECT_ID,
+      userId: 'u-new',
+      role: 'MEMBER',
+      createdAt: new Date(),
+    };
     bag.txInsertReturning
       .mockResolvedValueOnce([userRow]) // users insert
       .mockResolvedValueOnce([memberRow]); // project_members insert
@@ -457,15 +470,29 @@ describe('createAndAddMember', () => {
 
     expect(result.user).toEqual(userRow);
     expect(result.membership).toEqual(memberRow);
-    expect(bag.txInsertValuesArg).toMatchObject({ projectId: PROJECT_ID, userId: 'u-new', role: 'MEMBER' });
+    expect(bag.txInsertValuesArg).toMatchObject({
+      projectId: PROJECT_ID,
+      userId: 'u-new',
+      role: 'MEMBER',
+    });
     // Exactly two inserts ran inside the one db.transaction.
     expect(bag.txInsertReturning).toHaveBeenCalledTimes(2);
   });
 
   it('honors the supplied PROJECT_ADMIN role', async () => {
     bag.txInsertReturning
-      .mockResolvedValueOnce([{ id: 'u-x', email: 'x@allowed.com', fullName: 'X', displayName: null, isPlatformAdmin: false }])
-      .mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: 'u-x', role: 'PROJECT_ADMIN', createdAt: new Date() }]);
+      .mockResolvedValueOnce([
+        {
+          id: 'u-x',
+          email: 'x@allowed.com',
+          fullName: 'X',
+          displayName: null,
+          isPlatformAdmin: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        { projectId: PROJECT_ID, userId: 'u-x', role: 'PROJECT_ADMIN', createdAt: new Date() },
+      ]);
 
     await createAndAddMember('x@allowed.com', 'X', null, PROJECT_ID, 'PROJECT_ADMIN');
 
@@ -485,8 +512,18 @@ describe('createAndAddMember', () => {
 
   it('runs both inserts inside a single db.transaction', async () => {
     bag.txInsertReturning
-      .mockResolvedValueOnce([{ id: 'u-a', email: 'a@allowed.com', fullName: 'A', displayName: null, isPlatformAdmin: false }])
-      .mockResolvedValueOnce([{ projectId: PROJECT_ID, userId: 'u-a', role: 'MEMBER', createdAt: new Date() }]);
+      .mockResolvedValueOnce([
+        {
+          id: 'u-a',
+          email: 'a@allowed.com',
+          fullName: 'A',
+          displayName: null,
+          isPlatformAdmin: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        { projectId: PROJECT_ID, userId: 'u-a', role: 'MEMBER', createdAt: new Date() },
+      ]);
 
     await createAndAddMember('a@allowed.com', 'A', null, PROJECT_ID);
 
@@ -510,11 +547,8 @@ describe('createAndAddMember', () => {
     const fkErr = { code: '23503' };
     bag.txInsertReturning.mockRejectedValueOnce(fkErr);
 
-    await expect(
-      createAndAddMember('x@allowed.com', 'X', null, PROJECT_ID),
-    ).rejects.toEqual(fkErr);
+    await expect(createAndAddMember('x@allowed.com', 'X', null, PROJECT_ID)).rejects.toEqual(fkErr);
 
     expect(bag.txInsertReturning).toHaveBeenCalledTimes(1);
   });
 });
-

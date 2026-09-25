@@ -117,7 +117,9 @@ describe('index.html no-flash bootstrap (source-presence, D6)', () => {
   const html = readFileSync(htmlPath, 'utf8');
 
   it('declares <meta name="color-scheme" content="light dark"> (PRD §3.1)', () => {
-    expect(html).toContain('<meta name="color-scheme" content="light dark">');
+    // Prefix match (no trailing '>') so the assertion is agnostic to Prettier's
+    // void-element style in index.html (`<meta … />` vs `<meta …>`).
+    expect(html).toContain('<meta name="color-scheme" content="light dark"');
   });
 
   it('has a plain inline <script> in <head> (no src, not a module — D2)', () => {

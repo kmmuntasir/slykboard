@@ -31,9 +31,8 @@ export function StartEndDateFields({ readOnly }: StartEndDateFieldsProps) {
         formState: { errors },
     } = useFormContext<TicketFormValues>();
 
-    // eslint-disable-next-line react-hooks/incompatible-library
     const startDate = watch('startDate');
-    // eslint-disable-next-line react-hooks/incompatible-library
+
     const endDate = watch('endDate');
 
     return (

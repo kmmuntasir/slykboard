@@ -35,7 +35,9 @@ const membershipMock = vi.hoisted(() => ({
 vi.mock('../db/client', () => ({
   db: {
     transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({}),
-    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(projectRows.rows) }) }) }),
+    select: () => ({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve(projectRows.rows) }) }),
+    }),
   },
 }));
 vi.mock('../services/membershipService', () => ({

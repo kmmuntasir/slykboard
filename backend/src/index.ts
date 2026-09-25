@@ -44,11 +44,7 @@ app.use(
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         'script-src': ["'self'", 'https://accounts.google.com', THEME_BOOTSTRAP_HASH],
         'frame-src': ["'self'", 'https://accounts.google.com'],
-        'connect-src': [
-          "'self'",
-          'https://accounts.google.com',
-          'https://oauth2.googleapis.com',
-        ],
+        'connect-src': ["'self'", 'https://accounts.google.com', 'https://oauth2.googleapis.com'],
         'img-src': ["'self'", 'data:', 'https://lh3.googleusercontent.com'],
       },
     },

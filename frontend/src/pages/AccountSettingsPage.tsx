@@ -54,7 +54,6 @@ export function AccountSettingsPage() {
 }
 
 function AccountSettingsBody() {
-    const user = useAuthStore((s) => s.user)!;
     const [active, setActive] = useState<SectionId>('profile');
 
     return (
@@ -153,10 +152,7 @@ function ProfileSection() {
     };
 
     return (
-        <SettingsSection
-            title="Profile"
-            description="Update how others see you across Slykboard."
-        >
+        <SettingsSection title="Profile" description="Update how others see you across Slykboard.">
             <div className="flex items-center gap-4">
                 <Avatar src={avatarUrl} name={user.name || user.email} size="lg" />
                 <div className="flex-1 space-y-2">
@@ -214,11 +210,7 @@ function ProfileSection() {
                 label="Display name"
                 htmlFor="display-name"
                 action={
-                    <Button
-                        size="sm"
-                        onClick={handleSaveDisplayName}
-                        disabled={!displayNameDirty}
-                    >
+                    <Button size="sm" onClick={handleSaveDisplayName} disabled={!displayNameDirty}>
                         Save
                     </Button>
                 }
@@ -239,10 +231,7 @@ function AccountSection() {
     const user = useAuthStore((s) => s.user)!;
 
     return (
-        <SettingsSection
-            title="Account"
-            description="Your sign-in identity and system role."
-        >
+        <SettingsSection title="Account" description="Your sign-in identity and system role.">
             <Field label="Email" htmlFor="email">
                 <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />

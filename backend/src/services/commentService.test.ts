@@ -458,12 +458,9 @@ describe('commentService deleteComment authorization matrix (SLYK-13)', () => {
     bag.commentRow = [existing];
     bag.deleteReturn = [{ id: COMMENT_ID }];
 
-    const result = await deleteComment(
-      COMMENT_ID,
-      ACTOR_ID,
-      isPlatformAdmin,
-      isProjectAdmin,
-    ).catch((e) => e);
+    const result = await deleteComment(COMMENT_ID, ACTOR_ID, isPlatformAdmin, isProjectAdmin).catch(
+      (e) => e,
+    );
 
     if (expectForbidden) {
       expect(result).toBeInstanceOf(AppError);

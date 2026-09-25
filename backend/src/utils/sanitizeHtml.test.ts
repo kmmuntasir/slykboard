@@ -84,17 +84,14 @@ describe('sanitizeDescription', () => {
     },
     {
       name: 'style dropped when only disallowed props on figure',
-      input:
-        '<figure style="float:right"><img src="https://example.com/a.png"></figure>',
-      expected:
-        '<figure><img src="https://example.com/a.png"></figure>',
+      input: '<figure style="float:right"><img src="https://example.com/a.png"></figure>',
+      expected: '<figure><img src="https://example.com/a.png"></figure>',
     },
     {
       name: 'CSS-borne script (url javascript:) blocked by subsetting',
       input:
         '<figure style="background:url(javascript:alert(1))"><img src="https://example.com/a.png"></figure>',
-      expected:
-        '<figure><img src="https://example.com/a.png"></figure>',
+      expected: '<figure><img src="https://example.com/a.png"></figure>',
     },
     {
       name: 'style stripped on non-scoped tag (<p>)',

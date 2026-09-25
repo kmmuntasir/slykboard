@@ -68,9 +68,9 @@ describe('Field', () => {
             (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes('Title'),
         );
         expect(textNode).toBeDefined();
-        expect(iconEl.compareDocumentPosition(textNode as Text) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-            Node.DOCUMENT_POSITION_FOLLOWING,
-        );
+        expect(
+            iconEl.compareDocumentPosition(textNode as Text) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 
     it('without an icon keeps the block label span (no flex)', () => {

@@ -76,12 +76,8 @@
           "name": "ActivityLogs_ticket_id_Tickets_id_fk",
           "tableFrom": "ActivityLogs",
           "tableTo": "Tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -89,12 +85,8 @@
           "name": "ActivityLogs_user_id_Users_id_fk",
           "tableFrom": "ActivityLogs",
           "tableTo": "Users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -171,12 +163,8 @@
           "name": "Comments_ticket_id_Tickets_id_fk",
           "tableFrom": "Comments",
           "tableTo": "Tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -184,12 +172,8 @@
           "name": "Comments_author_id_Users_id_fk",
           "tableFrom": "Comments",
           "tableTo": "Users",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["author_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -272,12 +256,8 @@
           "name": "Labels_project_id_Projects_id_fk",
           "tableFrom": "Labels",
           "tableTo": "Projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -349,12 +329,8 @@
           "name": "project_members_project_id_Projects_id_fk",
           "tableFrom": "project_members",
           "tableTo": "Projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -362,12 +338,8 @@
           "name": "project_members_user_id_Users_id_fk",
           "tableFrom": "project_members",
           "tableTo": "Users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -375,10 +347,7 @@
       "compositePrimaryKeys": {
         "project_members_project_id_user_id_pk": {
           "name": "project_members_project_id_user_id_pk",
-          "columns": [
-            "project_id",
-            "user_id"
-          ]
+          "columns": ["project_id", "user_id"]
         }
       },
       "uniqueConstraints": {},
@@ -410,12 +379,8 @@
           "name": "project_sequences_project_id_Projects_id_fk",
           "tableFrom": "project_sequences",
           "tableTo": "Projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -489,12 +454,8 @@
           "name": "Projects_creator_id_Users_id_fk",
           "tableFrom": "Projects",
           "tableTo": "Users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -504,9 +465,7 @@
         "Projects_slug_unique": {
           "name": "Projects_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -559,12 +518,8 @@
           "name": "TicketLabels_ticket_id_Tickets_id_fk",
           "tableFrom": "TicketLabels",
           "tableTo": "Tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -572,12 +527,8 @@
           "name": "TicketLabels_label_id_Labels_id_fk",
           "tableFrom": "TicketLabels",
           "tableTo": "Labels",
-          "columnsFrom": [
-            "label_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["label_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -585,10 +536,7 @@
       "compositePrimaryKeys": {
         "TicketLabels_ticket_id_label_id_pk": {
           "name": "TicketLabels_ticket_id_label_id_pk",
-          "columns": [
-            "ticket_id",
-            "label_id"
-          ]
+          "columns": ["ticket_id", "label_id"]
         }
       },
       "uniqueConstraints": {},
@@ -698,12 +646,8 @@
           "name": "Tickets_project_id_Projects_id_fk",
           "tableFrom": "Tickets",
           "tableTo": "Projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -711,12 +655,8 @@
           "name": "Tickets_assignee_id_Users_id_fk",
           "tableFrom": "Tickets",
           "tableTo": "Users",
-          "columnsFrom": [
-            "assignee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assignee_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -724,12 +664,8 @@
           "name": "Tickets_creator_id_Users_id_fk",
           "tableFrom": "Tickets",
           "tableTo": "Users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -739,10 +675,7 @@
         "tickets_project_number_uq": {
           "name": "tickets_project_number_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "project_id",
-            "ticket_number"
-          ]
+          "columns": ["project_id", "ticket_number"]
         }
       },
       "policies": {},
@@ -827,12 +760,8 @@
           "name": "TimeEntries_ticket_id_Tickets_id_fk",
           "tableFrom": "TimeEntries",
           "tableTo": "Tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -840,12 +769,8 @@
           "name": "TimeEntries_user_id_Users_id_fk",
           "tableFrom": "TimeEntries",
           "tableTo": "Users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -956,9 +881,7 @@
         "Users_email_unique": {
           "name": "Users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -984,21 +907,12 @@
     "public.Priority": {
       "name": "Priority",
       "schema": "public",
-      "values": [
-        "LOW",
-        "MEDIUM",
-        "HIGH",
-        "URGENT",
-        "CRITICAL"
-      ]
+      "values": ["LOW", "MEDIUM", "HIGH", "URGENT", "CRITICAL"]
     },
     "public.ProjectMemberRole": {
       "name": "ProjectMemberRole",
       "schema": "public",
-      "values": [
-        "PROJECT_ADMIN",
-        "MEMBER"
-      ]
+      "values": ["PROJECT_ADMIN", "MEMBER"]
     }
   },
   "schemas": {},

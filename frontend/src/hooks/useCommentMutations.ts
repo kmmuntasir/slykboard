@@ -1,9 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  createTicketComment,
-  updateTicketComment,
-  deleteTicketComment,
-} from '@/api/comments';
+import { createTicketComment, updateTicketComment, deleteTicketComment } from '@/api/comments';
 import { ticketKeys } from '@/api/queryKeys';
 
 // SLYK-13 T10: ticket-comment mutations.

@@ -4,7 +4,7 @@
 // insert UX stays prompt-based (window.prompt) with the original http(s)-only
 // / reject-javascript:/data: security posture via a custom PromptImageInsert
 // plugin.
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CKEditor } from '@ckeditor/ckeditor5-react';
 import {
     Autoformat,
@@ -137,9 +137,10 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
     // Freeze the data seed passed to <CKEditor> at the initial value. The
     // @ckeditor/ckeditor5-react wrapper reconciles data on every re-render via
     // shouldUpdateEditorData (calls instance.data.set(nextProps.data)) — a SECOND
-    // setData path outside our applyingExternalData guard. Freezing the prop makes
-    // the sync effect below the single setData authority.
-    const initialDataRef = useRef<string>(value);
+    // setData path outside our applyingExternalData guard. Freezing the value in
+    // a lazy useState initializer (stable across re-renders, read-safe in render
+    // unlike a ref) makes the sync effect below the single setData authority.
+    const [initialData] = useState(value);
 
     // config is stable per placeholder; memoized so a parent re-render (which
     // happens on every keystroke) does not rebuild the plugin/toolbar arrays.
@@ -263,7 +264,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         <div className="rich-text rounded-md border border-input bg-card p-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-primary">
             <CKEditor
                 editor={ClassicEditor}
-                data={initialDataRef.current}
+                data={initialData}
                 config={config}
                 onReady={(editor) => {
                     editorRef.current = editor;

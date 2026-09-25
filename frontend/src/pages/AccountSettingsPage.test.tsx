@@ -51,9 +51,7 @@ describe('AccountSettingsPage', () => {
     it('renders the heading and the section sidebar', () => {
         renderPage();
 
-        expect(
-            screen.getByRole('heading', { name: 'Account Settings' }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Account Settings' })).toBeInTheDocument();
         expect(
             screen.getByRole('navigation', { name: 'Account settings sections' }),
         ).toBeInTheDocument();
@@ -150,16 +148,12 @@ describe('AccountSettingsPage', () => {
         expect(screen.getByRole('heading', { name: 'Danger Zone' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Delete account' }));
-        expect(
-            screen.getByRole('heading', { name: 'Delete account?' }),
-        ).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Delete account?' })).toBeInTheDocument();
         // Confirm closes the dialog (UI-only no-op). The dialog confirm shares the
         // page button's accessible name, so disambiguate by clicking the last match
         // (the dialog renders in a portal appended to <body>).
         const deleteButtons = screen.getAllByRole('button', { name: 'Delete account' });
         fireEvent.click(deleteButtons[deleteButtons.length - 1]!);
-        expect(
-            screen.queryByRole('heading', { name: 'Delete account?' }),
-        ).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Delete account?' })).toBeNull();
     });
 });

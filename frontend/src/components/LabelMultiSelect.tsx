@@ -47,8 +47,7 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
     const trimmedSearch = search.trim();
     const lowerSearch = trimmedSearch.toLowerCase();
     const hasExactMatch =
-        trimmedSearch !== '' &&
-        labels.some((l: Label) => l.name.toLowerCase() === lowerSearch);
+        trimmedSearch !== '' && labels.some((l: Label) => l.name.toLowerCase() === lowerSearch);
     const showCreateRow = canManageLabels && trimmedSearch !== '' && !hasExactMatch;
 
     async function handleCreate() {
@@ -150,8 +149,7 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                         const filtered = labels.filter((l: Label) =>
                             l.name.toLowerCase().includes(lowerSearch),
                         );
-                        const showEmpty =
-                            filtered.length === 0 && !showCreateRow;
+                        const showEmpty = filtered.length === 0 && !showCreateRow;
 
                         if (showEmpty) {
                             return (
@@ -198,9 +196,7 @@ export function LabelMultiSelect({ projectSlug, value, onChange }: LabelMultiSel
                                             className="inline-block h-3 w-3 rounded-full"
                                             style={{ backgroundColor: DEFAULT_LABEL_COLOR }}
                                         />
-                                        <span>
-                                            Create Label &lsquo;{trimmedSearch}&rsquo;
-                                        </span>
+                                        <span>Create Label &lsquo;{trimmedSearch}&rsquo;</span>
                                     </button>
                                 )}
                             </>

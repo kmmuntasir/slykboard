@@ -33,11 +33,10 @@ const DEFAULT_SWATCH_LABEL = 'Color';
 
 // --- Props ------------------------------------------------------------------
 
-export interface ColorPickerProps
-    extends Omit<
-        ComponentPropsWithoutRef<typeof PopoverPrimitive.Root>,
-        'defaultOpen' | 'open' | 'onOpenChange' | 'modal' | 'children'
-    > {
+export interface ColorPickerProps extends Omit<
+    ComponentPropsWithoutRef<typeof PopoverPrimitive.Root>,
+    'defaultOpen' | 'open' | 'onOpenChange' | 'modal' | 'children'
+> {
     /** Controlled color value, a #RRGGBB hex string. */
     value: string;
     /** Emitted with the new #RRGGBB hex whenever the picker or input changes it. */

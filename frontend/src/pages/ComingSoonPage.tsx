@@ -13,9 +13,7 @@ export function ComingSoonPage({ title = 'Coming Soon' }: ComingSoonPageProps) {
         <div className="mx-auto max-w-2xl space-y-6 p-4">
             <h1 className="text-2xl font-semibold">{title}</h1>
             <Card className={cn('p-4')}>
-                <p className="text-sm text-muted-foreground">
-                    This section isn't available yet.
-                </p>
+                <p className="text-sm text-muted-foreground">This section isn't available yet.</p>
             </Card>
         </div>
     );

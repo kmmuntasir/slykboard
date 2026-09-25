@@ -4,5 +4,5 @@ import { useAuthStore } from '@/stores/useAuthStore';
 // a platform admin. The server-side guard is the real gate; this hook is for UX
 // (hide/show UI elements, redirect away from admin routes).
 export function useRequirePlatformAdmin(): boolean {
-    return !!useAuthStore((s) => s.user?.isPlatformAdmin);
+  return !!useAuthStore((s) => s.user?.isPlatformAdmin);
 }

@@ -34,10 +34,12 @@ export const queryClient = new QueryClient({
       // not see both an inline message AND a generic toast. This is now the
       // preferred project-wide convention for locally-handled mutation errors;
       // meta.revertMessage still overrides text-only for callers that keep the toast.
-      const meta = mutation.meta as {
-        revertMessage?: string;
-        suppressGlobalToast?: boolean;
-      } | undefined;
+      const meta = mutation.meta as
+        | {
+            revertMessage?: string;
+            suppressGlobalToast?: boolean;
+          }
+        | undefined;
       if (meta?.suppressGlobalToast) return;
       toast.error(meta?.revertMessage ?? defaultMessage(error));
     },

@@ -87,7 +87,10 @@ export function ProjectPicker() {
     } else if (!projects || projects.length === 0) {
         triggerBody = (
             <>
-                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <FolderKanban
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                />
                 <span className="truncate text-muted-foreground">No projects yet</span>
             </>
         );
@@ -95,7 +98,10 @@ export function ProjectPicker() {
         triggerBody = (
             <>
                 {selected && <ColorDot slug={selected.slug} />}
-                <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <FolderKanban
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                />
                 {/*
                   T6: overflow tooltip. Radix Tooltip has no built-in overflow gate,
                   so this is always-on (shows on hover/focus even when the label

@@ -52,12 +52,7 @@ function renderComment(comment: CommentDto, slug = 'some-project') {
     // isolated subtree, so mount it here too — Radix Tooltip throws without it.
     return render(
         <TooltipProvider>
-            <CommentItem
-                comment={comment}
-                slug={slug}
-                onEdit={vi.fn()}
-                onDelete={vi.fn()}
-            />
+            <CommentItem comment={comment} slug={slug} onEdit={vi.fn()} onDelete={vi.fn()} />
         </TooltipProvider>,
     );
 }
@@ -93,15 +88,18 @@ describe('CommentItem', () => {
     it.each([
         { edited: true, shown: true },
         { edited: false, shown: false },
-    ])('shows the (edited) marker only when edited===true (edited=$edited)', ({ edited, shown }) => {
-        setUser();
-        renderComment(makeComment({ edited }));
-        if (shown) {
-            expect(screen.getByText('(edited)')).toBeInTheDocument();
-        } else {
-            expect(screen.queryByText('(edited)')).not.toBeInTheDocument();
-        }
-    });
+    ])(
+        'shows the (edited) marker only when edited===true (edited=$edited)',
+        ({ edited, shown }) => {
+            setUser();
+            renderComment(makeComment({ edited }));
+            if (shown) {
+                expect(screen.getByText('(edited)')).toBeInTheDocument();
+            } else {
+                expect(screen.queryByText('(edited)')).not.toBeInTheDocument();
+            }
+        },
+    );
 
     // --- relative time + tooltip -------------------------------------------
     it('renders a relative <time> element with dateTime preserved (T6: title moved to Tooltip)', () => {
@@ -155,28 +153,25 @@ describe('CommentItem', () => {
             editShown: false,
             deleteShown: true,
         },
-    ])(
-        'permission matrix: $name',
-        ({ currentUser, authorId, slug, editShown, deleteShown }) => {
-            setUser(currentUser);
-            renderComment(
-                makeComment({ author: { id: authorId, fullName: 'Ada', avatarUrl: null } }),
-                slug ?? 'some-project',
-            );
-            const edit = screen.queryByRole('button', { name: /^edit$/i });
-            const del = screen.queryByRole('button', { name: /^delete$/i });
-            if (editShown) {
-                expect(edit).toBeInTheDocument();
-            } else {
-                expect(edit).not.toBeInTheDocument();
-            }
-            if (deleteShown) {
-                expect(del).toBeInTheDocument();
-            } else {
-                expect(del).not.toBeInTheDocument();
-            }
-        },
-    );
+    ])('permission matrix: $name', ({ currentUser, authorId, slug, editShown, deleteShown }) => {
+        setUser(currentUser);
+        renderComment(
+            makeComment({ author: { id: authorId, fullName: 'Ada', avatarUrl: null } }),
+            slug ?? 'some-project',
+        );
+        const edit = screen.queryByRole('button', { name: /^edit$/i });
+        const del = screen.queryByRole('button', { name: /^delete$/i });
+        if (editShown) {
+            expect(edit).toBeInTheDocument();
+        } else {
+            expect(edit).not.toBeInTheDocument();
+        }
+        if (deleteShown) {
+            expect(del).toBeInTheDocument();
+        } else {
+            expect(del).not.toBeInTheDocument();
+        }
+    });
 
     // --- null-author can never be edited, but admins can still delete --------
     it('null-author sentinel: not editable by anyone, deletable by a Platform Admin', () => {
@@ -195,7 +190,9 @@ describe('CommentItem', () => {
         setUser({ id: 'u-author' });
         const onEdit = vi.fn();
         const onDelete = vi.fn();
-        const comment = makeComment({ author: { id: 'u-author', fullName: 'Ada', avatarUrl: null } });
+        const comment = makeComment({
+            author: { id: 'u-author', fullName: 'Ada', avatarUrl: null },
+        });
         render(
             <TooltipProvider>
                 <CommentItem

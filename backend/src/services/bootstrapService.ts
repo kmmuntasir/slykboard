@@ -61,10 +61,7 @@ export async function ensureBootstrapAdmin(): Promise<void> {
         isPlatformAdmin: true,
         blocked: false,
       });
-      logger.info(
-        { email: bootstrapEmail },
-        'Bootstrap platform admin created',
-      );
+      logger.info({ email: bootstrapEmail }, 'Bootstrap platform admin created');
       return;
     }
 
@@ -76,10 +73,7 @@ export async function ensureBootstrapAdmin(): Promise<void> {
       return;
     }
 
-    await tx
-      .update(users)
-      .set({ isPlatformAdmin: true })
-      .where(eq(users.id, existing.id));
+    await tx.update(users).set({ isPlatformAdmin: true }).where(eq(users.id, existing.id));
     logger.info(
       { email: bootstrapEmail, userId: existing.id },
       'Existing user promoted to platform admin',

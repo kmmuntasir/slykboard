@@ -5,9 +5,6 @@ import { AppError } from '../utils/appError';
 import { ErrorCode } from '../utils/envelope';
 import { recordActivity } from './activityLogService';
 
-// Canonical tx alias (mirrors ticketService.ts:14 and activityLogService.ts:6).
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 // SLYK-13: null-safe author shape. A comment whose author row was deleted
 // (authorId FK ON DELETE SET NULL) resolves to the all-null sentinel below so
 // the FE can render "Unknown user" uniformly — matches the plan's "deleted
@@ -157,10 +154,7 @@ export async function createComment(
     throw new AppError(ErrorCode.VALIDATION_FAILED, 'Comment body cannot be empty');
   }
 
-  const [inserted] = await db
-    .insert(comments)
-    .values({ ticketId, authorId, body })
-    .returning();
+  const [inserted] = await db.insert(comments).values({ ticketId, authorId, body }).returning();
   if (!inserted) {
     throw new AppError(ErrorCode.INTERNAL_ERROR, 'Insert returned no comment row');
   }
@@ -220,7 +214,7 @@ export async function updateComment(
     throw new AppError(ErrorCode.VALIDATION_FAILED, 'Comment body cannot be empty');
   }
 
-  const updated = await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
     const [row] = await tx
       .update(comments)
       .set({ body, updatedAt: new Date() })

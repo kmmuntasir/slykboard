@@ -19,7 +19,6 @@ export function LabelsField({ projectSlug }: LabelsFieldProps) {
         formState: { errors },
     } = useFormContext<TicketFormValues>();
 
-    // eslint-disable-next-line react-hooks/incompatible-library
     const labelIds = watch('labelIds') ?? [];
 
     return (

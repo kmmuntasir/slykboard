@@ -64,17 +64,11 @@ export type CreatedMember = {
 
 // 1. Membership existence check. Takes a tx (NOT the db singleton) so middleware
 //    can run it inside the same transactional read as project resolution.
-export async function isProjectMember(
-  tx: Tx,
-  projectId: string,
-  userId: string,
-): Promise<boolean> {
+export async function isProjectMember(tx: Tx, projectId: string, userId: string): Promise<boolean> {
   const rows = await tx
     .select({ projectId: projectMembers.projectId })
     .from(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .limit(1);
   return rows.length > 0;
 }
@@ -89,9 +83,7 @@ export async function getMemberRole(
   const rows = await tx
     .select({ role: projectMembers.role })
     .from(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .limit(1);
   return rows.length > 0 ? rows[0]!.role : null;
 }
@@ -136,9 +128,7 @@ export async function addMember(
       await tx
         .update(projectMembers)
         .set({ role })
-        .where(
-          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-        );
+        .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)));
     }
   });
 }
@@ -156,9 +146,7 @@ export async function removeMember(
   }
   const deleted = await db
     .delete(projectMembers)
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .returning();
   if (deleted.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -166,16 +154,11 @@ export async function removeMember(
 }
 
 // 6. Promote an existing member to PROJECT_ADMIN. NOT_FOUND if they aren't a member.
-export async function promoteToProjectAdmin(
-  projectId: string,
-  userId: string,
-): Promise<void> {
+export async function promoteToProjectAdmin(projectId: string, userId: string): Promise<void> {
   const updated = await db
     .update(projectMembers)
     .set({ role: 'PROJECT_ADMIN' })
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .returning();
   if (updated.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -199,9 +182,7 @@ export async function setMemberRole(
   const updated = await db
     .update(projectMembers)
     .set({ role })
-    .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-    )
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
     .returning();
   if (updated.length === 0) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -253,9 +234,7 @@ export async function addExistingMember(
       const [updated] = await tx
         .update(projectMembers)
         .set({ role })
-        .where(
-          and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
-        )
+        .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
         .returning(columns);
       if (updated) return updated;
     }

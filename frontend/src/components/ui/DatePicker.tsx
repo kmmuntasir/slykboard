@@ -94,20 +94,23 @@ const TRIGGER_BASE =
 
 // --- Trigger ----------------------------------------------------------------
 
-export interface DatePickerTriggerProps
-    extends ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger> {}
+export type DatePickerTriggerProps = ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>;
 
 export const DatePickerTrigger = forwardRef<
     ElementRef<typeof PopoverPrimitive.Trigger>,
     DatePickerTriggerProps
->(function DatePickerTrigger({ className, children, ...rest }, ref) {
+>(function DatePickerTrigger({ className, ...rest }, ref) {
     const { value, placeholder, clearable, disabled, onChange } = useDatePickerContext();
 
     return (
         <PopoverPrimitive.Trigger
             ref={ref}
             disabled={disabled}
-            className={cn(TRIGGER_BASE, 'w-full inline-flex items-center justify-between', className)}
+            className={cn(
+                TRIGGER_BASE,
+                'w-full inline-flex items-center justify-between',
+                className,
+            )}
             {...rest}
         >
             <span className={cn(!value && 'text-muted-foreground')}>
@@ -130,8 +133,9 @@ export const DatePickerTrigger = forwardRef<
 
 // --- Content (Portal + Content) --------------------------------------------
 
-export interface DatePickerContentProps
-    extends ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> {
+export interface DatePickerContentProps extends ComponentPropsWithoutRef<
+    typeof PopoverPrimitive.Content
+> {
     sideOffset?: number;
 }
 
@@ -158,8 +162,7 @@ export const DatePickerContent = forwardRef<
 
 // --- Quick Pick button ------------------------------------------------------
 
-export interface DatePickerQuickPickProps
-    extends ComponentPropsWithoutRef<'button'> {
+export interface DatePickerQuickPickProps extends ComponentPropsWithoutRef<'button'> {
     active?: boolean;
 }
 
@@ -187,7 +190,8 @@ const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
     [UI.Root]: 'p-1',
     [UI.Chevron]: 'h-4 w-4 [fill:currentColor]',
     [UI.Day]: 'flex items-center justify-center',
-    [UI.DayButton]: 'w-9 h-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
+    [UI.DayButton]:
+        'w-9 h-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.CaptionLabel]: 'flex items-center justify-center py-2 font-medium text-sm',
     [UI.Dropdowns]: '',
     [UI.Dropdown]: '',
@@ -205,7 +209,8 @@ const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
         'p-1 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors',
     [UI.Week]: 'flex',
     [UI.Weeks]: '',
-    [UI.Weekday]: 'flex items-center justify-center w-9 h-9 text-muted-foreground text-xs font-medium',
+    [UI.Weekday]:
+        'flex items-center justify-center w-9 h-9 text-muted-foreground text-xs font-medium',
     [UI.Weekdays]: 'flex',
     [UI.WeekNumber]: '',
     [UI.WeekNumberHeader]: '',
@@ -219,8 +224,10 @@ const DAY_PICKER_CLASSNAMES: DayPickerProps['classNames'] = {
     [DayFlag.focused]: '',
 };
 
-export interface DatePickerCalendarProps
-    extends Omit<DayPickerProps, 'mode' | 'selected' | 'onSelect'> {
+export interface DatePickerCalendarProps extends Omit<
+    DayPickerProps,
+    'mode' | 'selected' | 'onSelect'
+> {
     value: Date | null;
     onDaySelect: (date: Date) => void;
 }
@@ -253,7 +260,6 @@ export interface DatePickerProps {
     clearable?: boolean;
     quickPicks?: QuickPick[];
     disabled?: boolean;
-    'aria-label'?: string;
     children: React.ReactNode;
 }
 
@@ -264,7 +270,6 @@ export function DatePicker({
     clearable = false,
     quickPicks,
     disabled = false,
-    'aria-label': ariaLabel,
     children,
 }: DatePickerProps) {
     const [open, setOpen] = useState(false);
@@ -342,10 +347,7 @@ export function DatePicker({
                                 </DatePickerQuickPick>
                             </div>
                         ) : (
-                            <DatePickerCalendar
-                                value={value}
-                                onDaySelect={handleDaySelect}
-                            />
+                            <DatePickerCalendar value={value} onDaySelect={handleDaySelect} />
                         )}
                     </DatePickerContent>
                 )}

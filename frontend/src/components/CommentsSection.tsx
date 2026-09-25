@@ -23,11 +23,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { CommentForm } from './CommentForm';
 import { CommentItem } from './CommentItem';
 import { useTicketComments } from '@/hooks/useTicketComments';
-import {
-    useCreateComment,
-    useUpdateComment,
-    useDeleteComment,
-} from '@/hooks/useCommentMutations';
+import { useCreateComment, useUpdateComment, useDeleteComment } from '@/hooks/useCommentMutations';
 import type { CommentDto } from '@/types/comment';
 
 const DELETE_DIALOG_TITLE_ID = 'delete-comment-title';
@@ -56,10 +52,7 @@ export function CommentsSection({ ticketId, slug, disabled = false }: CommentsSe
     }
 
     function handleEditSubmit(commentId: string, body: string) {
-        updateMut.mutate(
-            { commentId, body },
-            { onSuccess: () => setEditingId(null) },
-        );
+        updateMut.mutate({ commentId, body }, { onSuccess: () => setEditingId(null) });
     }
 
     function handleConfirmDelete() {

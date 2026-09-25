@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { AlignLeft, Pencil } from 'lucide-react';
 
@@ -37,7 +37,6 @@ export function DescriptionField({ readOnly, isEditing, onStartEdit }: Descripti
         formState: { errors, isSubmitSuccessful },
     } = useFormContext<TicketFormValues>();
 
-    // eslint-disable-next-line react-hooks/incompatible-library
     const descriptionValue = watch('description') ?? '';
 
     // Revert to read-only after a successful global Save. RHF flips
@@ -45,11 +44,14 @@ export function DescriptionField({ readOnly, isEditing, onStartEdit }: Descripti
     // of the next submit — a host-agnostic robust mechanism. Only the
     // uncontrolled (internal) mode reverts here: a controlled parent manages
     // its own edit state (the modal's Cancel path does its own revert).
-    useEffect(() => {
-        if (!controlled && isSubmitSuccessful) {
-            setInternalEditing(false);
-        }
-    }, [controlled, isSubmitSuccessful]);
+    // Derived during render (prev-value pattern) instead of an effect: the
+    // revert must fire exactly on the false → true transition, and reacting
+    // to form state synchronously avoids an effect-driven cascading render.
+    const [prevSubmitSuccessful, setPrevSubmitSuccessful] = useState(isSubmitSuccessful);
+    if (!controlled && isSubmitSuccessful !== prevSubmitSuccessful) {
+        setPrevSubmitSuccessful(isSubmitSuccessful);
+        if (isSubmitSuccessful) setInternalEditing(false);
+    }
 
     // Show the editor only when actively editing an editable ticket. `readOnly`
     // always wins (no editor, no Edit button).

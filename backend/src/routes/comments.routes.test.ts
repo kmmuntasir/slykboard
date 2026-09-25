@@ -261,9 +261,7 @@ describe('POST /api/tickets/:ticketId/comments (SLYK-13)', () => {
 
   it('404 soft-deleted ticket (anti-oracle: createComment re-checks ticketIsLive)', async () => {
     mockedFindVersion.mockResolvedValue(0);
-    mockedCreateComment.mockRejectedValue(
-      new AppError(ErrorCode.NOT_FOUND, 'Ticket not found'),
-    );
+    mockedCreateComment.mockRejectedValue(new AppError(ErrorCode.NOT_FOUND, 'Ticket not found'));
 
     const res = await request(app)
       .post(`/api/tickets/${VALID_TICKET_ID}/comments`)

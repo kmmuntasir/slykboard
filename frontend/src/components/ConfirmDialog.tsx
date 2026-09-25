@@ -54,11 +54,7 @@ export function ConfirmDialog({
             title={title}
             blockBackdropClose={blockBackdropClose}
         >
-            {message ? (
-                <p className="mb-4 text-sm text-muted-foreground">{message}</p>
-            ) : (
-                children
-            )}
+            {message ? <p className="mb-4 text-sm text-muted-foreground">{message}</p> : children}
             <div className="flex justify-end gap-2">
                 <Button
                     type="button"

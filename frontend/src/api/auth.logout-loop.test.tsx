@@ -55,7 +55,14 @@ const fullUser: AuthUser = {
 
 const freshResponse: AuthResponse = {
     token: 'fresh-tok',
-    user: { id: 'u1', email: 'a@x.com', fullName: 'A', isPlatformAdmin: false, displayName: null, avatarUrl: null },
+    user: {
+        id: 'u1',
+        email: 'a@x.com',
+        fullName: 'A',
+        isPlatformAdmin: false,
+        displayName: null,
+        avatarUrl: null,
+    },
 };
 
 // Queue of HTTP statuses for non-/auth/ requests (the protected board call).

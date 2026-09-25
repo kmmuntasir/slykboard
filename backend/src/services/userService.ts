@@ -101,10 +101,7 @@ export async function createUser({
 // guard. Demoting the only remaining PA would leave the system unmanageable, so
 // it throws CONFLICT. Any actual change bumps the token version so outstanding
 // JWTs are hard-expired and the new claim (pa) takes effect on next issue.
-export async function setPlatformAdmin(
-  userId: string,
-  isPlatformAdmin: boolean,
-): Promise<UserRow> {
+export async function setPlatformAdmin(userId: string, isPlatformAdmin: boolean): Promise<UserRow> {
   const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!existing) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
@@ -183,11 +180,7 @@ export async function setUserBlocked({
     throw new AppError(ErrorCode.FORBIDDEN, 'You cannot deactivate yourself');
   }
   // 2. PRE-FETCH existing row
-  const [existing] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, targetUserId))
-    .limit(1);
+  const [existing] = await db.select().from(users).where(eq(users.id, targetUserId)).limit(1);
   if (!existing) {
     throw new AppError(ErrorCode.NOT_FOUND, 'User not found');
   }

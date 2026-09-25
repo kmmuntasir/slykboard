@@ -54,7 +54,11 @@ export function CommentForm({
     const textareaLabel = mode === 'edit' ? 'Edit comment' : 'Write a comment';
 
     return (
-        <div role="group" aria-label={mode === 'edit' ? 'Comment editor' : 'Comment composer'} className="flex flex-col gap-2">
+        <div
+            role="group"
+            aria-label={mode === 'edit' ? 'Comment editor' : 'Comment composer'}
+            className="flex flex-col gap-2"
+        >
             <Textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
@@ -75,7 +79,13 @@ export function CommentForm({
                         Cancel
                     </Button>
                 )}
-                <Button type="button" variant="primary" size="sm" disabled={isDisabled} onClick={handleSubmit}>
+                <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={isDisabled}
+                    onClick={handleSubmit}
+                >
                     {label}
                 </Button>
             </div>

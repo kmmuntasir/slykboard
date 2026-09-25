@@ -84,19 +84,15 @@ export function ProjectsPage() {
                         }
                         title="No projects yet"
                         description="Create your first project to get started."
-                        action={
-                            {
-                                label: 'Create project',
-                                onClick: () => {
-                                    createProjectFormRef.current?.scrollIntoView({
-                                        behavior: 'smooth',
-                                    });
-                                    createProjectFormRef.current
-                                        ?.querySelector('input')
-                                        ?.focus();
-                                },
-                            }
-                        }
+                        action={{
+                            label: 'Create project',
+                            onClick: () => {
+                                createProjectFormRef.current?.scrollIntoView({
+                                    behavior: 'smooth',
+                                });
+                                createProjectFormRef.current?.querySelector('input')?.focus();
+                            },
+                        }}
                     />
                 ) : (
                     <EmptyState

@@ -14,7 +14,7 @@
 // meta: { suppressGlobalToast: true }, honored in lib/queryClient.ts
 // (the chosen project-wide mechanism — see the top-of-file comment there). The
 // local handlers in this file own the full error UX.
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { addMember, createAndAddMember } from '@/api/members';
@@ -97,8 +97,7 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
     // Honor only the response for the CURRENT trimmed email — a stale lookup
     // (e.g. the user kept typing) is ignored via key equality in React Query,
     // but we also guard here against any late-arriving data.
-    const lookupMatchesCurrent =
-        emailValid && lookup.data !== undefined && trimmedEmail.length > 0;
+    const lookupMatchesCurrent = emailValid && lookup.data !== undefined && trimmedEmail.length > 0;
     const lookupUser = lookupMatchesCurrent ? lookup.data!.user : undefined;
     const lookupExists = lookupMatchesCurrent ? lookup.data!.exists : false;
 
@@ -117,12 +116,12 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
     const branch: 1 | 2 | 3 | 4 | undefined = alreadyMember
         ? 1
         : isPlatformAdmin
-            ? 2
-            : lookupExists
-                ? 3
-                : lookupMatchesCurrent
-                    ? 4
-                    : undefined;
+          ? 2
+          : lookupExists
+            ? 3
+            : lookupMatchesCurrent
+              ? 4
+              : undefined;
 
     const isFetching = emailValid && lookup.isFetching;
     const isPending = addMemberMutation.isPending || createAndAddMemberMutation.isPending;
@@ -132,7 +131,12 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
     const createFormDirty = fullName.trim().length > 0 || displayName.trim().length > 0;
 
     const primaryDisabled =
-        !emailValid || isFetching || isPending || branch === undefined || branch === 1 || branch === 2;
+        !emailValid ||
+        isFetching ||
+        isPending ||
+        branch === undefined ||
+        branch === 1 ||
+        branch === 2;
 
     // Reset all local state — invoked on close and after a successful mutation.
     const resetState = () => {
@@ -149,11 +153,16 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
         onClose();
     };
 
-    // Reset whenever the modal is closed from the outside (isOpen → false).
-    useEffect(() => {
+    // handleClose resets before invoking the parent's onClose (Cancel / X / Esc /
+    // post-success). An outside close (parent flipping isOpen without our
+    // handleClose) is caught by the derived prev-value check below — adjusted
+    // during render (not an effect) so the reset lands in the same commit
+    // without a cascading effect-driven render.
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+    if (prevIsOpen !== isOpen) {
+        setPrevIsOpen(isOpen);
         if (!isOpen) resetState();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen]);
+    }
 
     // --- Mutation handlers ----------------------------------------------------
 
@@ -260,11 +269,7 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
                 </Field>
 
                 {branchStatus ? (
-                    <p
-                        role="status"
-                        aria-live="polite"
-                        className="text-sm text-muted-foreground"
-                    >
+                    <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
                         {branchStatus}
                     </p>
                 ) : null}
@@ -273,22 +278,18 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
                 {branch === 3 && lookupUser ? (
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 rounded-md border border-border p-3">
-                            <Avatar
-                                size="sm"
-                                name={nameFor(lookupUser)}
-                            />
+                            <Avatar size="sm" name={nameFor(lookupUser)} />
                             <div className="min-w-0">
-                                <p className="truncate text-sm font-medium">{nameFor(lookupUser)}</p>
+                                <p className="truncate text-sm font-medium">
+                                    {nameFor(lookupUser)}
+                                </p>
                                 <p className="truncate text-sm text-muted-foreground">
                                     {lookupUser.email}
                                 </p>
                             </div>
                         </div>
                         <Field label="Project Role" htmlFor="add-member-role-existing">
-                            <Select
-                                value={role}
-                                onValueChange={(v) => setRole(v as MemberRole)}
-                            >
+                            <Select value={role} onValueChange={(v) => setRole(v as MemberRole)}>
                                 <SelectTrigger
                                     id="add-member-role-existing"
                                     aria-label="Project role"
@@ -346,10 +347,7 @@ export function AddMemberModal({ slug, isOpen, onClose }: AddMemberModalProps) {
                             />
                         </Field>
                         <Field label="Project Role" htmlFor="add-member-role-new">
-                            <Select
-                                value={role}
-                                onValueChange={(v) => setRole(v as MemberRole)}
-                            >
+                            <Select value={role} onValueChange={(v) => setRole(v as MemberRole)}>
                                 <SelectTrigger
                                     id="add-member-role-new"
                                     aria-label="Project role"

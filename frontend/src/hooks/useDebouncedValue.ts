@@ -6,12 +6,12 @@ import { useEffect, useState } from 'react';
 // flushes the latest value. The pending timer is cleared on change and on
 // unmount so no state update fires after the component is gone.
 export function useDebouncedValue<T>(value: T, delayMs = 300): T {
-    const [debounced, setDebounced] = useState<T>(value);
+  const [debounced, setDebounced] = useState<T>(value);
 
-    useEffect(() => {
-        const timer = setTimeout(() => setDebounced(value), delayMs);
-        return () => clearTimeout(timer);
-    }, [value, delayMs]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
 
-    return debounced;
+  return debounced;
 }

@@ -116,9 +116,7 @@ describe('reportService projectId forwarding (SLYK-16 T3/T6)', () => {
 
       // The projectId value 'p1' must be embedded in at least one captured
       // predicate (the eq(tickets.projectId, 'p1') term).
-      const forwarded = bag.whereCalls.some((c) =>
-        collectBoundValues(c.predicate).includes('p1'),
-      );
+      const forwarded = bag.whereCalls.some((c) => collectBoundValues(c.predicate).includes('p1'));
       expect(forwarded).toBe(true);
     },
   );

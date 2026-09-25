@@ -204,7 +204,12 @@ describe('auth routes — POST /google login gate (SLYK-01 Task H)', () => {
       fullName: 'Admin One',
       avatarUrl: null,
     });
-    const admin = { ...linkedUser, id: 'admin1', email: 'admin@example.com', isPlatformAdmin: true };
+    const admin = {
+      ...linkedUser,
+      id: 'admin1',
+      email: 'admin@example.com',
+      isPlatformAdmin: true,
+    };
     mockedFindByEmail.mockResolvedValue(admin as never);
     mockedLinkGoogleId.mockResolvedValue(admin as never);
     mockedSign.mockResolvedValue('jwt-admin');
@@ -213,9 +218,7 @@ describe('auth routes — POST /google login gate (SLYK-01 Task H)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.user.isPlatformAdmin).toBe(true);
-    expect(mockedSign).toHaveBeenCalledWith(
-      expect.objectContaining({ sub: 'admin1', pa: true }),
-    );
+    expect(mockedSign).toHaveBeenCalledWith(expect.objectContaining({ sub: 'admin1', pa: true }));
   });
 
   it('does NOT consult ALLOWED_DOMAIN on the login path for existing users', async () => {

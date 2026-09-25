@@ -28,10 +28,7 @@ describe('Select', () => {
     }) {
         const onValueChange = overrides?.onValueChange ?? vi.fn();
         render(
-            <Select
-                value={overrides?.value}
-                onValueChange={onValueChange}
-            >
+            <Select value={overrides?.value} onValueChange={onValueChange}>
                 <SelectTrigger>
                     <SelectValue placeholder="Pick a color">Pick a color</SelectValue>
                 </SelectTrigger>
@@ -98,13 +95,15 @@ describe('Select', () => {
         openMenu();
         // The selected item's leading indicator contains the Check svg.
         const blueItem = screen.getByRole('menuitem', { name: 'Blue' });
-        const check = blueItem.querySelector('svg.lucide-check, svg[class*="lucide"]' +
-            '[class*="check"]');
+        const check = blueItem.querySelector(
+            'svg.lucide-check, svg[class*="lucide"]' + '[class*="check"]',
+        );
         expect(check).not.toBeNull();
         // A non-selected item must NOT show a check.
         const redItem = screen.getByRole('menuitem', { name: 'Red' });
-        const redCheck = redItem.querySelector('svg.lucide-check, svg[class*="lucide"]' +
-            '[class*="check"]');
+        const redCheck = redItem.querySelector(
+            'svg.lucide-check, svg[class*="lucide"]' + '[class*="check"]',
+        );
         expect(redCheck).toBeNull();
     });
 

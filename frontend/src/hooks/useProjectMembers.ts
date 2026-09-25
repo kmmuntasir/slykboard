@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    listMembers,
-    addMember,
-    createAndAddMember,
-    updateMemberRole,
-    removeMember,
-    lookupMember,
+  listMembers,
+  addMember,
+  createAndAddMember,
+  updateMemberRole,
+  removeMember,
+  lookupMember,
 } from '@/api/members';
 import { memberKeys, projectKeys } from '@/api/queryKeys';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -28,50 +28,50 @@ const LOOKUP_STALE_TIME_MS = 15 * 1000;
 // (Platform Admin OR Project Admin) without a second round-trip.
 
 export function useProjectMembers(slug: string) {
-    return useQuery({
-        queryKey: memberKeys.forProject(slug),
-        queryFn: () => listMembers(slug),
-        staleTime: STALE_TIME_MS,
-    });
+  return useQuery({
+    queryKey: memberKeys.forProject(slug),
+    queryFn: () => listMembers(slug),
+    staleTime: STALE_TIME_MS,
+  });
 }
 
 export function useAddMember(slug: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (body: { email?: string; userId?: string; role?: MemberRole }) =>
-            addMember(slug, body),
-        onSuccess: () => invalidateMembership(queryClient, slug),
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email?: string; userId?: string; role?: MemberRole }) =>
+      addMember(slug, body),
+    onSuccess: () => invalidateMembership(queryClient, slug),
+  });
 }
 
 export function useCreateAndAddMember(slug: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (body: {
-            email: string;
-            fullName?: string;
-            displayName?: string | null;
-            role?: MemberRole;
-        }) => createAndAddMember(slug, body),
-        onSuccess: () => invalidateMembership(queryClient, slug),
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      email: string;
+      fullName?: string;
+      displayName?: string | null;
+      role?: MemberRole;
+    }) => createAndAddMember(slug, body),
+    onSuccess: () => invalidateMembership(queryClient, slug),
+  });
 }
 
 export function useUpdateMemberRole(slug: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: ({ userId, role }: { userId: string; role: MemberRole }) =>
-            updateMemberRole(slug, userId, role),
-        onSuccess: () => invalidateMembership(queryClient, slug),
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: MemberRole }) =>
+      updateMemberRole(slug, userId, role),
+    onSuccess: () => invalidateMembership(queryClient, slug),
+  });
 }
 
 export function useRemoveMember(slug: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (userId: string) => removeMember(slug, userId),
-        onSuccess: () => invalidateMembership(queryClient, slug),
-    });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => removeMember(slug, userId),
+    onSuccess: () => invalidateMembership(queryClient, slug),
+  });
 }
 
 // Derives the current user's membership row from the roster + whether they are a
@@ -80,23 +80,23 @@ export function useRemoveMember(slug: string) {
 // real member has no membership row (isProjectAdmin === false) but is still a
 // manager via the platform-admin bypass.
 export function useCurrentProjectMembership(slug: string): {
-    membership: Member | undefined;
-    isProjectAdmin: boolean;
+  membership: Member | undefined;
+  isProjectAdmin: boolean;
 } {
-    const { data: members } = useProjectMembers(slug);
-    const currentUserId = useAuthStore((s) => s.user?.id);
-    const membership = useMemo(
-        () => members?.find((m) => m.userId === currentUserId),
-        [members, currentUserId],
-    );
-    const isProjectAdmin = membership?.role === 'PROJECT_ADMIN';
-    return { membership, isProjectAdmin };
+  const { data: members } = useProjectMembers(slug);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const membership = useMemo(
+    () => members?.find((m) => m.userId === currentUserId),
+    [members, currentUserId],
+  );
+  const isProjectAdmin = membership?.role === 'PROJECT_ADMIN';
+  return { membership, isProjectAdmin };
 }
 
 function invalidateMembership(queryClient: ReturnType<typeof useQueryClient>, slug: string) {
-    void queryClient.invalidateQueries({ queryKey: memberKeys.forProject(slug) });
-    // Membership changes affect project access visibility — refresh project detail.
-    void queryClient.invalidateQueries({ queryKey: projectKeys.detail(slug) });
+  void queryClient.invalidateQueries({ queryKey: memberKeys.forProject(slug) });
+  // Membership changes affect project access visibility — refresh project detail.
+  void queryClient.invalidateQueries({ queryKey: projectKeys.detail(slug) });
 }
 
 // SLYK-02 T4 — debounced read-only email lookup powering the Add-Member modal's
@@ -107,13 +107,13 @@ function invalidateMembership(queryClient: ReturnType<typeof useQueryClient>, sl
 // — lib/queryClient.ts), so inline handling in the modal stays clean. Keyed on
 // [slug, debouncedEmail] so React Query discards stale lookups as the user types.
 export function useLookupMember(slug: string, email: string) {
-    const debouncedEmail = useDebouncedValue(email.trim(), LOOKUP_DEBOUNCE_MS);
-    const enabled = EMAIL_PATTERN.test(debouncedEmail);
-    return useQuery({
-        queryKey: memberKeys.lookup(slug, debouncedEmail),
-        queryFn: () => lookupMember(slug, debouncedEmail),
-        enabled,
-        staleTime: LOOKUP_STALE_TIME_MS,
-        retry: false,
-    });
+  const debouncedEmail = useDebouncedValue(email.trim(), LOOKUP_DEBOUNCE_MS);
+  const enabled = EMAIL_PATTERN.test(debouncedEmail);
+  return useQuery({
+    queryKey: memberKeys.lookup(slug, debouncedEmail),
+    queryFn: () => lookupMember(slug, debouncedEmail),
+    enabled,
+    staleTime: LOOKUP_STALE_TIME_MS,
+    retry: false,
+  });
 }

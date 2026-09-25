@@ -211,7 +211,9 @@ describe('GET /api/projects/:slug/members/lookup (SLYK-02 T1)', () => {
   ])('400 VALIDATION_FAILED on invalid email query ($name)', async ({ qs }) => {
     mockedFindVersion.mockResolvedValue(0);
 
-    const path = qs ? `/api/projects/SLYK/members/lookup?${qs}` : '/api/projects/SLYK/members/lookup';
+    const path = qs
+      ? `/api/projects/SLYK/members/lookup?${qs}`
+      : '/api/projects/SLYK/members/lookup';
     const res = await request(app)
       .get(path)
       .set('Authorization', `Bearer ${await tokenFor(false)}`);
@@ -289,11 +291,7 @@ describe('DELETE /api/projects/:slug/members/:userId (SLYK-05 Task-10)', () => {
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
     // Handler forwards (projectId, targetUserId, actingUserId) to the service.
-    expect(membershipMock.removeMember).toHaveBeenCalledWith(
-      'p1',
-      ACTING_USER_ID,
-      ACTING_USER_ID,
-    );
+    expect(membershipMock.removeMember).toHaveBeenCalledWith('p1', ACTING_USER_ID, ACTING_USER_ID);
   });
 
   it('200 + {data:{userId}} on a valid other-target remove (forwards actingUserId)', async () => {
@@ -307,11 +305,7 @@ describe('DELETE /api/projects/:slug/members/:userId (SLYK-05 Task-10)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ userId: OTHER_USER_ID });
-    expect(membershipMock.removeMember).toHaveBeenCalledWith(
-      'p1',
-      OTHER_USER_ID,
-      ACTING_USER_ID,
-    );
+    expect(membershipMock.removeMember).toHaveBeenCalledWith('p1', OTHER_USER_ID, ACTING_USER_ID);
   });
 
   it('404 NOT_FOUND propagation when the target is not a member', async () => {

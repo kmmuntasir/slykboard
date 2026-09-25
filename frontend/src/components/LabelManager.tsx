@@ -141,9 +141,7 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                                                     size="sm"
                                                     className="h-8 w-8 p-0"
                                                     aria-label={'Edit ' + l.name}
-                                                    onClick={() =>
-                                                        startEdit(l.id, l.name, l.color)
-                                                    }
+                                                    onClick={() => startEdit(l.id, l.name, l.color)}
                                                 >
                                                     <Pencil
                                                         className="h-4 w-4"
@@ -168,9 +166,7 @@ export function LabelManager({ projectSlug }: LabelManagerProps) {
                                                     />
                                                 </Button>
                                             </TooltipTrigger>
-                                            <TooltipContent side="bottom">
-                                                Delete
-                                            </TooltipContent>
+                                            <TooltipContent side="bottom">Delete</TooltipContent>
                                         </Tooltip>
                                     </div>
                                 </div>

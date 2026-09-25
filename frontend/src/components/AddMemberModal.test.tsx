@@ -223,40 +223,38 @@ describe('AddMemberModal', () => {
         },
     ];
 
-    branchCases.forEach(
-        ({ name, email, roster, lookup, expectPrimaryDisabled, expectStatus }) => {
-            it(name, () => {
-                setRoster(roster);
-                setLookup(lookup);
-                renderModal();
-                typeEmail(email);
+    branchCases.forEach(({ name, email, roster, lookup, expectPrimaryDisabled, expectStatus }) => {
+        it(name, () => {
+            setRoster(roster);
+            setLookup(lookup);
+            renderModal();
+            typeEmail(email);
 
-                if (expectStatus) {
-                    expect(screen.getAllByText(expectStatus).length).toBeGreaterThan(0);
-                }
+            if (expectStatus) {
+                expect(screen.getAllByText(expectStatus).length).toBeGreaterThan(0);
+            }
 
-                // Branch 3 renders the existing user's details.
-                if (email === 'ada@example.com') {
-                    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
-                }
-                // Branch 4 expands the create form (Full Name optional field) +
-                // a read-only pre-filled email field.
-                if (lookup.exists === false) {
-                    expect(screen.getByLabelText('Full name (optional)')).toBeInTheDocument();
-                    const readOnlyEmail = document.getElementById(
-                        'add-member-email-readonly',
-                    ) as HTMLInputElement;
-                    expect(readOnlyEmail).not.toBeNull();
-                    expect(readOnlyEmail.value).toBe('new@example.com');
-                }
+            // Branch 3 renders the existing user's details.
+            if (email === 'ada@example.com') {
+                expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+            }
+            // Branch 4 expands the create form (Full Name optional field) +
+            // a read-only pre-filled email field.
+            if (lookup.exists === false) {
+                expect(screen.getByLabelText('Full name (optional)')).toBeInTheDocument();
+                const readOnlyEmail = document.getElementById(
+                    'add-member-email-readonly',
+                ) as HTMLInputElement;
+                expect(readOnlyEmail).not.toBeNull();
+                expect(readOnlyEmail.value).toBe('new@example.com');
+            }
 
-                const primary = screen.getByRole('button', {
-                    name: lookup.exists === false ? 'Create & add' : 'Add Member',
-                }) as HTMLButtonElement;
-                expect(primary.disabled).toBe(expectPrimaryDisabled);
-            });
-        },
-    );
+            const primary = screen.getByRole('button', {
+                name: lookup.exists === false ? 'Create & add' : 'Add Member',
+            }) as HTMLButtonElement;
+            expect(primary.disabled).toBe(expectPrimaryDisabled);
+        });
+    });
 
     // --- Branch 3 happy path: confirm → addMember → success toast + close ---
 
@@ -274,7 +272,10 @@ describe('AddMemberModal', () => {
         fireEvent.click(screen.getByRole('button', { name: 'DoConfirm' }));
 
         await waitFor(() => expect(addMemberMock).toHaveBeenCalledTimes(1));
-        expect(addMemberMock).toHaveBeenCalledWith('proj', { email: 'ada@example.com', role: 'MEMBER' });
+        expect(addMemberMock).toHaveBeenCalledWith('proj', {
+            email: 'ada@example.com',
+            role: 'MEMBER',
+        });
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Member added.'));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -306,9 +307,7 @@ describe('AddMemberModal', () => {
             displayName: 'Grace',
             role: 'MEMBER',
         });
-        await waitFor(() =>
-            expect(toastSuccess).toHaveBeenCalledWith('Member created and added.'),
-        );
+        await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Member created and added.'));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 

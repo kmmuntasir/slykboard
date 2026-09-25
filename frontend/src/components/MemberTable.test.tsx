@@ -229,8 +229,12 @@ describe('MemberTable', () => {
                 makeMember({ userId: 'u-2', email: 'bo@example.com' }),
             ];
             render(<MemberTable {...baseProps} members={members} canManage={true} />);
-            expect(screen.getByRole('button', { name: 'Remove ada@example.com' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Remove bo@example.com' })).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Remove ada@example.com' }),
+            ).toBeInTheDocument();
+            expect(
+                screen.getByRole('button', { name: 'Remove bo@example.com' }),
+            ).toBeInTheDocument();
         });
 
         it('each role select has a descriptive aria-label using the email', () => {

@@ -14,7 +14,6 @@ import type { TicketFormValues } from '@/hooks/useTicketForm';
 export function ChecklistField() {
     const { watch, setValue } = useFormContext<TicketFormValues>();
 
-    // eslint-disable-next-line react-hooks/incompatible-library
     const checklist = watch('checklist') ?? [];
 
     return (

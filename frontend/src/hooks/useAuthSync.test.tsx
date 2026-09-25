@@ -61,7 +61,10 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
 
 vi.mock('@/api/auth', () => ({ fetchMe: fetchMeMock, logout: logoutApiMock }));
 
-vi.mock('@/api/client', () => ({ registerLogoutHandlers: registerMock, registerForbiddenHandler: registerForbiddenMock }));
+vi.mock('@/api/client', () => ({
+    registerLogoutHandlers: registerMock,
+    registerForbiddenHandler: registerForbiddenMock,
+}));
 
 vi.mock('@/stores/useAuthStore', () => ({
     useAuthStore: Object.assign(

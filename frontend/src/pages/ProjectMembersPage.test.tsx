@@ -16,7 +16,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ProjectMembersPage } from './ProjectMembersPage';
-import { ApiClientError } from '@/api/client';
 import type { Member, MemberRole } from '@/types/member';
 
 // --- Controllable mock state ------------------------------------------------
@@ -161,16 +160,19 @@ beforeEach(() => {
 
 describe('ProjectMembersPage — heading + roster rendering', () => {
     it('renders the "Member Management" heading', () => {
-        roster = [
-            makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice' }),
-        ];
+        roster = [makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice' })];
         renderPage();
         expect(screen.getByRole('heading', { name: 'Member Management' })).toBeInTheDocument();
     });
 
     it('renders each member row via <MemberTable>', () => {
         roster = [
-            makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice', role: 'PROJECT_ADMIN' }),
+            makeMember({
+                userId: 'u1',
+                email: 'alice@x.com',
+                fullName: 'Alice',
+                role: 'PROJECT_ADMIN',
+            }),
             makeMember({ userId: 'u2', email: 'bob@x.com', fullName: 'Bob', role: 'MEMBER' }),
         ];
         renderPage();
@@ -253,9 +255,24 @@ describe('ProjectMembersPage — "Add Member" button visibility + modal', () => 
 });
 
 describe('ProjectMembersPage — management controls (canManage gate)', () => {
-    const gateCases: Array<{ name: string; platform: boolean; project: boolean; canManage: boolean }> = [
-        { name: 'admin sees per-row role select + remove controls', platform: true, project: false, canManage: true },
-        { name: 'plain Member sees a read-only roster', platform: false, project: false, canManage: false },
+    const gateCases: Array<{
+        name: string;
+        platform: boolean;
+        project: boolean;
+        canManage: boolean;
+    }> = [
+        {
+            name: 'admin sees per-row role select + remove controls',
+            platform: true,
+            project: false,
+            canManage: true,
+        },
+        {
+            name: 'plain Member sees a read-only roster',
+            platform: false,
+            project: false,
+            canManage: false,
+        },
     ];
 
     gateCases.forEach(({ name, platform, project, canManage }) => {
@@ -263,7 +280,12 @@ describe('ProjectMembersPage — management controls (canManage gate)', () => {
             isPlatformAdmin = platform;
             isProjectAdmin = project;
             roster = [
-                makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice', role: 'PROJECT_ADMIN' }),
+                makeMember({
+                    userId: 'u1',
+                    email: 'alice@x.com',
+                    fullName: 'Alice',
+                    role: 'PROJECT_ADMIN',
+                }),
                 makeMember({ userId: 'me', email: 'me@x.com', fullName: 'Me', role: 'MEMBER' }),
             ];
             renderPage();
@@ -284,7 +306,9 @@ describe('ProjectMembersPage — management controls (canManage gate)', () => {
 describe('ProjectMembersPage — role change', () => {
     beforeEach(() => {
         isPlatformAdmin = true;
-        roster = [makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice', role: 'MEMBER' })];
+        roster = [
+            makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice', role: 'MEMBER' }),
+        ];
     });
 
     it('changing the role select calls useUpdateMemberRole and toasts success', async () => {
@@ -316,7 +340,9 @@ describe('ProjectMembersPage — role change', () => {
 describe('ProjectMembersPage — remove via confirm dialog', () => {
     beforeEach(() => {
         isPlatformAdmin = true;
-        roster = [makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice', role: 'MEMBER' })];
+        roster = [
+            makeMember({ userId: 'u1', email: 'alice@x.com', fullName: 'Alice', role: 'MEMBER' }),
+        ];
     });
 
     it('clicking Remove opens the confirm dialog (no immediate delete)', () => {
@@ -351,18 +377,53 @@ describe('ProjectMembersPage — live search (useMemo, case-insensitive)', () =>
     beforeEach(() => {
         isPlatformAdmin = true;
         roster = [
-            makeMember({ userId: 'u1', email: 'alice@example.com', fullName: 'Alice Smith', displayName: null }),
-            makeMember({ userId: 'u2', email: 'bob@example.com', fullName: 'Bob', displayName: 'Bobby' }),
-            makeMember({ userId: 'u3', email: 'carol@other.io', fullName: 'Carol', displayName: null }),
+            makeMember({
+                userId: 'u1',
+                email: 'alice@example.com',
+                fullName: 'Alice Smith',
+                displayName: null,
+            }),
+            makeMember({
+                userId: 'u2',
+                email: 'bob@example.com',
+                fullName: 'Bob',
+                displayName: 'Bobby',
+            }),
+            makeMember({
+                userId: 'u3',
+                email: 'carol@other.io',
+                fullName: 'Carol',
+                displayName: null,
+            }),
         ];
     });
 
     const searchCases: Array<{ name: string; query: string; expectEmails: string[] }> = [
-        { name: 'partial name "ali" → Alice only', query: 'ali', expectEmails: ['alice@example.com'] },
-        { name: 'partial displayName "bobby" → Bob', query: 'bobby', expectEmails: ['bob@example.com'] },
-        { name: 'partial email "example.com" → Alice + Bob', query: 'example.com', expectEmails: ['alice@example.com', 'bob@example.com'] },
-        { name: 'case-insensitive "ALICE" → Alice', query: 'ALICE', expectEmails: ['alice@example.com'] },
-        { name: 'empty query → all rows', query: '', expectEmails: ['alice@example.com', 'bob@example.com', 'carol@other.io'] },
+        {
+            name: 'partial name "ali" → Alice only',
+            query: 'ali',
+            expectEmails: ['alice@example.com'],
+        },
+        {
+            name: 'partial displayName "bobby" → Bob',
+            query: 'bobby',
+            expectEmails: ['bob@example.com'],
+        },
+        {
+            name: 'partial email "example.com" → Alice + Bob',
+            query: 'example.com',
+            expectEmails: ['alice@example.com', 'bob@example.com'],
+        },
+        {
+            name: 'case-insensitive "ALICE" → Alice',
+            query: 'ALICE',
+            expectEmails: ['alice@example.com'],
+        },
+        {
+            name: 'empty query → all rows',
+            query: '',
+            expectEmails: ['alice@example.com', 'bob@example.com', 'carol@other.io'],
+        },
         { name: 'no-match query → empty-results card', query: 'zzz', expectEmails: [] },
     ];
 

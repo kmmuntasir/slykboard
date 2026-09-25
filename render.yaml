@@ -26,7 +26,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: RUN_MIGRATIONS_ON_START
-        value: "true"
+        value: 'true'
       # Secrets — fill in the Render dashboard.
       - key: FRONTEND_URL
         sync: false

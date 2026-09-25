@@ -97,9 +97,7 @@ describe('ensureBootstrapAdmin', () => {
 
     await ensureBootstrapAdmin();
 
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('Bootstrap admin disabled'),
-    );
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Bootstrap admin disabled'));
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
@@ -108,9 +106,7 @@ describe('ensureBootstrapAdmin', () => {
 
     await ensureBootstrapAdmin();
 
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('Bootstrap admin disabled'),
-    );
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Bootstrap admin disabled'));
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
@@ -139,7 +135,9 @@ describe('ensureBootstrapAdmin', () => {
 
   it('is idempotent when the row already has isPlatformAdmin=true (no-op)', async () => {
     testEnv.env.bootstrapAdminEmail = 'admin@allowed.com';
-    bag.txSelectLimit.mockResolvedValueOnce([{ id: 'u1', email: 'admin@allowed.com', isPlatformAdmin: true }]);
+    bag.txSelectLimit.mockResolvedValueOnce([
+      { id: 'u1', email: 'admin@allowed.com', isPlatformAdmin: true },
+    ]);
 
     await ensureBootstrapAdmin();
 

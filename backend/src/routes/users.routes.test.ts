@@ -194,7 +194,6 @@ describe('usersRouter — GET /api/users (F13 T5)', () => {
   });
 });
 
-
 describe('usersRouter — PATCH /api/users/:userId/blocked (F25)', () => {
   it('returns 200 + updated user for ADMIN (block=true)', async () => {
     mockedFindVersion.mockResolvedValue(0);

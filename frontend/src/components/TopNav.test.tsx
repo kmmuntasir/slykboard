@@ -512,7 +512,7 @@ describe('TopNav', () => {
         expect(screen.getAllByText('Select a project first').length).toBeGreaterThanOrEqual(1);
     });
 
-// F49 — the F42 "Reports coming soon" tooltip is gone; Reports is an enabled
+    // F49 — the F42 "Reports coming soon" tooltip is gone; Reports is an enabled
     // link with a project present. Assert no "coming soon" surface remains.
     it('project-present: no "Reports coming soon" tooltip (F49 unblocks Reports)', () => {
         useAuthStore.getState().setUser(fullUser);

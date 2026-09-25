@@ -115,12 +115,7 @@ describe('ColorPicker', () => {
     it('forwards ref to the trigger button', () => {
         const ref = createRef<HTMLButtonElement>();
         render(
-            <ColorPicker
-                ref={ref}
-                value="#6b7280"
-                onChange={vi.fn()}
-                aria-label="Pick color"
-            />,
+            <ColorPicker ref={ref} value="#6b7280" onChange={vi.fn()} aria-label="Pick color" />,
         );
         expect(ref.current).toBeInstanceOf(HTMLButtonElement);
     });

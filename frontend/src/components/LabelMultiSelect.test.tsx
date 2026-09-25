@@ -62,7 +62,9 @@ function mockUseLabels(overrides: Partial<UseQueryResult<Label[]>> = {}): UseQue
 // SLYK-08 B2-2: error-state fixture. useLabels (TanStack Query) exposes
 // isError + refetch; the B2-1 production component surfaces them as a distinct
 // Retry control under the disabled trigger.
-function mockUseLabelsError(overrides: Partial<UseQueryResult<Label[]>> = {}): UseQueryResult<Label[]> {
+function mockUseLabelsError(
+    overrides: Partial<UseQueryResult<Label[]>> = {},
+): UseQueryResult<Label[]> {
     return {
         data: undefined,
         isLoading: false,

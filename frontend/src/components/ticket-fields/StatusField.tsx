@@ -1,7 +1,13 @@
 import { useFormContext } from 'react-hook-form';
 import { Columns3 } from 'lucide-react';
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/Select';
 import { Field } from '@/components/ui/Field';
 import { useProject } from '@/hooks/useProjects';
 import type { TicketFormValues } from '@/hooks/useTicketForm';

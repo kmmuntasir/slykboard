@@ -187,7 +187,7 @@ export async function updateProject(args: {
     }
 
     // DEL-04: deactivating a project stops every running timer on its tickets.
- // Runs inside this tx BEFORE the projects UPDATE so a failure rolls back both.
+    // Runs inside this tx BEFORE the projects UPDATE so a failure rolls back both.
     // Reactivation (isActive===true) must NOT touch timers.
     if (args.isActive === false) {
       await stopTimersForProject(tx, project.id);

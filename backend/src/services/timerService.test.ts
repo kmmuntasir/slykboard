@@ -103,8 +103,8 @@ vi.mock('../db/client', () => {
   };
   startBag.startTx = startTx;
 
-  (db as Record<string, unknown>).transaction = vi.fn(
-    async (cb: (tx: typeof startTx) => unknown) => cb(startTx),
+  (db as Record<string, unknown>).transaction = vi.fn(async (cb: (tx: typeof startTx) => unknown) =>
+    cb(startTx),
   );
 
   return { db };

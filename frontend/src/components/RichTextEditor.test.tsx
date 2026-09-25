@@ -31,7 +31,7 @@ const { currentEditor } = vi.hoisted(() => ({
 }));
 
 vi.mock('@ckeditor/ckeditor5-react', async () => {
-    const { useEffect, useRef, createElement } = await import('react');
+    const { useEffect, useRef, useState, createElement } = await import('react');
 
     interface EditorLike {
         getData: () => string;
@@ -51,14 +51,18 @@ vi.mock('@ckeditor/ckeditor5-react', async () => {
     function CKEditor({ config, data, onChange, onReady }: MockCKEditorProps) {
         const editableRef = useRef<HTMLDivElement | null>(null);
         const editorRef = useRef<EditorLike | null>(null);
+        // Freeze the mount-time data + onReady (stable identities) so the
+        // mount-only effect below can list its deps without re-firing when the
+        // parent re-renders with a fresh inline onReady closure.
+        const [initialData] = useState(data ?? '');
+        const [mountOnReady] = useState(() => onReady);
 
         // Mount-only: populate the editable with the initial `data`, build the
         // fake editor bound to the editable's DOM, and hand it back via onReady.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         useEffect(() => {
             const el = editableRef.current;
             if (!el) return;
-            el.innerHTML = data ?? '';
+            el.innerHTML = initialData;
             const editor: EditorLike = {
                 getData: () => el.innerHTML,
                 setData: vi.fn((value: string) => {
@@ -67,8 +71,8 @@ vi.mock('@ckeditor/ckeditor5-react', async () => {
             };
             editorRef.current = editor;
             currentEditor.current = editor;
-            onReady?.(editor);
-        }, []);
+            mountOnReady?.(editor);
+        }, [initialData, mountOnReady]);
 
         const items = config?.toolbar?.items ?? [];
 
@@ -157,9 +161,7 @@ describe('RichTextEditor', () => {
     });
 
     it('passes the placeholder prop into the editor config', () => {
-        render(
-            <RichTextEditor value="" onChange={vi.fn()} placeholder="Describe the ticket" />,
-        );
+        render(<RichTextEditor value="" onChange={vi.fn()} placeholder="Describe the ticket" />);
         // The mock echoes config.placeholder onto the editable's data-placeholder.
         expect(screen.getByTestId('ck-editable').getAttribute('data-placeholder')).toBe(
             'Describe the ticket',
@@ -193,9 +195,7 @@ describe('RichTextEditor', () => {
 
     it('does not call setData when the parent echoes the just-emitted value (round-trip guard)', async () => {
         const onChange = vi.fn();
-        const { rerender } = render(
-            <RichTextEditor value="<p>first</p>" onChange={onChange} />,
-        );
+        const { rerender } = render(<RichTextEditor value="<p>first</p>" onChange={onChange} />);
 
         // Wait until the mocked editor has mounted and stashed itself in the holder.
         await waitFor(() => expect(currentEditor.current).not.toBeNull());
@@ -219,9 +219,7 @@ describe('RichTextEditor', () => {
     });
 
     it('calls setData for a genuine external value change', async () => {
-        const { rerender } = render(
-            <RichTextEditor value="<p>first</p>" onChange={vi.fn()} />,
-        );
+        const { rerender } = render(<RichTextEditor value="<p>first</p>" onChange={vi.fn()} />);
 
         await waitFor(() => expect(currentEditor.current).not.toBeNull());
         const setData = currentEditor.current!.setData as unknown as Mock;
@@ -235,9 +233,7 @@ describe('RichTextEditor', () => {
 
     it('does not call setData on repeated echoed re-renders during editing', async () => {
         const onChange = vi.fn();
-        const { rerender } = render(
-            <RichTextEditor value="<p>start</p>" onChange={onChange} />,
-        );
+        const { rerender } = render(<RichTextEditor value="<p>start</p>" onChange={onChange} />);
 
         await waitFor(() => expect(currentEditor.current).not.toBeNull());
         const setData = currentEditor.current!.setData as unknown as Mock;
