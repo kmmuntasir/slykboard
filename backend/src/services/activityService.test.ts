@@ -13,7 +13,9 @@ type ActionType =
   | 'PRIORITY_CHANGED'
   | 'ASSIGNEE_CHANGED'
   | 'LABELS_CHANGED'
-  | 'CONTENT_UPDATED';
+  | 'CONTENT_UPDATED'
+  | 'PARENT_CHANGED'
+  | 'TYPE_CHANGED';
 
 // Build an ActivityLogRow input with sane defaults; tests override per case.
 function makeRow(
@@ -47,8 +49,9 @@ function enrichOne(
   over: Parameters<typeof makeRow>[0],
   columnMap = new Map<string, string>(),
   assigneeMap = new Map<string, string>(),
+  ticketRefMap = new Map<string, string>(),
 ): ActivityEntry {
-  const entries = enrichActivityRows([makeRow(over)], columnMap, assigneeMap);
+  const entries = enrichActivityRows([makeRow(over)], columnMap, assigneeMap, ticketRefMap);
   expect(entries).toHaveLength(1);
   return entries[0]!;
 }
@@ -177,6 +180,71 @@ describe('enrichActivityRows', () => {
     expect(entry.from).toBe('HIGH');
     expect(entry.to).toBe('MEDIUM');
     expect(entry.message).toBeNull();
+  });
+
+  // CR-03 FR-03.7: hierarchy actions enrich instead of falling through to the
+  // all-null base (previously they rendered as raw UUIDs / generic "updated").
+  describe('hierarchy actions (CR-03 FR-03.7)', () => {
+    const ticketRefMap = new Map([
+      ['t-1', 'SLYK-2'],
+      ['t-2', 'SLYK-7'],
+    ]);
+
+    it('PARENT_CHANGED known ticket ids resolve to <SLUG>-<n> display refs', () => {
+      const entry = enrichOne(
+        { actionType: 'PARENT_CHANGED', oldValue: 't-1', newValue: 't-2' },
+        columnMap,
+        assigneeMap,
+        ticketRefMap,
+      );
+      expect(entry.from).toBe('SLYK-2');
+      expect(entry.to).toBe('SLYK-7');
+      expect(entry.message).toBeNull();
+    });
+
+    it('PARENT_CHANGED null side stays null (root / detached to root)', () => {
+      const entry = enrichOne(
+        { actionType: 'PARENT_CHANGED', oldValue: null, newValue: 't-2' },
+        columnMap,
+        assigneeMap,
+        ticketRefMap,
+      );
+      expect(entry.from).toBeNull();
+      expect(entry.to).toBe('SLYK-7');
+    });
+
+    it('PARENT_CHANGED unknown ticket id → "Unknown ticket"', () => {
+      const entry = enrichOne(
+        { actionType: 'PARENT_CHANGED', oldValue: 't-ghost', newValue: 't-2' },
+        columnMap,
+        assigneeMap,
+        ticketRefMap,
+      );
+      expect(entry.from).toBe('Unknown ticket');
+      expect(entry.to).toBe('SLYK-7');
+    });
+
+    it('PARENT_CHANGED with an omitted map still resolves (defensive default)', () => {
+      const entry = enrichOne(
+        { actionType: 'PARENT_CHANGED', oldValue: 't-1', newValue: null },
+        columnMap,
+        assigneeMap,
+      );
+      expect(entry.from).toBe('Unknown ticket');
+      expect(entry.to).toBeNull();
+    });
+
+    it('TYPE_CHANGED → raw SCREAMING_SNAKE passthrough (FE humanizes)', () => {
+      const entry = enrichOne(
+        { actionType: 'TYPE_CHANGED', oldValue: 'TASK', newValue: 'STORY' },
+        columnMap,
+        assigneeMap,
+        ticketRefMap,
+      );
+      expect(entry.from).toBe('TASK');
+      expect(entry.to).toBe('STORY');
+      expect(entry.message).toBeNull();
+    });
   });
 
   it('LABELS_CHANGED → message = newValue, from/to null', () => {

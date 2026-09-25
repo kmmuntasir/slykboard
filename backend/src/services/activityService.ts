@@ -67,6 +67,19 @@ export function resolveAssignee(value: string | null, map: Map<string, string>):
   return map.get(value) ?? 'Unknown user';
 }
 
+/**
+ * CR-03 FR-03.7: resolve a PARENT_CHANGED old/new value to a display ref.
+ * - null → null (root — the ticket had no parent / was detached to root)
+ * - known ticket id → '<SLUG>-<NUMBER>' display ref from the batch-resolved map
+ * - unknown id → 'Unknown ticket' (defensive; parents soft-delete, so refs stay resolvable)
+ */
+export function resolveParentRef(value: string | null, map: Map<string, string>): string | null {
+  if (value === null) {
+    return null;
+  }
+  return map.get(value) ?? 'Unknown ticket';
+}
+
 function toActor(row: ActivityLogRow): ActivityActor | null {
   if (row.actorId === null) {
     return null;
@@ -83,11 +96,14 @@ function toActor(row: ActivityLogRow): ActivityActor | null {
  * NOT sort — callers rely on SQL ORDER BY for reverse-chrono ordering.
  * columnMap resolves STATUS_CHANGED column ids to display names.
  * assigneeMap resolves ASSIGNEE_CHANGED user ids to full names.
+ * ticketRefMap (CR-03 FR-03.7) resolves PARENT_CHANGED ticket ids to
+ * '<SLUG>-<NUMBER>' display refs.
  */
 export function enrichActivityRows(
   rows: ActivityLogRow[],
   columnMap: Map<string, string>,
   assigneeMap: Map<string, string>,
+  ticketRefMap: Map<string, string> = new Map<string, string>(),
 ): ActivityEntry[] {
   return rows.map((row) => {
     const createdAt =
@@ -120,6 +136,18 @@ export function enrichActivityRows(
         };
       case 'PRIORITY_CHANGED':
         // Raw SCREAMING_SNAKE passthrough; FE title-cases per PRD REQ-3.2.
+        return { ...base, from: row.oldValue, to: row.newValue };
+      case 'PARENT_CHANGED':
+        // CR-03 FR-03.7: raw values are ticket UUIDs (null = root) — resolve to
+        // '<SLUG>-<NUMBER>' display refs so the FE never renders a raw id.
+        return {
+          ...base,
+          from: resolveParentRef(row.oldValue, ticketRefMap),
+          to: resolveParentRef(row.newValue, ticketRefMap),
+        };
+      case 'TYPE_CHANGED':
+        // CR-03 FR-03.7: raw SCREAMING_SNAKE type passthrough (mirrors
+        // PRIORITY_CHANGED); FE humanizes via TICKET_TYPE_DISPLAY.
         return { ...base, from: row.oldValue, to: row.newValue };
       case 'LABELS_CHANGED':
         return { ...base, message: row.newValue };
@@ -156,13 +184,15 @@ export async function getTicketActivity(ticketId: string): Promise<ActivityEntry
   const ticket = ticketRows[0]!;
 
   // 2. Resolve project columns {id,name} → name lookup for STATUS_CHANGED.
+  //    The slug rides along for PARENT_CHANGED display-ref formatting.
   const columnMap = new Map<string, string>();
   const projectRows = await db
-    .select({ columns: projects.columns })
+    .select({ columns: projects.columns, slug: projects.slug })
     .from(projects)
     .where(eq(projects.id, ticket.projectId))
     .limit(1);
   const projectColumns = projectRows[0]?.columns;
+  const projectSlug = projectRows[0]?.slug;
   if (projectColumns) {
     for (const col of projectColumns) {
       columnMap.set(col.id, col.name);
@@ -211,6 +241,32 @@ export async function getTicketActivity(ticketId: string): Promise<ActivityEntry
     }
   }
 
+  // 4b. CR-03 FR-03.7: batch-resolve PARENT_CHANGED ticket ids →
+  // '<SLUG>-<NUMBER>' display refs (avoids N+1; parents are same-project by the
+  // hierarchy rules). Unresolvable ids simply stay absent → 'Unknown ticket'.
+  const ticketRefMap = new Map<string, string>();
+  const parentIds = new Set<string>();
+  for (const row of rows) {
+    if (row.actionType !== 'PARENT_CHANGED') {
+      continue;
+    }
+    for (const value of [row.oldValue, row.newValue]) {
+      if (value !== null) {
+        parentIds.add(value);
+      }
+    }
+  }
+  if (parentIds.size > 0 && projectSlug) {
+    const parentRows = await db
+      .select({ id: tickets.id, ticketNumber: tickets.ticketNumber })
+      .from(tickets)
+      .where(inArray(tickets.id, [...parentIds]));
+    for (const parent of parentRows) {
+      // Same '<SLUG>-<NUMBER>' ref format as the FE formatTicketId (unpadded).
+      ticketRefMap.set(parent.id, `${projectSlug.toUpperCase()}-${parent.ticketNumber}`);
+    }
+  }
+
   // 5. Enrich via the pure helper (single path; exercised by unit tests).
-  return enrichActivityRows(rows, columnMap, assigneeMap);
+  return enrichActivityRows(rows, columnMap, assigneeMap, ticketRefMap);
 }

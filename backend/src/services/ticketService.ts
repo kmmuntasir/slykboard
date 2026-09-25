@@ -126,13 +126,24 @@ async function assertHierarchyRules(
 }
 
 /**
- * CR-03 FR-03.9: auto-progression recompute, walked UP from the mutated child.
+ * CR-03 FR-03.9: auto-progression recompute, walked UP from the mutated ticket.
+ * The START ticket itself is evaluated first, then each ancestor while climbing.
  * Any ticket with ≥1 live direct children derives its column from the earliest
  * child column (Epics, Stories, and Tasks alike — client decision 2026-09-25).
  * A childless ancestor keeps its column (manual control resumes). The walk
  * stops as soon as an ancestor's column does not change — higher ancestors
  * cannot be affected when this one didn't move. Auto-moves are logged as
  * ordinary STATUS_CHANGED rows attributed to the acting user.
+ *
+ * Evaluating the seed matters for re-parent-OUT: updateTicket seeds the OLD
+ * parent chain at the old parentId, and the old parent itself must fall back
+ * to its next-earliest child's column — the previous climb-only logic skipped
+ * it, leaving the old parent's column stale until an unrelated child mutation.
+ *
+ * The seed's own result NEVER gates the climb: a childless seed still climbs
+ * (createTicket seeds at the new child, whose parent must be re-evaluated), and
+ * a stable seed still climbs (a ticket joining a new parent changes that
+ * parent's child SET even when the seed's own column is unchanged).
  */
 export async function recomputeAncestorColumns(
   tx: Tx,
@@ -146,45 +157,58 @@ export async function recomputeAncestorColumns(
   // Defensive: a project row without a columns array (mock/legacy shape) → no-op.
   if (!project || !Array.isArray(project.columns)) return;
 
-  let currentId = args.startTicketId;
-  const visited = new Set<string>([args.startTicketId]); // corrupt-cycle guard
-  for (let depth = 0; depth < 4; depth += 1) {
-    const [child] = await tx
-      .select({ id: tickets.id, parentId: tickets.parentId })
-      .from(tickets)
-      .where(eq(tickets.id, currentId))
-      .limit(1);
-    // `== null` covers both null (root) and undefined (legacy rows pre-CR-03).
-    if (!child || child.parentId == null || visited.has(child.parentId)) break;
-    visited.add(child.parentId);
+  let currentId: string | null = args.startTicketId;
+  const visited = new Set<string>(); // corrupt-cycle guard
+  // Depth bound: the seed (depth 0) + one evaluation per ancestor. The rank
+  // ordering caps real chains at Epic→Story→Task→Subtask, so 5 is generous;
+  // the visited set is the actual guard.
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (currentId === null || visited.has(currentId)) break;
+    visited.add(currentId);
 
-    const [parent] = await tx.select().from(tickets).where(eq(tickets.id, child.parentId)).limit(1);
-    if (!parent || parent.deletedAt !== null) break;
+    const [node] = await tx.select().from(tickets).where(eq(tickets.id, currentId)).limit(1);
+    // The seed may be soft-deleted (deleteTicket seeds AFTER its cascade) — its
+    // evaluation is then a harmless no-op (no live children survive the
+    // cascade), but the walk must still climb. Deleted ANCESTORS stop the walk.
+    if (!node || (depth > 0 && node.deletedAt !== null)) break;
 
     const children = await tx
       .select({ statusColumn: tickets.statusColumn })
       .from(tickets)
-      .where(and(eq(tickets.parentId, parent.id), isNull(tickets.deletedAt)));
-    if (children.length === 0) break; // childless → manual control, stop climbing
+      .where(and(eq(tickets.parentId, node.id), isNull(tickets.deletedAt)));
 
-    const target = earliestChildColumn(
-      project.columns,
-      children.map((row) => row.statusColumn),
-    );
-    if (target === null || target === parent.statusColumn) break; // stable → done
-
-    await tx
-      .update(tickets)
-      .set({ statusColumn: target, updatedAt: new Date() })
-      .where(eq(tickets.id, parent.id));
-    await recordActivity(tx, {
-      ticketId: parent.id,
-      actorId: args.actingUserId,
-      action: 'STATUS_CHANGED',
-      oldValue: parent.statusColumn,
-      newValue: target,
-    });
-    currentId = parent.id; // the move may ripple to the grandparent
+    let climb: boolean;
+    if (children.length === 0) {
+      // Childless → manual control. An ancestor's inaction freezes everything
+      // above it (stop), but the seed must still climb: a freshly created
+      // childless ticket may pull its parent backward.
+      climb = depth === 0;
+    } else {
+      const target = earliestChildColumn(
+        project.columns,
+        children.map((row) => row.statusColumn),
+      );
+      const moved = target !== null && target !== node.statusColumn;
+      if (moved) {
+        await tx
+          .update(tickets)
+          .set({ statusColumn: target, updatedAt: new Date() })
+          .where(eq(tickets.id, node.id));
+        await recordActivity(tx, {
+          ticketId: node.id,
+          actorId: args.actingUserId,
+          action: 'STATUS_CHANGED',
+          oldValue: node.statusColumn,
+          newValue: target,
+        });
+      }
+      // Stop-when-unchanged: an ancestor that stays put freezes the walk.
+      // The seed's evaluation result never gates the climb (see doc above).
+      climb = depth === 0 || moved;
+    }
+    if (!climb) break;
+    // `?? null` covers both null (root) and undefined (legacy rows pre-CR-03).
+    currentId = node.parentId ?? null;
   }
 }
 
@@ -213,6 +237,14 @@ export interface MoveTicketInput {
   statusColumn: string;
   position: number;
   actingUserId: string;
+}
+
+// CR-10: "description is required" means non-empty AFTER HTML sanitization AND
+// tag-stripping — a tags-only body ('<p></p>', '<p>   </p>') is not a
+// description. sanitizeDescription keeps the allowed-tag subset, so emptiness
+// is judged on the text that survives it.
+function isEmptyDescriptionHtml(sanitized: string): boolean {
+  return sanitized.replace(/<[^>]*>/g, '').trim() === '';
 }
 
 // True when any adjacent pair in an ASC-ordered position list is closer than EPSILON
@@ -411,6 +443,14 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
   const type = input.type ?? 'TASK';
   const parentId = input.parentId ?? null;
 
+  // DEL-01 T2 / CR-10: sanitize ONCE before the txn. "Required" means non-empty
+  // AFTER sanitization + tag-stripping — the route schema's min(1) only rejects
+  // a truly empty string, so a tags-only body ('<p></p>') must be rejected here.
+  const sanitizedDescription = sanitizeDescription(input.description);
+  if (isEmptyDescriptionHtml(sanitizedDescription)) {
+    throw new AppError(ErrorCode.VALIDATION_FAILED, 'Description is required');
+  }
+
   const insertedTicket = await db.transaction(async (tx) => {
     await assertHierarchyRules(tx, { projectId: project.id, type, parentId });
 
@@ -429,9 +469,8 @@ export async function createTicket(input: CreateTicketInput): Promise<TicketRow>
         projectId: project.id,
         ticketNumber,
         title: input.title,
-        // DEL-01 T2 / CR-10: sanitize the description on the create path too
-        // (mirrors the edit path). Required since CR-10, so it is always written.
-        description: sanitizeDescription(input.description),
+        // DEL-01 T2 / CR-10: sanitized (and emptiness-guarded) above the txn.
+        description: sanitizedDescription,
         statusColumn: resolvedColumn,
         position,
         creatorId: input.creatorId,
@@ -657,6 +696,19 @@ export async function updateTicket(args: {
       });
     }
 
+    // CR-10 FR-10.3: the route refinement only fires when BOTH bounds are in
+    // the body, so a single-sided PATCH must be validated here against the
+    // MERGED window (incoming bound + stored counterpart). The merged end must
+    // remain strictly after the merged start.
+    if (patch.startDate !== undefined || patch.endDate !== undefined) {
+      const effectiveStart =
+        patch.startDate !== undefined ? new Date(patch.startDate) : oldRow.startDate;
+      const effectiveEnd = patch.endDate !== undefined ? new Date(patch.endDate) : oldRow.endDate;
+      if (effectiveEnd.getTime() <= effectiveStart.getTime()) {
+        throw new AppError(ErrorCode.VALIDATION_FAILED, 'End date must be after the start date');
+      }
+    }
+
     // F18 T5 (D9, GAP #2): when labels are in the patch, snapshot the OLD label
     // names BEFORE replacing (replace deletes the link rows). Resolve NEW names
     // from the project's label rows so the diff carries readable names, not ids.
@@ -714,7 +766,15 @@ export async function updateTicket(args: {
       updateSet.title = patch.title;
     }
     if (patch.description !== undefined) {
-      updateSet.description = sanitizeDescription(patch.description);
+      const sanitized = sanitizeDescription(patch.description);
+      // CR-10 FR-10.4: description is required — a value that sanitizes/strips
+      // to nothing may never overwrite a stored description that has content.
+      // Legacy rows stored empty (truly '' or tags-only) stay editable: setting
+      // a real value is allowed, and empty→empty stays a harmless write.
+      if (isEmptyDescriptionHtml(sanitized) && !isEmptyDescriptionHtml(oldRow.description)) {
+        throw new AppError(ErrorCode.VALIDATION_FAILED, 'Description is required');
+      }
+      updateSet.description = sanitized;
     }
     if (patch.priority !== undefined) {
       updateSet.priority = patch.priority;

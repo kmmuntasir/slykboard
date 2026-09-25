@@ -88,6 +88,8 @@ type Row = {
   statusColumn: string;
   position: number;
   priority: Priority;
+  type: 'EPIC' | 'STORY' | 'TASK' | 'SUBTASK';
+  parentId: string | null;
   checklist: ChecklistItem[];
   assigneeId: string | null;
   creatorId: string;
@@ -109,6 +111,8 @@ function makeTicket(
   return {
     title: `T${over.ticketNumber}`,
     priority: 'MEDIUM' as Priority,
+    type: 'TASK',
+    parentId: null,
     checklist: [] as ChecklistItem[],
     assigneeId: null,
     assigneeFullName: null,
@@ -564,6 +568,75 @@ describe('boardService getBoard', () => {
 
       const result = await getBoard('SLYK');
       expect(result.columns[0]!.tickets[0]!.runningTimer?.userId).toBe('u1');
+    });
+  });
+
+  describe('CR-03 FR-03.8 epic summaries', () => {
+    it('rolls up descendant count, done count, and all-time tracked time per epic', async () => {
+      bag.getProjectBySlug.mockResolvedValue(
+        makeProject([
+          { id: 'c1', name: 'To Do' },
+          { id: 'c2', name: 'Done' },
+        ]),
+      );
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({
+          id: 'e1',
+          ticketNumber: 1,
+          statusColumn: 'c1',
+          position: 10,
+          type: 'EPIC',
+        }),
+        makeTicket({
+          id: 's1',
+          ticketNumber: 2,
+          statusColumn: 'c1',
+          position: 20,
+          type: 'STORY',
+          parentId: 'e1',
+        }),
+        makeTicket({
+          id: 't1',
+          ticketNumber: 3,
+          statusColumn: 'c2',
+          position: 30,
+          type: 'TASK',
+          parentId: 's1',
+        }),
+      ]);
+      // CR-12 aggregate rows: epic has 30m of its own, story 60m, task untracked.
+      bag.dbSelectGroupBy.mockResolvedValue([
+        { ticketId: 'e1', ms: 1_800_000 },
+        { ticketId: 's1', ms: 3_600_000 },
+      ]);
+
+      const result = await getBoard('SLYK');
+
+      expect(result.epics).toHaveLength(1);
+      const epic = result.epics[0]!;
+      expect(epic.id).toBe('e1');
+      expect(epic.descendantCount).toBe(2);
+      expect(epic.doneDescendantCount).toBe(1); // task sits in the last column
+      expect(epic.trackedTotalMs).toBe(5_400_000); // epic 30m + story 60m
+    });
+
+    it('reports zero tracked total for a childless epic with no entries', async () => {
+      bag.getProjectBySlug.mockResolvedValue(makeProject([{ id: 'c1', name: 'To Do' }]));
+      bag.dbSelectOrderBy.mockResolvedValue([
+        makeTicket({
+          id: 'e1',
+          ticketNumber: 1,
+          statusColumn: 'c1',
+          position: 10,
+          type: 'EPIC',
+        }),
+      ]);
+
+      const result = await getBoard('SLYK');
+
+      expect(result.epics).toHaveLength(1);
+      expect(result.epics[0]!.descendantCount).toBe(0);
+      expect(result.epics[0]!.trackedTotalMs).toBe(0);
     });
   });
 });

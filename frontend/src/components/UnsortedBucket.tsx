@@ -5,6 +5,9 @@ interface UnsortedBucketProps {
     tickets: Ticket[];
     projectSlug: string;
     onEdit?: (displayId: string) => void;
+    // FR-10.6: orphaned tickets aren't in the last column, so they can be
+    // overdue — forward the last-column id so the badge logic applies here too.
+    lastColumnId?: string;
 }
 
 // F09 D-Unsorted-Bucket: trailing pseudo-column for tickets whose status_column
@@ -15,7 +18,12 @@ interface UnsortedBucketProps {
 // IN (nothing can be dropped INTO the sentinel). The isDropDisabled flag is
 // wired by T5 on the <Droppable> rendered inside BoardColumn via the isUnsorted
 // prop forwarded below; UnsortedBucket itself only forwards isUnsorted.
-export function UnsortedBucket({ tickets, projectSlug, onEdit }: UnsortedBucketProps) {
+export function UnsortedBucket({
+    tickets,
+    projectSlug,
+    onEdit,
+    lastColumnId,
+}: UnsortedBucketProps) {
     return (
         <div className="opacity-80">
             <BoardColumn
@@ -25,6 +33,7 @@ export function UnsortedBucket({ tickets, projectSlug, onEdit }: UnsortedBucketP
                 projectSlug={projectSlug}
                 isUnsorted
                 onEdit={onEdit}
+                lastColumnId={lastColumnId}
             />
         </div>
     );

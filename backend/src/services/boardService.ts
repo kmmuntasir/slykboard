@@ -10,16 +10,6 @@ import type { HydratedLabel } from './labelService';
 import type { ChecklistItem } from '../db/schema';
 import type { TicketType } from './ticketService';
 
-// CR-03: rank map mirrored from ticketService for the board's epic-chip walk
-// (top-level epic resolution) — importing the frozen const directly would pull
-// the whole service into the board read path; the map is 4 literals.
-const TYPE_RANK: Readonly<Record<TicketType, number>> = {
-  EPIC: 3,
-  STORY: 2,
-  TASK: 1,
-  SUBTASK: 0,
-};
-
 // F09 D-Unsorted-Bucket: stable id for the orphan pseudo-column.
 export const UNSORTED_BUCKET_ID = '__unsorted__';
 const UNSORTED_BUCKET_NAME = 'Unsorted';
@@ -71,6 +61,7 @@ export interface EpicSummary {
   title: string;
   descendantCount: number; // live descendants at any depth
   doneDescendantCount: number; // descendants in the LAST column
+  trackedTotalMs: number; // FR-03.8: all-time adjusted tracked time, epic + descendants
 }
 
 export interface BoardColumn {
@@ -179,6 +170,7 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
   // CR-12 FR-12.4: per-ticket closed-time totals in ONE aggregate query (no
   // N+1), plus the set of tickets with a running timer (any member) for the
   // live badge. Manual entries carry minutes; timer rows use wall-clock.
+  // Inlined SQL mirror of reportService.effectiveDurationMs — keep in sync.
   const rowIds = rows.map((r) => r.id);
   const trackedByTicket = new Map<string, number>();
   const runningByTicket = new Map<string, { userId: string; startTime: Date }>();
@@ -297,6 +289,11 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
       const seen = new Set<string>([epic.id]);
       let descendantCount = 0;
       let doneDescendantCount = 0;
+      // FR-03.8: all-time subtree tracked total — the epic's own entries plus
+      // every live descendant's, from the per-ticket totals already computed
+      // above (adjusted durations, closed entries only). Pure map sums: no
+      // extra query, in line with the board payload's no-N+1 budget.
+      let trackedTotalMs = epic.trackedTotalMs;
       for (let depth = 0; depth < 3 && frontier.length > 0; depth += 1) {
         const next: string[] = [];
         for (const id of frontier) {
@@ -304,6 +301,7 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
             if (seen.has(child.id)) continue;
             seen.add(child.id);
             descendantCount += 1;
+            trackedTotalMs += child.trackedTotalMs;
             if (lastColumnId !== null && child.statusColumn === lastColumnId) {
               doneDescendantCount += 1;
             }
@@ -318,6 +316,7 @@ export async function getBoard(slug: string, filters?: BoardFilters): Promise<Bo
         title: epic.title,
         descendantCount,
         doneDescendantCount,
+        trackedTotalMs,
       };
     });
 

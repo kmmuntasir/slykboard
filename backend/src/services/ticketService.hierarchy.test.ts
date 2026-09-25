@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '../db/client';
 import { activityLogs, projectSequences, projects, tickets, users } from '../db/schema';
@@ -45,13 +45,14 @@ function create(
     type?: ticketService.TicketType;
     parentId?: string | null;
     statusColumn?: string;
+    description?: string;
   },
 ) {
   return ticketService.createTicket({
     slug,
     creatorId: userId,
     title: args.title,
-    description: 'Fixture description',
+    description: args.description ?? 'Fixture description',
     priority: 'MEDIUM',
     statusColumn: args.statusColumn ?? C1,
     startDate: new Date().toISOString(),
@@ -161,7 +162,7 @@ describe('CR-03 hierarchy (integration)', () => {
     expect(await columnOf(epic.id)).toBe(C2);
 
     // A second child left behind pulls the parents back (backward move).
-    const sub2 = await create(slug, { title: 'Sub 2', type: 'SUBTASK', parentId: task.id });
+    await create(slug, { title: 'Sub 2', type: 'SUBTASK', parentId: task.id });
     expect(await columnOf(task.id)).toBe(C1); // sub2 sits in c1
     expect(await columnOf(epic.id)).toBe(C1);
 
@@ -227,6 +228,96 @@ describe('CR-03 hierarchy (integration)', () => {
     expect(typeChange?.oldValue).toBe('TASK');
     expect(typeChange?.newValue).toBe('STORY');
     expect(parentChange).toBeDefined(); // from the earlier re-parent
+  });
+
+  it('re-parent-out re-evaluates the seeded old parent immediately (stale column fix)', async () => {
+    const slug = await createTestProject();
+    const epicA = await create(slug, { title: 'Epic A', type: 'EPIC' });
+    const epicB = await create(slug, { title: 'Epic B', type: 'EPIC' });
+    const task = await create(slug, { title: 'Task', type: 'TASK', parentId: epicA.id });
+    const story = await create(slug, { title: 'Story', type: 'STORY', parentId: epicA.id });
+
+    // Children at c2 (task) and c3 (story) → epic A is pinned at c2 by the
+    // least-progressed child; epic B (childless) stays where it was created.
+    await ticketService.moveTicket({
+      ticketId: task.id,
+      statusColumn: C2,
+      position: 100,
+      actingUserId: userId,
+    });
+    await ticketService.moveTicket({
+      ticketId: story.id,
+      statusColumn: C3,
+      position: 100,
+      actingUserId: userId,
+    });
+    expect(await columnOf(epicA.id)).toBe(C2);
+    expect(await columnOf(epicB.id)).toBe(C1);
+
+    // Re-parent the c2 child OUT of epic A: epic A must fall back to its
+    // remaining child's column (c3) in the SAME mutation — the pre-fix walk
+    // skipped the seed (old parent) and left it stale at c2.
+    await ticketService.updateTicket({
+      ticketId: task.id,
+      patch: { parentId: epicB.id },
+      actingUserId: userId,
+    });
+
+    expect(await columnOf(epicA.id)).toBe(C3);
+    expect(await columnOf(epicB.id)).toBe(C2); // new chain derives from the task
+
+    // The fallback is logged as a STATUS_CHANGED row attributed to the actor
+    // (epic A has a second, earlier row from the setup move: c1→c2).
+    const moves = await db
+      .select({
+        ticketId: activityLogs.ticketId,
+        oldValue: activityLogs.oldValue,
+        newValue: activityLogs.newValue,
+        userId: activityLogs.userId,
+      })
+      .from(activityLogs)
+      .where(
+        and(eq(activityLogs.ticketId, epicA.id), eq(activityLogs.actionType, 'STATUS_CHANGED')),
+      );
+    expect(moves).toHaveLength(2);
+    const fallback = moves.find((row) => row.oldValue === C2);
+    expect(fallback).toMatchObject({ newValue: C3, userId });
+
+    // Sanity: create/move/delete recompute paths behave exactly as before.
+    const story2 = await create(slug, { title: 'Story 2', type: 'STORY', parentId: epicA.id });
+    expect(await columnOf(epicA.id)).toBe(C1); // create pulls the parent back
+    await ticketService.moveTicket({
+      ticketId: story2.id,
+      statusColumn: C2,
+      position: 100,
+      actingUserId: userId,
+    });
+    expect(await columnOf(epicA.id)).toBe(C2); // move pulls the parent forward
+    await ticketService.deleteTicket(story2.id, userId);
+    expect(await columnOf(epicA.id)).toBe(C3); // delete falls back to remaining child
+  });
+
+  it('rejects a create whose description sanitizes/strips to empty (CR-10)', async () => {
+    const slug = await createTestProject();
+
+    await expect(
+      create(slug, { title: 'Tags only', description: '<p></p>' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      create(slug, { title: 'Blank html', description: '<p>   </p>' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('still creates with a normal rich-text description (CR-10)', async () => {
+    const slug = await createTestProject();
+
+    const ticket = await create(slug, {
+      title: 'Rich text ok',
+      description: '<p>Hello <strong>world</strong></p>',
+    });
+
+    expect(ticket.description).toContain('Hello');
+    expect(ticket.description).toContain('<strong>');
   });
 
   it('cascades soft-delete through the subtree and recomputes the orphaned chain', async () => {

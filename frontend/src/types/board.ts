@@ -20,6 +20,7 @@ export interface EpicSummary {
   title: string;
   descendantCount: number;
   doneDescendantCount: number;
+  trackedTotalMs: number; // all-time adjusted tracked time, epic + descendants
 }
 
 export interface BoardPayload {

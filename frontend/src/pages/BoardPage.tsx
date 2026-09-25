@@ -21,6 +21,7 @@ import { ApiClientError } from '@/api/client';
 import { fetchTicketByRef } from '@/api/tickets';
 import { ticketKeys } from '@/api/queryKeys';
 import { formatTicketId } from '@/utils/formatTicketId';
+import { formatDuration } from '@/utils/formatDuration';
 import type { BoardPayload } from '@/types/board';
 import type { UpdateTicketDto } from '@/types/ticket';
 
@@ -207,6 +208,7 @@ export function BoardPage() {
                                     tickets={column.tickets}
                                     projectSlug={board.project.slug}
                                     onEdit={handleEdit}
+                                    lastColumnId={lastColumnId}
                                 />
                             ) : (
                                 <BoardColumn
@@ -254,6 +256,7 @@ function EpicsView({ slug, epics, onEdit }: EpicsViewProps) {
                         <th className="px-4 py-2 font-medium">Epic</th>
                         <th className="px-4 py-2 font-medium">Progress</th>
                         <th className="px-4 py-2 font-medium">Done</th>
+                        <th className="px-4 py-2 font-medium">Tracked</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -293,6 +296,14 @@ function EpicsView({ slug, epics, onEdit }: EpicsViewProps) {
                                 </td>
                                 <td className="px-4 py-2 tabular-nums">
                                     {epic.doneDescendantCount}/{epic.descendantCount} ({pct}%)
+                                </td>
+                                <td
+                                    className="px-4 py-2 tabular-nums"
+                                    title="Tracked time including sub-tickets"
+                                >
+                                    {epic.trackedTotalMs > 0
+                                        ? formatDuration(epic.trackedTotalMs)
+                                        : '—'}
                                 </td>
                             </tr>
                         );

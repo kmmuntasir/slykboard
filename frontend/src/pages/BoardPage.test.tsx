@@ -432,6 +432,7 @@ describe('BoardPage — CR-03 hierarchy', () => {
                     title: 'Payments epic',
                     descendantCount: 2,
                     doneDescendantCount: 1,
+                    trackedTotalMs: 0,
                 },
             ],
         };
@@ -463,6 +464,9 @@ describe('BoardPage — CR-03 hierarchy', () => {
         expect(screen.getByRole('table', { name: 'Epics' })).toBeInTheDocument();
         expect(screen.getByText('Payments epic')).toBeInTheDocument();
         expect(screen.getByText('1/2 (50%)')).toBeInTheDocument();
+        // FR-03.8: a Tracked column renders; zero tracked time renders as a dash.
+        expect(screen.getByRole('columnheader', { name: 'Tracked' })).toBeInTheDocument();
+        expect(screen.getByText('—')).toBeInTheDocument();
     });
 
     it('CR-03: cross-column drop of a parent with children is refused (no move mutation)', async () => {

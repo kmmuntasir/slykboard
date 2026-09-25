@@ -713,6 +713,30 @@ describe('ticketService createTicket (F12)', () => {
     expect(bag.lastInsert!.description).toBe('<clean>Fixture description</clean>');
   });
 
+  it('CR-10: rejects a create whose sanitized description strips to empty (tags-only body)', async () => {
+    bag.getProjectBySlug.mockResolvedValue(makeProject());
+    // The real sanitizer KEEPS the allowed-tag subset ('<p></p>' survives it),
+    // so the service must judge emptiness on the stripped text.
+    bag.sanitizeMock.mockImplementation(() => '<p></p>');
+
+    const error = await createTicket({
+      slug: 'SLYK',
+      creatorId: 'u1',
+      title: 'Tags only',
+      description: '<p></p>',
+      priority: 'MEDIUM' as const,
+      statusColumn: 'c1',
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 86_400_000).toISOString(),
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    // Guard fires before the txn: no sequence allocation, no insert, no log.
+    expect(bag.txnInvoked).not.toHaveBeenCalled();
+    expect(bag.lastInsert).toBeNull();
+  });
+
   it('CR-10: inserts the schedule window as Dates parsed from the ISO input', async () => {
     bag.getProjectBySlug.mockResolvedValue(makeProject());
     bag.seqRow = [{ nextNumber: 1 }];
@@ -926,6 +950,100 @@ describe('ticketService updateTicket (F13 T6)', () => {
     expect((bag.updateSets[0]!.startDate as Date).toISOString()).toBe(start);
     expect(bag.updateSets[0]!.endDate).toBeInstanceOf(Date);
     expect((bag.updateSets[0]!.endDate as Date).toISOString()).toBe(due);
+  });
+
+  it('CR-10 FR-10.3: single-sided endDate before the stored startDate throws VALIDATION_FAILED', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({
+        id: TICKET_ID,
+        startDate: new Date('2026-06-01T00:00:00.000Z'),
+        endDate: new Date('2026-12-31T00:00:00.000Z'),
+      }),
+    ]);
+
+    const error = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { endDate: '2026-01-01T00:00:00.000Z' },
+      actingUserId: 'u1',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    expect(bag.updateSets.length).toBe(0);
+  });
+
+  it('CR-10 FR-10.3: single-sided startDate after the stored endDate throws VALIDATION_FAILED', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({
+        id: TICKET_ID,
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+        endDate: new Date('2026-06-30T00:00:00.000Z'),
+      }),
+    ]);
+
+    const error = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { startDate: '2026-12-01T00:00:00.000Z' },
+      actingUserId: 'u1',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    expect(bag.updateSets.length).toBe(0);
+  });
+
+  it('CR-10 FR-10.3: single-sided patch inside the stored window is accepted and merged', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({
+        id: TICKET_ID,
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+        endDate: new Date('2026-12-31T00:00:00.000Z'),
+      }),
+    ]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID })];
+
+    await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { endDate: '2026-06-30T00:00:00.000Z' },
+      actingUserId: 'u1',
+    });
+
+    expect(bag.updateSets.length).toBe(1);
+    expect(bag.updateSets[0]!.startDate).toBeUndefined();
+    expect((bag.updateSets[0]!.endDate as Date).toISOString()).toBe('2026-06-30T00:00:00.000Z');
+  });
+
+  it('CR-10 FR-10.4: sanitized-empty description over a stored non-empty description throws', async () => {
+    bag.loadTicketFinal.mockResolvedValue([
+      makeTicket({ id: TICKET_ID, description: 'real content' }),
+    ]);
+    // Simulate a tags-only body: the sanitizer keeps the markup, the strip check
+    // must see through it.
+    bag.sanitizeMock.mockImplementation(() => '<p></p>');
+
+    const error = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { description: '<p></p>' },
+      actingUserId: 'u1',
+    }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ErrorCode.VALIDATION_FAILED);
+    expect(bag.updateSets.length).toBe(0);
+  });
+
+  it('CR-10 FR-10.4: legacy row stored with an empty description stays editable', async () => {
+    bag.loadTicketFinal.mockResolvedValue([makeTicket({ id: TICKET_ID, description: '' })]);
+    bag.updateReturn = [makeTicket({ id: TICKET_ID, description: '<clean>new</clean>' })];
+
+    const { new: updated } = await updateTicket({
+      ticketId: TICKET_ID,
+      patch: { description: 'new' },
+      actingUserId: 'u1',
+    });
+
+    expect(updated.description).toBe('<clean>new</clean>');
+    expect(bag.updateSets[0]!.description).toBe('<clean>new</clean>');
   });
 
   it('T1: absent dueDate in patch leaves dueDate out of the update set', async () => {

@@ -6,7 +6,14 @@ import type { ActivityEntry } from '@/types/activity';
 // F19 T2: table-driven sentence-switch over actionType (REQ-5.2/5.3 grammar) +
 // removed-entity edge fallbacks (null actor / null from-to / priority Title-Case).
 
-function entry(partial: Partial<ActivityEntry>): ActivityEntry {
+// CR-03 FR-03.7: hierarchy actions ride the same envelope; the shared
+// ActivityEntry type predates them, so the fixture widens the union like the
+// utility under test does.
+type TestAction = ActivityEntry['actionType'] | 'PARENT_CHANGED' | 'TYPE_CHANGED';
+
+function entry(
+  partial: Partial<Omit<ActivityEntry, 'actionType'>> & { actionType?: TestAction },
+): ActivityEntry {
   return {
     id: 'log-1',
     createdAt: '2026-06-24T10:00:00.000Z',
@@ -16,7 +23,7 @@ function entry(partial: Partial<ActivityEntry>): ActivityEntry {
     to: null,
     message: null,
     ...partial,
-  };
+  } as ActivityEntry;
 }
 
 describe('describeActivity', () => {
@@ -61,6 +68,26 @@ describe('describeActivity', () => {
       input: entry({ actionType: 'COMMENT_DELETED' }),
       expected: 'deleted a comment',
     },
+    {
+      name: 'PARENT_CHANGED (attach) → moved under <ref>',
+      input: entry({ actionType: 'PARENT_CHANGED', from: null, to: 'SLY-12' }),
+      expected: 'moved under SLY-12',
+    },
+    {
+      name: 'PARENT_CHANGED (re-parent) → moved from <ref> to <ref>',
+      input: entry({ actionType: 'PARENT_CHANGED', from: 'SLY-3', to: 'SLY-12' }),
+      expected: 'moved from SLY-3 to SLY-12',
+    },
+    {
+      name: 'PARENT_CHANGED (detach) → moved from <ref> to root',
+      input: entry({ actionType: 'PARENT_CHANGED', from: 'SLY-3', to: null }),
+      expected: 'moved from SLY-3 to root',
+    },
+    {
+      name: 'TYPE_CHANGED → humanizes the enum via TICKET_TYPE_DISPLAY',
+      input: entry({ actionType: 'TYPE_CHANGED', from: 'TASK', to: 'STORY' }),
+      expected: 'changed type from Task to Story',
+    },
   ];
 
   cases.forEach(({ name, input, expected }) => {
@@ -91,6 +118,12 @@ describe('describeActivity', () => {
     expect(
       describeActivity(entry({ actionType: 'PRIORITY_CHANGED', from: null, to: 'HIGH' })).clause,
     ).toBe('changed Priority from Unknown user to High');
+  });
+
+  it('TYPE_CHANGED with an unknown type value falls back to the raw value', () => {
+    expect(
+      describeActivity(entry({ actionType: 'TYPE_CHANGED', from: 'TASK', to: 'WHIMSY' })).clause,
+    ).toBe('changed type from Task to WHIMSY');
   });
 });
 
