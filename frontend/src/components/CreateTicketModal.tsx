@@ -12,8 +12,12 @@ interface CreateTicketModalProps {
 
 export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicketModalProps) {
     const createTicket = useCreateTicket(slug);
+    // CR-10: status is REQUIRED (no server default). The host passes the
+    // column context (the board seeds its first real column), and the form's
+    // StatusField still lets the member change it before submitting.
+    const resolvedColumnId = columnId ?? '';
 
-    const handleSubmit = async (values: UpdateTicketDto) => {
+    const handleSubmit = async (values: UpdateTicketDto & { statusColumn?: string }) => {
         await createTicket.mutateAsync({
             title: values.title as string,
             // CR-10: description, priority and the window are required — the
@@ -22,7 +26,8 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
             priority: values.priority!,
             assigneeId: values.assigneeId ?? undefined,
             labelIds: values.labelIds,
-            statusColumn: columnId,
+            // The form's StatusField wins; the prop/first column is the fallback.
+            statusColumn: values.statusColumn || resolvedColumnId,
             checklist: values.checklist,
             type: values.type,
             parentId: values.parentId,
@@ -45,6 +50,7 @@ export function CreateTicketModal({ open, onClose, slug, columnId }: CreateTicke
                 mode="create"
                 projectSlug={slug}
                 defaultValues={{
+                    statusColumn: resolvedColumnId,
                     title: '',
                     description: '',
                     // CR-10: no priority default — the user picks explicitly.

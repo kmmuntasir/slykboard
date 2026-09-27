@@ -132,6 +132,11 @@ export function BoardPage() {
     const lastColumnId = board
         ? (board.columns.filter((column) => !column.isUnsorted).at(-1)?.id ?? undefined)
         : undefined;
+    // CR-10: new tickets always carry an explicit status — seed the first real
+    // column when the button is opened without a column context.
+    const firstColumnId = board
+        ? (board.columns.find((column) => !column.isUnsorted)?.id ?? undefined)
+        : undefined;
     const filteredColumns = board
         ? applyHierarchyFilters(board.columns).filter(
               // Drop columns that ended up empty ONLY due to filters when any
@@ -196,7 +201,7 @@ export function BoardPage() {
                 <EmptyState
                     title="No tickets yet"
                     description="Create one to get started."
-                    action={<NewTicketButton slug={slug} />}
+                    action={<NewTicketButton slug={slug} columnId={firstColumnId} />}
                 />
             ) : (
                 <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

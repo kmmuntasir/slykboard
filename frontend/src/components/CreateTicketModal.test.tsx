@@ -126,6 +126,25 @@ describe('CreateTicketModal', () => {
         await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
+    it('CR-10: sends the column context it was opened with', async () => {
+        const onClose = vi.fn();
+        mutateAsync.mockResolvedValueOnce({});
+        render(<CreateTicketModal open onClose={onClose} slug="SLYK" columnId="col-1" />);
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Column ctx' } });
+        fireEvent.click(screen.getByRole('button', { name: /edit description/i }));
+        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'details' } });
+        fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'MEDIUM' } });
+        fireEvent.change(screen.getByLabelText('End date'), {
+            target: { value: '2027-02-01T12:00' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }));
+        await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+        // Status is required (CR-10) — the supplied column is always sent.
+        expect(mutateAsync).toHaveBeenCalledWith(
+            expect.objectContaining({ statusColumn: 'col-1' }),
+        );
+    });
+
     it('cancel calls onClose without mutation', () => {
         const onClose = vi.fn();
         render(<CreateTicketModal open={true} onClose={onClose} slug="SLYK" />);
